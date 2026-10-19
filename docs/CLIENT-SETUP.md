@@ -1,6 +1,6 @@
 # Beta MCP client setup preparation
 
-October19, 2026. The application is deployed and actual browser/Codex acceptance passed. ChatGPT configuration is filled in the signed-in UI; private secret entry, creation, consent and actual tool acceptance are pending. Keep the initial enrollment owner-only and use separately registered shopping client IDs; do not reuse SSH credentials or grants.
+October19, 2026. The application is deployed and actual browser/Codex acceptance passed. The owner completed ChatGPT connection privately; Shopping is installed. Actual read calls succeeded; an example creation request is running and write acceptance still needs verification. Keep the initial enrollment owner-only and use separately registered shopping client IDs; do not reuse SSH credentials or grants.
 
 ## Codex
 
@@ -60,3 +60,13 @@ ssh personal_prd 'sudo -n cat /home/admin/agent-shopping-list/secrets/chatgpt-cl
 The assistant does not have a tool channel for entering that secret without a logged argument; human private paste is pending. Approval is requested at the browser access-granting step before Create as a plugin. Creating the connection, completing consent, discovering all16tools and actual owner-scoped calls remain unexecuted. A filled form/Keycloakregistration is not ChatGPT acceptance.
 
 Actual Codex evidence: OAuthlogin succeeded; live get_context/get_list/save_list/get_list/search_products/search_purchases/get_insights passed. Onlywrite initialized and selected an empty Walmart list. Private callback is http://127.0.0.1:18444/callback; resource supplied once by discovery; explicit5shoppingscopes/nooffline/SSH. Local app restart preserved signed-in browser and activeWalmartlist.
+
+## Connection completed by owner
+
+The owner completed the private credential/connection steps. Browserverified installed Shopping plugin `plugin_asdk_app_6ad623031440819180772daa4ee4d3f2`. Do not repeat secret entry or create a duplicate. Try in chat opened the actual Shopping-selected conversation https://chatgpt.com/c/6ad6237b-d3b0-83e9-a830-ceb8fbfb0240. Actual read calls/preferences/catalog/list and public research occurred; example writes/finalreadback are still running. Filled-form instructions above remain reproduction reference, not current pending steps.
+
+## Actual ChatGPT write acceptance passed
+
+The owner requested examples. Through the actual selected Shopping plugin in ChatGPT, three sourced variants and a separate active ExampleWalmart list were created and re-read. Independent liveUI/readonlycounts/audit verification confirms shopping-chatgpt saved3products/1list/1itembatch; all3items quantity1unchecked, oldWalmart/preferences intact,0purchases. First invalid provenance payload made no writes; correction used source.fields package rather than package_count/package_size/package_unit. Allowed source.fields: name,brand,flavor,category,package,description. This is a client-input correction; validation was not weakened. Unknown prices/nutrition remain unknown.
+
+Shopping plugin https://chatgpt.com/plugins/plugin_asdk_app_6ad623031440819180772daa4ee4d3f2 and actual test conversation https://chatgpt.com/c/6ad6237b-d3b0-83e9-a830-ceb8fbfb0240. Both ChatGPT and Codex have now performed actual authorized live reads/writes. Physicalphone/realreceipt and remaining revocation/negative-token cases remain separate beta follow-up.
