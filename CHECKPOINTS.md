@@ -503,3 +503,7 @@ FreshReviewer /root/oauth_compat_review session01a15446-d097-7962-add4-fe8be9c95
 ### CP10 update — no-backup correction independently Approved
 
 Coordinator final formatter/assets/vet/all ordinary tests/both binaries and JS/shell/diff checks passed after Translation froze. Fresh reviewer `/root/no_backup_review`, host-verified session01a15454-4c22-7a60-a81f-bad627a5266f gpt-6.1-sol/max, returned Approved/no actionable findings after independent uncached SQLite/admin suites, both races, targeted vet/format/diff checks. No reviewer edits or live connections. Commit and replacement final-commit image builds/tests/scans next; CP03/06/10 live acceptance remains open.
+
+### CP10 update — replacement beta.2 images accepted locally
+
+Application commit7970b5c, version0.1.0-beta.2, built2026-10-19T13:25:45Z. Exact amd64/arm64 candidates passed production-process/browser/SDK/retry and actual container restart with identical durable reports; offline pinned Trivy scans found0 known vulnerabilities. All ephemeral test containers/volumes cleaned. Prepared personal_prd environment now pins tested amd64 config efcd5b19be9e3b3ceef3c470bc61c1547769bb9e79278ef74581d6413dbd13f0. Full index/config/archive identities and scanner evidence in docs/validation/CP10-no-backup-2026-10-19.md. No publication/transfer/live action/production backup. Local release work complete; concrete live rollout authorization and actual identity/client/phone/persistence acceptance remain. CP03/06/10 stay in progress.

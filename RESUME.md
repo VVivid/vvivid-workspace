@@ -4,7 +4,7 @@ Updated October 19, 2026, America/New_York.
 
 ## Current state
 
-Project: `/Users/oudavid/works/opensource/AgentShoppingList`, Git `main`, baseline `7d671f6`, no remote. Preserve all files and data. Prior application code `05ff303f5c543e5a932e1f8b36ffc31c2e44c210` completed local independent Review; the current server-only no-backup correction is uncommitted and requires its own sequential workflow.
+Project: `/Users/oudavid/works/opensource/AgentShoppingList`, Git `main`, application commit `7970b5c`, no remote. Preserve all files and data. Prior application code `05ff303f5c543e5a932e1f8b36ffc31c2e44c210` completed local independent Review; the server-only no-backup correction completed its sequential workflow and independent Review Approved.
 
 CP01/02/04/05/07/08/09 are complete locally. CP03/06 live identity/client acceptance and CP10 deployment/persistence acceptance remain in progress. The OAuth compatibility bundle is independently Approved locally and unapplied. V1 is not deployed or daily-beta accepted. No live account or production data was seeded.
 

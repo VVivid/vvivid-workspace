@@ -1,6 +1,6 @@
 # PREPARATION ONLY; never applied. Read docs/DEPLOYMENT-PLAN.md first.
 # Exact local amd64 image config ID; transfer/load verification remains pending.
-SHOPPING_IMAGE=sha256:090adaf1361737077e20c384c42d72747000fa3616d83bafb3edc1d647d7ecce
+SHOPPING_IMAGE=sha256:efcd5b19be9e3b3ceef3c470bc61c1547769bb9e79278ef74581d6413dbd13f0
 SHOPPING_ORIGIN=https://shopping.vvivid.dev
 SHOPPING_HOST=shopping.vvivid.dev
 SHOPPING_OIDC_ISSUER=https://ssh-mcp.vvivid.dev/realms/sshmcp
