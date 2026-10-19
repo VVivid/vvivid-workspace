@@ -1,0 +1,13 @@
+{
+  "name": "agentshoppinglist-assets",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build:css": "tailwindcss -i ./web/styles/app.css -o ./web/static/app.css --minify",
+    "watch:css": "tailwindcss -i ./web/styles/app.css -o ./web/static/app.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.0",
+    "tailwindcss": "4.3.0"
+  }
+}
