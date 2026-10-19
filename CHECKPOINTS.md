@@ -1,5 +1,27 @@
 # Development checkpoints
 
+## Latest feature handoff — temporary sharing Approved locally
+
+The owner authorized both retry corrections and fresh reviews. Worktree `/Users/oudavid/.codex/worktrees/temporary-item-sharing/AgentShoppingList`, branch `codex/temporary-item-sharing`, base259cd3e, now holds the complete locally Approved sharing feature. Owner creation keeps its original key/body through interrupted or malformed response bodies and later rejected retries/private-list refresh, recovering the URL only from a valid replay. Guest unknown checkoff retains exact retries through429/failed refresh. All52 production-script regressions (37owner/15guest), final make check build, four syntax checks and diff checks pass. Fresh independent reviewer01a15616-f468-7503-8bb6-dedb99f3bd71, verified gpt-6.1-sol/max, returned Approved with no blocking findings; fullfeature access/expiry/replay/separation reviewed. Builder/Translation runtime settings were independently verified too; evidence in worktree docs/validation/SHARING-2026-10-19.md.
+
+Changes remain uncommitted in the feature worktree. No push,deployment,live data/identity/infrastructure changes,listener or dependency link. Original checkout application source remains untouched; original notes below are historical. The locally approved feature is not deployed acceptance; existing CP03/06/10 beta gaps/actual-phone and six-hour wall-clock checks remain open. Next action only on a later user integration/deployment request: use the existing worktree; do not recreate/reset data or repeat completed implementation.
+
+
+## Current sharing worktree status — guest retry fixed; new Review Denied
+
+The owner authorized correcting the guest retry bug and rerunning Review. In `/Users/oudavid/.codex/worktrees/temporary-item-sharing/AgentShoppingList` (branchcodex/temporary-item-sharing,base259cd3e), sequential verified correction Builder/Translation completed;15 actual-production-share.js Node regressions (beforefix11pass4fail,after15pass), final makecheckbuild, three JS syntax checks and diff checks passed. Fresh verified independent reviewer01a1560d-0e81-7772-902b-d041fe20c1a3(gpt-6.1-sol/max) returned Denied for a new ownercreation case: app.js:111 clears pendingWrite after HTTP200 before validating result.record.code; interrupted/unparseableJSON returnsnull, causing Not synced/Retry with no operation to retry. Reproduced independently with unmodifiedapp.js. Guest429 pending key/body fix is complete; overall sharing slice remains blocked. No automatic correction under required skill; wait for owner instruction, then Builder/Translation/finalchecks/freshReview. Worktree docs/validation/SHARING-2026-10-19.md has full evidence. Original application files untouched; no commit/push/deploy/live-data work or listener.
+
+
+### October 19, 2026 — Temporary sharing design preview
+
+- Owner refinement: simplified the copy surface to URL and Copy link button only; friend screen unchanged. Demo navigation is outside the product surface. Fragment renderer and actual browser create-link/copy-screen/friend-view checks passed; copy surface screenshot inspected. No production changes.
+
+- Status: UI preview delivered; production sharing is not implemented. Existing checkpoint completion states are unchanged.
+- Scope: user requested a clickable design for selecting list items and sharing a five-letter public link for six hours. Conversation fragment: `/Users/oudavid/.codex/visualizations/2026/10/19/01a155ec-a760-70f3-a248-eec38cbbd532/share-shopping.html`. Sample data and `shopping.example` links only. Share selects items, generates a demo link, previews the guest checklist and expiry, and permits turning off the link. Shared checklist is separate from owner checkoff as a proposed design.
+- Executed: fragment renderer passed; actual browser exercised empty-selection disabling, one-item link generation, selected-only guest content, guest checkoff, simulated expiry/restoration, revocation and owner checklist separation. Screenshots inspected at390px and320px; at320px phone scrollWidth equals clientWidth271. No browser console errors observed. Clipboard was blocked by the preview sandbox; manual selection fallback passed. No real six-hour wait/server access enforcement, multi-client persistence or security acceptance was run.
+- Side effects: preview fragment and handoff notes only; temporary local127.0.0.1:4186 verification server stopped. No application/Go changes, live service/data changes or deployment. No independent implementation review applies to this conversation-only design. Git baseline259cd3e; no new commit.
+- Next: owner tries the preview and gives design feedback. Implementing public sharing remains a separate development request.
+
 Updated October 19, 2026. **CP00–CP02, CP04/CP05, CP07/CP08 and CP09 are locally complete. CP03/CP06 live identity/client acceptance and CP10 deployment remain in progress. The OAuth compatibility bundle is independently Approved locally and unapplied. A new local correction removes automatic migration backups under the user's server-only policy; prior application image approval does not cover that correction.**
 
 ## Progress ledger
@@ -575,3 +597,7 @@ User authorized git@github.com:VVivid/AgentShoppingList.git. Empty destination v
 ### GitHub publication verified
 
 Pushed main and annotated v0.1.0-beta.2 to git@github.com:VVivid/AgentShoppingList.git without force. Remote ls-remote verified releasecommit9e5eee537f012cb07863e22543e4aed6b6b49b53 for main and peeledtag; annotatedtagobjectdddbbbf6c2a400649b9747c40d66a5c26a3b2c5d. Main tracks origin/main; publication result recorded in a follow-up documentation commit. No deployment, registry publication, production data export or credential change. Existing unexecuted beta checks remain unchanged.
+
+## Feature worktree handoff — temporary item sharing
+
+Owner explicitly authorized implementation in a new worktree. Active attached worktree `/Users/oudavid/.codex/worktrees/temporary-item-sharing/AgentShoppingList`, branch `codex/temporary-item-sharing`, base259cd3e, holds the implementation and validation. Original checkout application files remain unchanged; its existing preview notes are preserved. Builder and Translation completed; final full build/tests/JS syntax, focused race suite, existing process restart/retry regression and mobile owner/anonymous-guest UI checks passed. Fresh independent Review returned Denied for one P2: `web/static/share.js:125` clears an unresolved pending write after throttled Retry and failed refresh. Exact key/body must survive until replay or authoritative refresh settles the outcome. Reviewer reproduced it with the actual script. No automatic correction under the required skill; await owner instruction. No feature commit, push or deployment. Worktree `docs/validation/SHARING-2026-10-19.md` contains verified stage IDs/models/efforts, actual evidence and next action.
