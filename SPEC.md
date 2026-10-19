@@ -22,15 +22,22 @@ Category icons come from a fixed application mapping. The agent assigns a catego
 
 Example: Polar Black Cherry Seltzer uses the Drinks icon. Its details identify Polar, Black Cherry, and 8 × 12 fl oz cans, with a sourced photo and Walmart listing. Different flavors and pack sizes are separate product variants.
 
+# Temporary item sharing
+
+The owner can select one or more current list items and create an exactly-five-letter, case-sensitive public link. It expires exactly six hours after creation, enforced on every public read/write and replay. The public snapshot includes only the selected names, package/category/quantity facts and retailer context. Guest pickup state persists separately and never changes the owner's list, confirmed purchases or Insights. Invalid/expired/disabled-owner links share one unavailable state.
+
+The compact My list flow adds Share, Cancel, Select all and Create link with a selected count. The copy modal shows only URL + Copy link; the friend page shows Shopping, “A little shopping help”, selected checklist and time left, without sign-in or private navigation. Authenticated creation uses existing scopes, CSRF, revisions, atomic audit and durable idempotency. Guest set-state writes use same-origin capability/CSRF protection, their own revisions and durable replay/audit. Collision-safe crypto codes are never recycled; bounded public request and owner creation budgets mitigate the intentionally short URLs. See [SHARING.md](docs/SHARING.md) for exact routes, limits, retention and local evidence. Implementation is in the local Builder workflow and has not been deployed or independently reviewed.
+
 # System boundaries
 
-One application backend exposes two authenticated interfaces over shared domain services and storage:
+One application backend exposes the authenticated web/MCP interfaces over shared domain services and storage, plus the explicitly limited temporary public copy:
 
 | Interface | Primary caller | Allowed work |
 | --- | --- | --- |
 | Web API under /api/v1 | Mobile browser | Read personal data; add, remove, resize, and check list items |
 | MCP at /mcp using Streamable HTTP | Authorized AI clients | Manage the authenticated user's products, lists, purchase records, and preferences |
 | Identity provider | Browser and MCP OAuth clients | Existing Keycloak handles sign-in and token issuance |
+| Public /s/{code} | Anyone holding a live temporary link | Read/check only its selected snapshot until expiry |
 
 MCP tools call the same domain services as the Web API. They do not automate the UI or bypass validation through direct database access.
 
@@ -106,7 +113,7 @@ Nutrition requires a serving basis such as per can, per 100 ml, or per 100 g. Mi
 
 # Web API contract
 
-All routes operate on the authenticated account. Read collections use bounded cursor pagination. The active-list response includes enough product summary data to render without one request per row.
+Routes under /api/v1 operate on the authenticated account. Public sharing uses the separate narrow /s contract in docs/SHARING.md. Read collections use bounded cursor pagination. The active-list response includes enough product summary data to render without one request per row.
 
 | Method and path | Purpose |
 | --- | --- |
@@ -117,6 +124,7 @@ All routes operate on the authenticated account. Read collections use bounded cu
 | POST /lists/{list_id}/items | Add a saved product with an explicit quantity and merge policy |
 | PATCH /lists/{list_id}/items/{item_id} | Set quantity or picked-up state |
 | DELETE /lists/{list_id}/items/{item_id} | Soft-remove an item while preserving its audit trail |
+| POST /lists/{list_id}/shares | Create a selected-item temporary public copy with current list/item/product revisions |
 | GET /purchases?from=...&to=...&cursor=... | Purchase history |
 | GET /purchases/{purchase_id} | Purchase details |
 | GET /insights?from=...&to=...&interval=week | Derived spending and quantity series |

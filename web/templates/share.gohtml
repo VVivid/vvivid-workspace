@@ -1,0 +1,35 @@
+{{define "shared-list"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>A little shopping help · Shopping</title>
+  <link rel="stylesheet" href="/static/app.css">
+  {{if .ExpiresAt}}<meta name="share-csrf" content="{{.WriteToken}}"><script src="/static/share.js" defer></script>{{end}}
+</head>
+<body class="min-h-dvh bg-background text-foreground antialiased">
+  <div class="shopping-app mx-auto w-full bg-white">
+    <header class="shared-brand flex items-center gap-3"><span class="app-icon grid place-items-center rounded-xl" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12l2 14H4L6 7Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg></span><span class="text-2xl font-semibold tracking-tight">Shopping</span></header>
+    <main id="shared-content"{{if .ExpiresAt}} data-expires-at="{{.ExpiresAt}}"{{end}} tabindex="-1">
+    {{if .ExpiresAt}}
+      <h1 class="share-title">A little shopping help</h1>
+      <p class="shared-subtitle">Shared{{if .Retailer}} {{.Retailer}}{{end}} list · {{len .Items}} {{if eq (len .Items) 1}}item{{else}}items{{end}}</p>
+      <p class="share-time" id="share-time">Available for 6 hours from creation</p>
+      <div id="share-status" class="sync-status" role="status" aria-live="polite" hidden><span></span> <button type="button" id="share-retry" hidden>Retry</button> <button type="button" id="share-refresh" hidden>Refresh</button></div>
+      <ul class="product-list" aria-label="Shared shopping items">{{range .Items}}
+        <li class="product-row{{if .PickedUp}} picked-up{{end}}" data-shared-position="{{.Position}}" data-revision="{{.Revision}}">
+          <label class="shared-row-label">{{template "category-icon" .}}<span class="product-label"><strong>{{.Name}}</strong><small>{{sharedPack .}}{{if .Retailer}} · {{.Retailer}}{{end}}</small></span><span class="shared-quantity">×{{.Quantity}}</span><span class="check-target"><input type="checkbox" data-shared-check aria-label="Picked up {{.Name}}"{{if .PickedUp}} checked{{end}}><span aria-hidden="true"></span></span></label>
+        </li>{{end}}
+      </ul>
+      <p class="shared-progress" id="shared-progress"></p>
+      <p class="share-footnote">Check items as you pick them up.<br>This shared copy keeps its own checklist.</p>
+      <noscript><p class="subtle-note">JavaScript is needed to save checkboxes. Reload this page to check whether the link is still available.</p></noscript>
+    {{else}}
+      <div class="share-unavailable"><h1 class="share-title">This link is unavailable</h1><p class="shared-subtitle">Shared lists are available for 6 hours.<br>Ask your friend for a new link.</p></div>
+    {{end}}
+    </main>
+  </div>
+</body>
+</html>{{end}}

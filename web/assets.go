@@ -3,5 +3,5 @@ package webassets
 
 import "embed"
 
-//go:embed templates/*.gohtml static/app.css static/app.js
+//go:embed templates/*.gohtml static/app.css static/app.js static/share.js
 var Files embed.FS

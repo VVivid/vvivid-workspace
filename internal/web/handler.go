@@ -52,6 +52,7 @@ type pageData struct {
 func NewHandler(logger *slog.Logger, auth *identity.Manager, service *shopping.Service) (http.Handler, error) {
 	templates, err := template.New("shopping").Funcs(template.FuncMap{
 		"pack":             packText,
+		"sharedPack":       sharedPack,
 		"snapshotPack":     snapshotPack,
 		"money":            moneyText,
 		"code":             currencyCode,
@@ -79,6 +80,7 @@ func NewHandler(logger *slog.Logger, auth *identity.Manager, service *shopping.S
 		}
 		auth.Register(mux)
 		registerAPI(mux, auth, service)
+		registerShares(mux, templates, auth, service)
 		mux.Handle("/mcp", auth.BearerMiddleware(auth.MCPAudience(), nil, shoppingmcp.NewHandler(service, logger)))
 	}
 	for _, current := range pages {
@@ -145,6 +147,9 @@ func NewHandler(logger *slog.Logger, auth *identity.Manager, service *shopping.S
 	}
 	mux.HandleFunc("GET /static/app.css", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, webassets.Files, "static/app.css")
+	})
+	mux.HandleFunc("GET /static/share.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, webassets.Files, "static/share.js")
 	})
 	mux.HandleFunc("GET /static/app.js", func(w http.ResponseWriter, r *http.Request) { http.ServeFileFS(w, r, webassets.Files, "static/app.js") })
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, r *http.Request) {
