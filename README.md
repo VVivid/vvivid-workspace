@@ -51,9 +51,9 @@ make build
 ./bin/shopping
 ```
 
-Open `http://127.0.0.1:8090`. The four pages use Go `html/template` and the CSS compiled from `web/styles/app.css`. Templates and compiled CSS are embedded in the binary; Node is build tooling only. `reference/ui-demo` is excluded from asset scanning and serving.
+Open `http://127.0.0.1:8090`. The four pages use Go `html/template` and the CSS compiled from `web/styles/app.css`. Templates and compiled CSS are embedded in the binary; Node is used only for asset builds and local checks. `reference/ui-demo` is excluded from asset scanning and serving.
 
-`make run` starts the same application with `go run`. `make fmt` formats Go sources. `npm run watch:css` watches CSS/templates while developing; restart the Go process to embed the result. The compiled CSS is tracked, so a Go-only build can render the current shell without npm installed. Rebuild CSS whenever its source/templates change.
+`make check` requires Node.js 24 and runs the guest browser-script regressions with its built-in test runner, followed by Go vet/tests. The script tests need no npm dependencies. `make run` starts the same application with `go run`. `make fmt` formats Go sources. `npm run watch:css` watches CSS/templates while developing; restart the Go process to embed the result. The compiled CSS is tracked, so a Go-only build can render the current shell without npm installed. Rebuild CSS whenever its source/templates change.
 
 Optional environment settings (the application does not load `.env` files):
 

@@ -1,6 +1,7 @@
 package web_test
 
 import (
+	"database/sql"
 	"fmt"
 	"net"
 	"net/http"
@@ -124,24 +125,40 @@ func TestMobilePreview(t *testing.T) {
 			failPageReads.Store(true)
 			_, _ = w.Write([]byte("Fixture page reads will fail with 503."))
 			return
+		case "/__fixture/expire-shares":
+			db, err := sql.Open("sqlite", f.Path)
+			if err != nil {
+				http.Error(w, "fixture database unavailable", 500)
+				return
+			}
+			defer db.Close()
+			expires := time.Now().Add(-time.Second).UnixMilli()
+			if _, err := db.ExecContext(r.Context(), `UPDATE temporary_shares SET created_at=?,expires_at=?`, expires-sqlite.ShareLifetime.Milliseconds(), expires); err != nil {
+				http.Error(w, "fixture expiry failed", 500)
+				return
+			}
+			_, _ = w.Write([]byte("Synthetic shares expired."))
+			return
 		case "/__fixture/restore-page-reads":
 			failPageReads.Store(false)
 			_, _ = w.Write([]byte("Fixture page reads restored."))
 			return
 		}
-		if failureStatus := int(writeFailureStatus.Load()); failureStatus != 0 && strings.HasPrefix(r.URL.Path, "/api/v1/") && r.Method != "GET" {
+		if failureStatus := int(writeFailureStatus.Load()); failureStatus != 0 && (strings.HasPrefix(r.URL.Path, "/api/v1/") || strings.HasPrefix(r.URL.Path, "/s/")) && r.Method != "GET" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(failureStatus)
 			_, _ = w.Write([]byte(`{"message":"Fixture write failure"}`))
 			return
 		}
-		if failPageReads.Load() && r.Method == "GET" && (r.URL.Path == "/" || r.URL.Path == "/products" || r.URL.Path == "/history" || r.URL.Path == "/insights") {
+		if failPageReads.Load() && r.Method == "GET" && (r.URL.Path == "/" || r.URL.Path == "/products" || r.URL.Path == "/history" || r.URL.Path == "/insights" || strings.HasPrefix(r.URL.Path, "/s/")) {
 			http.Error(w, "Fixture page read failure", http.StatusServiceUnavailable)
 			return
 		}
 		cloned := r.Clone(r.Context())
 		cloned.Host = "shopping.example"
-		cloned.AddCookie(cookie)
+		if !strings.HasPrefix(r.URL.Path, "/s/") && r.URL.Path != "/s" {
+			cloned.AddCookie(cookie)
+		}
 		if cloned.Header.Get("Origin") != "" {
 			cloned.Header.Set("Origin", testfixture.Origin)
 		}

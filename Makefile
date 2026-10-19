@@ -14,6 +14,7 @@ build:
 
 check:
 	@test -z "$$(gofmt -l cmd internal web/assets.go)" || (gofmt -l cmd internal web/assets.go; exit 1)
+	node --test web/tests/*.test.mjs
 	go vet ./...
 	go test ./...
 

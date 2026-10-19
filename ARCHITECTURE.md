@@ -33,7 +33,7 @@ Suggested packages, refine without overengineering:
 - internal/insights: fixed metric definitions using confirmed records.
 - web/templates and web/static: Go templates and compiled assets.
 
-Expose pages at /, browser JSON at /api/v1, remote MCP at /mcp, and web auth routes under /auth. Serve protected-resource metadata at the standard discovery location. User selected https://shopping.vvivid.dev and exact /api/v1 and /mcp audiences; registration, routing and live acceptance remain pending.
+Expose pages at /, browser JSON at /api/v1, remote MCP at /mcp, and web auth routes under /auth. The approved browser-only sharing slice adds public /s/{code} reads and revisioned capability/Origin-protected guest checkoff over separate snapshots; owner creation stays in the authenticated browser API. Its lifetime, disclosure and fixed global abuse budget are defined in docs/SHARING.md. Serve protected-resource metadata at the standard discovery location. User selected https://shopping.vvivid.dev and exact /api/v1 and /mcp audiences; registration, routing and live acceptance remain pending.
 
 Use the official Go MCP SDK. Prefer stateless Streamable HTTP for this request/response tool workload, subject to client compatibility. Authenticate every request; bind any retained sessions to the same user/client. MCP does not require tool calls to loop through HTTP API routes: both adapters call shared services.
 
