@@ -47,7 +47,7 @@ func TestFreshSchemaAndUpgradePreserveAccount(t *testing.T) {
 	if err := migrate(t.Context(), store.write, migrations); err != nil {
 		t.Fatalf("repeat migration: %v", err)
 	}
-	assertCount(t, store.write, "SELECT count(*) FROM schema_migrations", 4)
+	assertCount(t, store.write, "SELECT count(*) FROM schema_migrations", 5)
 	rows, err := store.read.QueryContext(t.Context(), "PRAGMA foreign_key_check")
 	if err != nil {
 		t.Fatal(err)
@@ -128,5 +128,44 @@ func assertCount(t *testing.T, db *sql.DB, query string, want int) {
 	var got int
 	if err := db.QueryRowContext(t.Context(), query).Scan(&got); err != nil || got != want {
 		t.Fatalf("%s: got %d, want %d, error %v", query, got, want, err)
+	}
+}
+
+func TestCatalogMigrationPreservesVersionFourShoppingRecords(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "version-four.sqlite")
+	db := openMigrationDatabase(t, path)
+	migrations, err := loadMigrations(migrationFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(t.Context(), db, migrations[:4]); err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{
+		`INSERT INTO accounts(id,created_at) VALUES ('legacy',1)`,
+		`INSERT INTO identities(issuer,subject,owner_id) VALUES ('https://issuer.example','legacy-user','legacy')`,
+		`INSERT INTO products(owner_id,id,name,category,created_at,updated_at) VALUES ('legacy','drink','Drink','drinks',1,1)`,
+		`INSERT INTO shopping_lists(owner_id,id,title,created_at,updated_at) VALUES ('legacy','list','Existing',1,1)`,
+		`INSERT INTO list_items(owner_id,id,list_id,product_id,quantity,picked_up,created_at,updated_at,created_by,updated_by) VALUES ('legacy','item','list','drink','2.5',1,1,1,'legacy-user','legacy-user')`,
+	} {
+		if _, err := db.ExecContext(t.Context(), statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err := Open(t.Context(), path, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	owner, err := store.OwnerForIdentity(t.Context(), ExternalIdentity{Issuer: "https://issuer.example", Subject: "legacy-user"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err := store.ListView(t.Context(), owner, "list", "", false)
+	if err != nil || len(view.Items) != 1 || !view.Items[0].PickedUp || view.Items[0].Quantity != "2.5" || view.SelectionRevision != 0 || view.ActiveListID != nil {
+		t.Fatalf("legacy shopping record lost or auto-selected: %#v %v", view, err)
 	}
 }

@@ -14,6 +14,7 @@ import (
 
 	"agentshoppinglist/internal/config"
 	"agentshoppinglist/internal/identity"
+	"agentshoppinglist/internal/shopping"
 	"agentshoppinglist/internal/store/sqlite"
 	"agentshoppinglist/internal/web"
 )
@@ -45,7 +46,7 @@ func run(ctx context.Context, logger *slog.Logger) (err error) {
 			return fmt.Errorf("identity: %w", err)
 		}
 	}
-	handler, err := web.NewHandler(logger, auth)
+	handler, err := web.NewHandler(logger, auth, shopping.New(store))
 	if err != nil {
 		return err
 	}

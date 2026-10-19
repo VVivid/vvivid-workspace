@@ -10,7 +10,7 @@ import (
 )
 
 func TestFoundationRoutes(t *testing.T) {
-	handler, err := NewHandler(slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	handler, err := NewHandler(slog.New(slog.NewTextHandler(io.Discard, nil)), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

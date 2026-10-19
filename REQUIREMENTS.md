@@ -1,6 +1,6 @@
 # User requirements
 
-Status: October 19, 2026. CP01/02 complete; CP03 local Builder identity checks pass, with review and live integration pending. Domain services and infrastructure acceptance remain pending. See CHECKPOINTS.md for evidence.
+Status: October19, 2026. CP01/02 complete; CP03 local identity independently Approved with live integration pending. CP04–CP06 local Builder implementation/checks pass; Translation, review, actual-client and later purchase/deployment acceptance remain. See CHECKPOINTS.md for evidence.
 
 ## Intended use
 

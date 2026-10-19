@@ -1,6 +1,6 @@
 # Identity preparation and operator runbook
 
-CP03 local implementation, October 19, 2026. The user selected `https://shopping.vvivid.dev`, initial enrollment of only their own account, and Codex plus ChatGPT as the first MCP clients. No shopping client, DNS, proxy, secret, live enrollment or deployment has been applied. Exact Keycloak subjects, registered callback URLs and generated client credentials remain operator inputs.
+CP03 local implementation, October 19, 2026. The user selected `https://shopping.vvivid.dev`, initial enrollment of only their own account, and Codex plus ChatGPT as the first MCP clients. No shopping client, DNS, proxy, secret, live enrollment or deployment has been applied. Own-account preferences are explicitly America/New_York, USD, Walmart, Monday week start; these are not global defaults. Exact Keycloak subjects, registered callback URLs and generated client credentials remain operator inputs.
 
 ## Application configuration
 
