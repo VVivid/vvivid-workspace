@@ -414,3 +414,18 @@ Pause cleanup: original Builder stopped test preview76489; lsof verified no list
 
 - Approved implementation committed05ff303f5c543e5a932e1f8b36ffc31c2e44c210. Built0.1.0-beta.1 arm64/amd64 images with exactcommit metadata; both realcontainer suites and offlinecurrentDB OS/Go scans passed. Freshlogs .cache/acceptance/beta-*.log; reports .cache/image-audit/beta-*-report.json. Versioncommands matched exactcommit/Go1.26.9/architecture. LocalimageIDs in finalvalidationnote.
 - No productionwrite or deployment/publication. Test-ownedcontainers/volumes/listeners cleaned. Nextrequest: bounded read-only personal_prd inventory to prepare exactlivechange set. Previous automaticrejection of productionshell outside localscope still applies until explicituserauthorization. No blocked/pausedgoalstatus: thisturn made concreteprogress and fullv1remainsincomplete.
+
+### CP10 authorization wait — October19
+
+- Same missing read-only production-discovery authorization persists across three consecutive goal turns. Current worktree/handoff revalidated at7bc85ea; no human approval arrived. Previous continuation was no progress, not a verified process wait.
+- All meaningful authorized local release work is finished and verified. Remaining live inventory/integration and off-server acceptance require user input/external state. Goal marked blocked on authorization, full objective unchanged and CP10 incomplete. No production connection, live change or repeated approval request performed this turn.
+- Next: human answers the existing read-only personal_prd discovery request, then resume inventory and prepare exact shopping-only live plan.
+
+### CP03/06/10 update 2026-10-19 — Authorized read-only live discovery
+
+- Human explicitly authorized read-only personal_prd discovery. Completed architecture/routing/Keycloak/source/resource checks, selected read-only database queries, no secret/user identity columns, and closed both connections. No live writes, enrollment or deployment. Concrete plan: docs/DEPLOYMENT-PLAN.md; nonsecret preparedinputs deploy/personal-prd.environment.prepared.
+- Verified amd64/Docker29.1.3/Traefik3.7.5 networkproxy, publicHTTPSimmich-public-websecure/resolverletsencrypt, Keycloak26.8.1 and working existingHTTPSdiscovery. No shoppingDNSresolution/router/client/resource found. Live shoppingresource probe returned400invalid_target. Existing SSH registrations and callbacks/mappers inspected; no actual newclientacceptance claimed.
+- Existing deployed OAuthproxy materially differs from localSSHcheckout. Automatic approval review rejected a credential-free deployed-source export and its lookup as unauthorized sensitive egress beyond discoveryscope; export not obtained, no workaround. Next needs explicit source-transfer authorization, then local exact-baseline compatibility patch workflow before requesting live rolloutapproval. This is a new blocker, not the previously cleared read-only-access condition.
+- Prepared immutable existing amd64image archive and committed minimal appsource archive locally with SHA/size in plan; no sourcecode changes to app or SSHrepo. Keep CP03/06/10 in progress and fullgoalunfinished.
+
+Discovery handoff checks: docker compose --env-file deploy/personal-prd.environment.prepared -f deploy/compose.yaml config --quiet and git diff --check passed. This rendered configuration only; no service/network/volume was created. No sourceimplementation changed, so code workflow/tests were not rerun for this docs/configuration-only discovery handoff.

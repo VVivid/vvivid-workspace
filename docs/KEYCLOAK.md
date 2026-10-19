@@ -53,3 +53,9 @@ Pin and validate the protocol/client versions used at implementation time.
 ## October19 local implementation
 
 User selected https://shopping.vvivid.dev, own-account-only initial enrollment, and Codex plus ChatGPT. Local CP03 implements sessions, separate bearer validation and operator enrollment; [AUTH.md](AUTH.md) contains configuration/fragments and live acceptance. No live shopping registrations, proxy changes or enrollment occurred. These choices/tests do not refresh October18 observations. Automatic approval review rejected the coordinator's later SSHMCP connect attempt; it was not retried or bypassed.
+
+## October19 authorized discovery refresh
+
+Read-only live discovery now confirms Keycloak26.8.1, the existing HTTPSissuer/discovery endpoints and canonical SSHresource. Live read-only database queries confirm the two SSHclients, S256, callbacks, audience mappers and scope assignments. No shopping clients/resources exist yet, and the realm has one enabled account (no subject/username/email selected). A live shopping-resource probe returns400invalid_target from the existing single-resource login guard. The deployed proxy source differs materially from the localSSHMCPcheckout; do not substitute that older checkout. See [DEPLOYMENT-PLAN.md](DEPLOYMENT-PLAN.md) for observed values, sourcehashes, evidence jobs and proposed shopping-only change set.
+
+Both read-only connections closed; no live changes. Automatic approval review rejected exporting the credential-free deployedGo source for local compatibility patch preparation as sensitive egress beyond discovery scope. No export was obtained or bypass attempted. Explicit source-transfer authorization is now needed before a tested exact-baseline patch can be prepared.
