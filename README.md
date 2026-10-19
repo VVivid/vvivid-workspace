@@ -4,9 +4,9 @@ V1 beta is deployed at https://shopping.vvivid.dev. Browser sign-in/refresh, Cod
 
 A mobile shopping list managed primarily by AI agents through built-in MCP. Open the list at Walmart, identify the right product, and check it off. Agents maintain product details, lists, purchase history, and preferences; the server computes insights.
 
-Status: October 19, 2026. CP01/02/04/05/07/08/09 are locally complete with independent approval. CP03/06 live identity/client acceptance and CP10 deployment remain in progress. A local correction now removes automatic migration backups under the user's server-only policy; it requires its own Translation, validation and independent Review before replacement release images. See CHECKPOINTS.md for actual evidence.
+Status: October 19, 2026. The V1 beta is deployed. Browser sign-in and refresh, both MCP clients, sourced example creation and live restart persistence have passed. CP01/02/04/05/07/08/09 are locally complete with independent approval. CP03/06/10 retain the remaining phone, real-receipt and live security acceptance checks; those checks are not claimed complete. Automatic migration backups are removed and the correction is independently approved. See CHECKPOINTS.md for the evidence ledger.
 
-The Go application serves four compact mobile views, a narrow browser API and16 built-in MCP tools over shared owner/scope-checked services. Agents maintain sourced purchase drafts, confirmation and full void/replacement corrections; History uses immutable confirmed snapshots and Insights computes recorded spending/compatible quantities. Complete Keycloak configuration enables sign-in, encrypted durable sessions and bearer authentication. No production accounts/data are seeded. Readiness checks configured identity and live persistence/migrations; the unconfigured shell stays503. See [docs/DOMAIN.md](docs/DOMAIN.md) and the [release and persistence runbook](docs/RUNBOOK.md).
+The Go application serves four compact mobile views, a narrow browser API and16 built-in MCP tools over shared owner/scope-checked services. Agents maintain sourced purchase drafts, confirmation and full void/replacement corrections; History uses immutable confirmed snapshots and Insights computes recorded spending/compatible quantities. Complete Keycloak configuration enables sign-in, encrypted durable sessions and bearer authentication. Accounts and personal data are never automatically seeded. Readiness checks configured identity and live persistence/migrations; the unconfigured shell stays503. See [docs/DOMAIN.md](docs/DOMAIN.md) and the [release and persistence runbook](docs/RUNBOOK.md).
 
 ## Start or resume
 
@@ -39,9 +39,11 @@ The local project documents are canonical for development. Reference Page: https
 
 ## Local development
 
-Use Go **1.26.9** and Node.js **24** with npm. The module is `agentshoppinglist`, a local module name; no remote repository destination has been selected. Exact dependency selections and the migration plan are in [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
+Use Go **1.26.9** and Node.js **24** with npm. The repository is [VVivid/AgentShoppingList](https://github.com/VVivid/AgentShoppingList). The Go module retains the local name `agentshoppinglist`; no module-path migration is required to build it. Exact dependency selections and the migration plan are in [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
 ```sh
+git clone git@github.com:VVivid/AgentShoppingList.git
+cd AgentShoppingList
 npm ci --ignore-scripts
 make assets
 make check
@@ -62,7 +64,7 @@ Optional environment settings (the application does not load `.env` files):
 | `SHOPPING_DB_PATH` | `data/shopping.sqlite` | Persistent file path; creates private parent directories; rejects memory-only database |
 | `SHOPPING_DB_BUSY_TIMEOUT` | `2s` | Go duration between `1ms` and `10s` |
 
-The default listener is local. The user selected `https://shopping.vvivid.dev`; deployment has not occurred. Invalid settings fail before listening. SIGINT/SIGTERM allows active requests to finish within the shutdown timeout. Logs exclude credentials, request bodies and query strings. `make build` also builds the operator-only `shopping-admin` enrollment/disable command and existing manual tools. `shopping version` and `shopping-admin version` identify the running build. See [docs/AUTH.md](docs/AUTH.md) for the optional complete identity bundle and explicit enrollment inputs.
+The default development listener is local. The deployed beta uses `https://shopping.vvivid.dev`. Invalid settings fail before listening. SIGINT/SIGTERM allows active requests to finish within the shutdown timeout. Logs exclude credentials, request bodies and query strings. `make build` also builds the operator-only `shopping-admin` enrollment/disable command and existing manual tools. `shopping version` and `shopping-admin version` identify the running build. See [docs/AUTH.md](docs/AUTH.md) for the optional complete identity bundle and explicit enrollment inputs.
 
 | Route | Current behavior |
 | --- | --- |
@@ -76,4 +78,4 @@ The default listener is local. The user selected `https://shopping.vvivid.dev`; 
 
 SQLite uses WAL, one writer, a bounded read-only pool and per-connection foreign keys. Embedded migrations reject altered/newer/gapped history and existing schemas without application history. No accounts are seeded; identity lookup never enrolls automatically. Fresh startup, enrollment and supported upgrades create no backup archive or backup scratch directory. Keep shopping data and runtime secrets on the server: no backups, snapshots, off-server copies, schedules or Mac recovery keys. Existing manual backup tools require a future explicit request and are not invoked by application paths. See [docs/RUNBOOK.md](docs/RUNBOOK.md). Data files are Git-ignored. Restricted local validation can use `GOMODCACHE=$PWD/.cache/go-mod GOCACHE=$PWD/.cache/go-build make check build`.
 
-Initial enrollment is only the user's own account; initial MCP clients are Codex and ChatGPT. Own-account preferences are America/New_York, USD, Walmart, Monday week start; these are user selections, not global defaults. Exact registrations/callbacks and subject remain operator inputs. No deployment or shopping OAuth clients have been created. Follow [CHECKPOINTS.md](CHECKPOINTS.md) and [RESUME.md](RESUME.md) for verification and next work.
+The deployed beta enrolls only the owner and has separate Codex and ChatGPT OAuth clients. Owner preferences are America/New_York, USD, Walmart, Monday week start; these are user selections, not global defaults. A new deployment must provision its own private secrets, exact callbacks and explicitly enrolled subject; the repository contains no live credentials or database. Follow [CHECKPOINTS.md](CHECKPOINTS.md) and [RESUME.md](RESUME.md) for verification and next work.

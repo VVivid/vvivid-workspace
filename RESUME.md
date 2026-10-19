@@ -6,7 +6,7 @@ Updated October 19, 2026, America/New_York.
 
 The owner authorized the shopping-only production rollout and later narrow Keycloak diagnostics/fixes. Beta `0.1.0-beta.2`, application commit `7970b5c`, is deployed at https://shopping.vvivid.dev. The application, browser sign-in/refresh, actual Codex OAuth/tools and live restart persistence are verified. The owner completed ChatGPT connection; Shopping is visibly installed. Actual ChatGPT read/write example creation passed and was independently verified in the UI and readonly audit counts. The owner says the app is good; coordinator recommends V1 beta for daily use. No backups, snapshots, off-server backup copies or Mac recovery keys: this is explicit user policy.
 
-Git main, no remote. Latest committed handoff `0867458`; later live evidence is uncommitted. Preserve all work and production data. CP01/02/04/05/07/08/09 are complete locally; CP03/06/10 remain open for the remaining actual client, phone and receipt-flow acceptance. Do not mark the overall goal complete prematurely.
+Git main; origin is git@github.com:VVivid/AgentShoppingList.git. Latest beta handoff is `ae0fb4f`; GitHub publication preparation is in progress. Preserve all work and production data. CP01/02/04/05/07/08/09 are complete locally; CP03/06/10 remain open for the remaining actual client, phone and receipt-flow acceptance. Do not mark the overall goal complete prematurely.
 
 ## Immediate next action
 
@@ -49,3 +49,9 @@ One Go1.26.9 app serves compact My list/Products/History/Insights, shared owner/
 Both exactbeta2 architectures passed actual process/browser/SDK/crash/retry/container restart checks and offline pinned Trivy scans with0 known findings. Final amd64 archive `.cache/image-audit/beta2-amd64.tar`, SHA c4ddcba2bda6693a496a5000484bf0477637fc9383e07a4c29c486d67ccbd2cc. No new application source build is required for the client setup.
 
 Use cached Go `.cache/go-mod/golang.org/toolchain@v0.0.1-go1.26.9.darwin-arm64/bin/go`, GOTOOLCHAIN=local, project caches and GOPROXY=off. For application changes follow build-translate-review with actual host-runtime verified gpt-6.1-sol/max Builder/Review and xhigh Translation; on Review Denied stop for the human. Keep this handoff current with actual evidence and avoid resetting completed work.
+
+## GitHub publication preparation
+
+User authorized preparing and pushing this repository to git@github.com:VVivid/AgentShoppingList.git. SSH ls-remote succeeded with no refs (empty destination). The GitHub connector could not see it (404) and gh CLI is absent; SSH is the authorized working transport. Scanned all254 unique historical blobs for private-key/token patterns and runtime/key paths: no matches; no blobs over2MB. This is a bounded pattern/path scan, not a guarantee against every possible secret. .cache,bin,node_modules and runtime DBs remain ignored. No production data, credentials, image archives or exported gateway source are tracked.
+
+README now describes actual V1 beta state and clone/build instructions. CachedGo1.26.9 make assets/check/build, JS/shell syntax and diff checks passed; ordinary tests cached. Application/build inputs match deployed7970b5c exactly. Commit preparation, push main and annotated v0.1.0-beta.2 tag, then verify remote refs. No GitHub Release/registry publication or live redeployment is requested.
