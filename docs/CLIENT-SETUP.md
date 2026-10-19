@@ -1,6 +1,6 @@
 # Beta MCP client setup preparation
 
-October19, 2026. No client configuration, registration or login was changed by this preparation. The deployed application, shopping registrations and live acceptance are still pending. Keep the initial enrollment owner-only and use separately registered shopping client IDs; do not reuse SSH credentials or grants.
+October19, 2026. The application is deployed and actual browser/Codex acceptance passed. ChatGPT configuration is filled in the signed-in UI; private secret entry, creation, consent and actual tool acceptance are pending. Keep the initial enrollment owner-only and use separately registered shopping client IDs; do not reuse SSH credentials or grants.
 
 ## Codex
 
@@ -28,3 +28,35 @@ Client management may require user interaction to obtain the exact callback and 
 - Account enrollment remains explicit; OAuth login alone does not enroll another realm account. Background/offline consent is a separate future choice.
 
 Local CLI inspection executed only `codex --version` and `codex mcp add --help`. The sandbox printed a PATH-alias permission warning; no server was added, config/credentials inspected or login attempted. Official documentation and this preparation do not establish the live clients' behavior.
+
+## Actual ChatGPT configuration
+
+The signed-in Plugins → Add custom MCP server UI was inspected. It supports User-Defined OAuth Client; use that explicit registration rather than the discovered DCR default. Its actual displayed callback is https://chatgpt.com/connector_platform_oauth_redirect. The shopping-chatgpt registration is now enabled with exactly that callback; confidential/S256/consent/lifetime/scope restrictions remain.
+
+| Field | Value |
+| --- | --- |
+| Name | Shopping |
+| Server URL / resource | https://shopping.vvivid.dev/mcp |
+| Authentication | OAuth |
+| Registration method | User-Defined OAuth Client |
+| Client ID | shopping-chatgpt |
+| Token auth method | client_secret_basic |
+| Callback | https://chatgpt.com/connector_platform_oauth_redirect |
+| Auth URL | https://ssh-mcp.vvivid.dev/realms/sshmcp/protocol/openid-connect/auth |
+| Token URL | https://ssh-mcp.vvivid.dev/realms/sshmcp/protocol/openid-connect/token |
+| Authorization server base | https://ssh-mcp.vvivid.dev/realms/sshmcp |
+| Default scopes | shopping:read, shopping:products:write, shopping:lists:write, shopping:purchases:write, shopping:preferences:write |
+| Base scopes | empty |
+| OIDC | enabled; scopes supported edited to only openid |
+
+Do not accept the realm-wide discovered OIDC scope list: it includes unrelated SSH/offline entries. The configured form limits OIDC to openid and default permissions to the five shopping scopes. No background/offline grant is authorized.
+
+The existing client secret is solely in the private server file /home/admin/agent-shopping-list/secrets/chatgpt-client. The operator can privately copy it into their clipboard using the following command, then paste it into OAuth client secret. Do not paste it into chat, source, screenshots or logs:
+
+```sh
+ssh personal_prd 'sudo -n cat /home/admin/agent-shopping-list/secrets/chatgpt-client' | pbcopy
+```
+
+The assistant does not have a tool channel for entering that secret without a logged argument; human private paste is pending. Approval is requested at the browser access-granting step before Create as a plugin. Creating the connection, completing consent, discovering all16tools and actual owner-scoped calls remain unexecuted. A filled form/Keycloakregistration is not ChatGPT acceptance.
+
+Actual Codex evidence: OAuthlogin succeeded; live get_context/get_list/save_list/get_list/search_products/search_purchases/get_insights passed. Onlywrite initialized and selected an empty Walmart list. Private callback is http://127.0.0.1:18444/callback; resource supplied once by discovery; explicit5shoppingscopes/nooffline/SSH. Local app restart preserved signed-in browser and activeWalmartlist.
