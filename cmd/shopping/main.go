@@ -48,7 +48,7 @@ func run(ctx context.Context, logger *slog.Logger) (err error) {
 		return fmt.Errorf("persistence: %w", err)
 	}
 	defer func() { err = errors.Join(err, store.Close()) }()
-	logger.Info("shopping starting", "build", buildinfo.Current(), "migration_backup", store.MigrationBackup)
+	logger.Info("shopping starting", "build", buildinfo.Current())
 	var auth *identity.Manager
 	if cfg.Identity != nil {
 		auth, err = identity.New(ctx, *cfg.Identity, store)

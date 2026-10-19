@@ -27,9 +27,9 @@ The official MCP SDK v1.8.0 supports protocol revision `2026-07-28`. CP06 should
 
 ## Migration plan for CP02
 
-Keep ordered SQL files embedded in the Go binary beside the SQLite store. Apply one pending migration per short transaction before serving requests. Store the applied version and content checksum in `schema_migrations`; reject altered migration history or a database schema newer than the binary supports. A failed transaction must leave the previous version usable. Forward migrations are the default; recovery from an incompatible migration uses a verified consistent backup, not an assumed reverse migration.
+Keep ordered SQL files embedded in the Go binary beside the SQLite store. Apply one pending migration per short transaction before serving requests. Store the applied version and content checksum in `schema_migrations`; reject altered migration history, a newer schema, or a nonempty schema without application history. A failed migration transaction rolls back; earlier committed migrations remain applied. Forward migrations are the default. Under the user's October 19 server-only policy, startup and enrollment create no backup archives and an incompatible release needs a compatible forward correction; do not assume a down migration or recovery point exists.
 
-CP02 must test fresh creation, upgrade with preserved records, rollback on failure, and foreign-key configuration on every connection path. CP10 supplies the release backup/restore procedure. CP01 creates no database or schema.
+CP02 tests fresh creation, upgrade with preserved records, rollback on failure, and foreign-key configuration on every connection path. CP10 documents release, migration and restart behavior without production backups. CP01 created no database or schema.
 
 ## Sources
 

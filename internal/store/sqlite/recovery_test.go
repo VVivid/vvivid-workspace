@@ -233,56 +233,6 @@ func TestRecoveryRejectsCorruptionNewerSchemaForeignKeysAndMissingSource(t *test
 	}
 }
 
-func TestUpgradeRequiresVerifiedBackupAndRecoveryNeverMigrates(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "legacy.sqlite")
-	db := openMigrationDatabase(t, path)
-	migrations, err := loadMigrations(migrationFiles)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := migrate(t.Context(), db, migrations[:4]); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-	store, err := Open(t.Context(), path, time.Second)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	if store.MigrationBackup == "" {
-		t.Fatal("upgrade omitted its verified recovery point")
-	}
-	manifest, err := VerifyBackup(t.Context(), store.MigrationBackup)
-	if err != nil || manifest.Report.Schema != 4 {
-		t.Fatalf("pre-migration recovery point: %#v %v", manifest.Report, err)
-	}
-	restorePath := filepath.Join(t.TempDir(), "isolated-old.sqlite")
-	if _, err := RestoreBackup(t.Context(), store.MigrationBackup, restorePath); err != nil {
-		t.Fatal(err)
-	}
-	report, err := InspectDatabase(t.Context(), restorePath)
-	if err != nil || report.Schema != 4 {
-		t.Fatalf("restore/verify migrated the recovery point: %#v %v", report, err)
-	}
-	if err := store.Ready(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.write.ExecContext(t.Context(), "DELETE FROM schema_migrations WHERE version=6"); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Ready(t.Context()); err == nil {
-		t.Fatal("readiness accepted incomplete migrations")
-	}
-	if err := store.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Ready(t.Context()); err == nil {
-		t.Fatal("closed persistence remained ready")
-	}
-}
-
 func TestRecoverySupportsEveryKnownMigrationPrefixWithoutApplyingNewSQL(t *testing.T) {
 	migrations, err := loadMigrations(migrationFiles)
 	if err != nil {
@@ -320,38 +270,5 @@ func TestRecoverySupportsEveryKnownMigrationPrefixWithoutApplyingNewSQL(t *testi
 				t.Fatal("recovery changed its source database")
 			}
 		})
-	}
-}
-
-func TestUpgradeDoesNotMigrateWhenVerifiedBackupCannotBeCreated(t *testing.T) {
-	directory := t.TempDir()
-	path := filepath.Join(directory, "old.sqlite")
-	db := openMigrationDatabase(t, path)
-	migrations, err := loadMigrations(migrationFiles)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := migrate(t.Context(), db, migrations[:4]); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(directory, 0o500); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(directory, 0o700) })
-	// SQLite may need writable WAL/SHM siblings too. Any such failure is also a
-	// safe startup refusal; in either case version4 must remain unchanged.
-	if store, err := Open(t.Context(), path, time.Second); err == nil {
-		_ = store.Close()
-		t.Fatal("upgrade proceeded without a writable backup directory")
-	}
-	if err := os.Chmod(directory, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	report, err := InspectDatabase(t.Context(), path)
-	if err != nil || report.Schema != 4 {
-		t.Fatalf("failed backup changed the source schema: %d %v", report.Schema, err)
 	}
 }

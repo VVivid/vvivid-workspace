@@ -45,7 +45,7 @@ Use a thin JS layer for checkoff, add-to-list, detail dialogs, search and revali
 
 ## SQLite and multi-user isolation
 
-Start with one SQLite database and one application instance on the same host. Put the database in a persistent directory such as /data, outside the image. Keep images as remote sourced URLs initially; if owned assets are added, persist and back them up alongside the database.
+Start with one SQLite database and one application instance on the same host. Put the database in a persistent directory such as /data, outside the image. Keep images as remote sourced URLs initially. Any future owned assets must persist on the server under the same no-backup policy as the database.
 
 Enable foreign_keys on all connections. Use WAL, bounded busy timeout/retries, a controlled writer and short transactions. Do not perform retailer requests while holding transactions. Define migrations and test both clean creation and upgrading existing data.
 
@@ -71,12 +71,12 @@ MCP bearer access tokens must have the correct issuer, signature, audience, time
 - Structured logs include request IDs and safe actor identifiers, never credentials. Use existing observability infrastructure where useful.
 - Use graceful shutdown and a restart policy. No process-local state may be the only copy of lists, sessions, idempotency results or pending confirmations.
 
-## Restart and recovery acceptance
+## Restart and migration acceptance
 
 Application restart must preserve checked state, lists, purchase history, preferences, owner boundaries and idempotency results. Uncommitted writes roll back; retrying an interrupted request cannot duplicate a purchase.
 
-Use SQLite's online backup API or a documented consistent snapshot mechanism. A live main-file copy alone is not a safe WAL backup. Record schema/application versions and any owned-asset manifest with backups; encrypt and retain copies off server. Restore into an isolated target and validate records, relationships and totals.
+The user's October 19 policy keeps shopping data and runtime secrets only on the server. Do not create backups, snapshots, off-server copies, backup schedules or Mac recovery keys. No startup, enrollment, request handler or migration path invokes the existing manual backup tools. Historical synthetic recovery tests do not authorize production backup work.
 
-Before migrations, make a verified backup. Do not assume an older binary can read a newer schema. Document compatible rollback or restore behavior and recovery objectives in CP10. Pin dependencies including the SQLite library and check current advisories before release.
+Initialize only an empty schema or validate an existing application's consecutive migration names/checksums before upgrading it. Reject an existing schema with no application migration history. Apply each pending migration in a short transaction; a failure rolls back that migration, while earlier successful migrations remain applied. Startup and enrollment create no recovery archives or backup scratch directories. There are no down migrations or guaranteed recovery point: an older binary must reject a newer schema, and an incompatible release needs a compatible forward correction while preserving the existing server volume. Pin dependencies including the SQLite library and check current advisories before release.
 
 External agents or schedulers initiate maintenance. The Go service exposes MCP tools; it does not start autonomous AI runs.
