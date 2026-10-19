@@ -5,7 +5,9 @@
   const refreshButton = document.querySelector("#refresh-view");
   const productDialog = document.querySelector("#product-dialog");
   const quantityDialog = document.querySelector("#quantity-dialog");
-  // Keep an unknown write outcome intact so Retry uses the same key and body.
+  const shareDialog = document.querySelector("#share-dialog");
+  let selectingShare = false;
+  // Keep unknown writes intact. A share needs its original result to recover the URL.
   let pendingWrite = null;
   let writing = false;
   let refreshing = false;
@@ -22,8 +24,12 @@
   }
   function disableWrites(disabled) {
     document.querySelectorAll("[data-picked-up], [data-edit-quantity], [data-add-product]").forEach(control => {
+      control.disabled = disabled || selectingShare;
+    });
+    document.querySelectorAll("[data-share-select], #share-cancel, #share-all, #share-start").forEach(control => {
       control.disabled = disabled;
     });
+    updateShareCount(disabled);
   }
   async function jsonRequest(url, options = {}) {
     const response = await fetch(url, { credentials: "same-origin", cache: "no-store", ...options });
@@ -60,6 +66,7 @@
       if (!content || !csrf) throw new Error("Sign in again to continue.");
       const pageError = content.querySelector(".page-error");
       if (pageError) throw new Error(pageError.textContent);
+      setSharing(false);
       document.querySelector("#content").replaceWith(content);
       document.querySelector('meta[name="csrf-token"]').content = csrf.content;
       disableWrites(Boolean(pendingWrite));
@@ -86,12 +93,16 @@
   }
   async function sendPending() {
     if (!pendingWrite || writing) return;
+    refreshController?.abort();
+    refreshController = null;
+    refreshing = false;
     const focus = pendingWrite.focus;
+    const creatingShare = pendingWrite.kind === "share";
     writing = true;
     disableWrites(true);
     message("Saving…");
     try {
-      await jsonRequest(pendingWrite.url, {
+      const result = await jsonRequest(pendingWrite.url, {
         method: pendingWrite.method,
         headers: {
           "Content-Type": "application/json",
@@ -100,8 +111,24 @@
         },
         body: JSON.stringify(pendingWrite.body),
       });
+      if (creatingShare) {
+        const code = result?.record?.code;
+        if (typeof code !== "string" || code.length !== 5 || /[^A-Za-z]/.test(code)) {
+          throw new Error("The share link response was incomplete.");
+        }
+        document.querySelector("#share-url").value = new URL(`/s/${code}`, location.origin).href;
+      }
       pendingWrite = null;
       writing = false;
+      if (creatingShare) {
+        setSharing(false);
+        document.querySelector("#copy-share-status").textContent = "";
+        dialogTrigger = document.querySelector("#share-start");
+        shareDialog.showModal();
+        document.querySelector("#share-url").focus();
+        message("");
+        return;
+      }
       if (await refreshView()) {
         message("Saved.");
         restoreFocus(focus);
@@ -110,46 +137,80 @@
       }
     } catch (error) {
       writing = false;
+      if (creatingShare && pendingWrite && (!error.status || error.status >= 500)) {
+        pendingWrite.outcomeUnknown = true;
+      }
       if (error.status && error.status < 500) {
-        // A rejected write is settled; reloading may still fail independently.
-        pendingWrite = null;
+        // A rejection settles this attempt, but cannot disprove an earlier
+        // unknown share creation. A private list refresh cannot recover its URL.
+        const unknownShare = creatingShare && pendingWrite?.outcomeUnknown;
+        if (!unknownShare) pendingWrite = null;
         const refreshed = await refreshView();
-        if (refreshed) {
+        if (unknownShare) {
+          message("Not synced. The link may already exist. Retry to recover its URL.", true);
+        } else if (refreshed) {
           message(error.status === 409 ? "The item or list changed. Refreshed; review it and try again." : error.message);
         } else {
           const reason = error.status === 409 ? "The list changed." : error.message;
           message(`${reason} Refresh failed; use Refresh to load the current list before trying again.`, false, true);
         }
       } else {
-        message("Not synced. The change may have reached the server. Retry safely or refresh.", true);
+        message(creatingShare
+          ? "Not synced. The link may already exist. Retry to recover its URL."
+          : "Not synced. The change may have reached the server. Retry safely or refresh.", true);
       }
     } finally {
       writing = false;
       disableWrites(Boolean(pendingWrite));
     }
   }
-  function mutate(method, url, body) {
+  function mutate(method, url, body, kind = "list") {
     if (pendingWrite || writing) return;
-    refreshController?.abort();
-    refreshController = null;
-    refreshing = false;
     const active = document.activeElement;
     const row = active?.closest("[data-item-id]") || dialogTrigger?.closest("[data-item-id]");
     const focus = row
       ? { item: row.dataset.itemId, control: method === "PATCH" && body.picked_up !== undefined ? "[data-picked-up]" : "[data-edit-quantity]" }
       : active?.dataset.addProduct ? { product: active.dataset.addProduct } : null;
-    pendingWrite = { method, url, body, focus, key: crypto.randomUUID() };
+    pendingWrite = { method, url, body, focus, kind, key: crypto.randomUUID(), outcomeUnknown: false };
     void sendPending();
   }
   function listContext() {
     const main = document.querySelector("#content");
     return { id: main.dataset.listId, revision: Number(main.dataset.listRevision) };
   }
+  function updateShareCount(disabled = Boolean(pendingWrite) || writing) {
+    const create = document.querySelector("#share-create");
+    if (!create) return;
+    const choices = [...document.querySelectorAll("[data-share-select]")];
+    const selected = choices.filter(input => input.checked).length;
+    create.disabled = disabled || selected === 0;
+    create.textContent = `Create link${selected ? ` · ${selected} item${selected === 1 ? "" : "s"}` : ""}`;
+    const all = document.querySelector("#share-all");
+    if (all) all.textContent = selected === choices.length ? "Deselect all" : "Select all";
+    for (const input of choices) {
+      input.closest(".product-row").classList.toggle("share-selected", input.checked);
+    }
+  }
+  function setSharing(active) {
+    selectingShare = active;
+    const main = document.querySelector("#content");
+    main.classList.toggle("selecting-share", active);
+    for (const id of ["share-selection-tools", "share-create-tools"]) {
+      const element = document.getElementById(id);
+      if (element) element.hidden = !active;
+    }
+    const start = document.querySelector("#share-start");
+    if (start) start.hidden = active;
+    main.querySelectorAll(".add-products").forEach(link => { link.hidden = active; });
+    main.querySelectorAll(".product-details").forEach(button => { button.tabIndex = active ? -1 : 0; });
+    main.querySelectorAll("[data-share-select]").forEach(input => { input.checked = false; });
+    disableWrites(Boolean(pendingWrite) || writing);
+  }
   function itemURL(item) {
     return `/api/v1/lists/${encodeURIComponent(listContext().id)}/items/${encodeURIComponent(item.id)}`;
   }
   function closeDialog(dialog) { dialog.close(); }
-  for (const dialog of [productDialog, quantityDialog]) {
+  for (const dialog of [productDialog, quantityDialog, shareDialog]) {
     dialog.addEventListener("close", () => {
       dialogTrigger?.focus({ preventScroll: true });
     });
@@ -239,6 +300,51 @@
   document.addEventListener("click", async event => {
     const target = event.target.closest("button");
     if (!target) return;
+    if (target.id === "share-start") {
+      if (pendingWrite || writing || refreshing) return;
+      setSharing(true);
+      document.querySelector("[data-share-select]")?.focus();
+      return;
+    }
+    if (target.id === "share-cancel") {
+      setSharing(false);
+      document.querySelector("#share-start")?.focus();
+      return;
+    }
+    if (target.id === "share-all") {
+      const choices = [...document.querySelectorAll("[data-share-select]")];
+      const checked = !choices.every(input => input.checked);
+      for (const input of choices) input.checked = checked;
+      updateShareCount();
+      return;
+    }
+    if (target.id === "share-create") {
+      const list = listContext();
+      const items = [...document.querySelectorAll("[data-share-select]:checked")].map(input => {
+        const row = input.closest("[data-item-id]");
+        return {
+          item_id: row.dataset.itemId,
+          expected_revision: Number(row.dataset.revision),
+          expected_product_revision: Number(row.dataset.productRevision),
+        };
+      });
+      if (items.length) {
+        mutate("POST", `/api/v1/lists/${encodeURIComponent(list.id)}/shares`, { expected_revision: list.revision, items }, "share");
+      }
+      return;
+    }
+    if (target.id === "copy-share") {
+      const field = document.querySelector("#share-url");
+      try {
+        await navigator.clipboard.writeText(field.value);
+        document.querySelector("#copy-share-status").textContent = "Link copied.";
+      } catch {
+        field.focus();
+        field.select();
+        document.querySelector("#copy-share-status").textContent = "Link selected. Press and hold, or use your keyboard, to copy.";
+      }
+      return;
+    }
     if (target.hasAttribute("data-close-dialog")) {
       closeDialog(target.closest("dialog"));
       return;
@@ -279,6 +385,10 @@
     }
   });
   document.addEventListener("change", event => {
+    if (event.target.hasAttribute("data-share-select")) {
+      updateShareCount();
+      return;
+    }
     if (!event.target.hasAttribute("data-picked-up")) return;
     const checkbox = event.target;
     const checked = checkbox.checked;
@@ -309,14 +419,18 @@
   });
   refreshButton.addEventListener("click", async () => {
     if (await refreshView()) {
-      // Discard a possibly delivered write only after loading authoritative state.
+      if (pendingWrite?.kind === "share") {
+        message("Not synced. The link may already exist. Retry to recover its URL.", true);
+        return;
+      }
+      // Private list state settles list edits, but never a lost share URL.
       pendingWrite = null;
       disableWrites(false);
       message("Refreshed. Review the current list before making another change.");
     }
   });
   function revalidate() {
-    if (!document.hidden && !pendingWrite && !writing && !productDialog.open && !quantityDialog.open && document.activeElement?.tagName !== "INPUT") void refreshView();
+    if (!document.hidden && !pendingWrite && !writing && !productDialog.open && !quantityDialog.open && !shareDialog.open && !selectingShare && document.activeElement?.tagName !== "INPUT") void refreshView();
   }
   window.addEventListener("focus", revalidate);
   document.addEventListener("visibilitychange", revalidate);

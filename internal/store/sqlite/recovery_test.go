@@ -91,7 +91,7 @@ func TestOnlineBackupActiveWALConcurrentWritesAndIsolatedRestore(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(verified, manifest) {
 		t.Fatalf("verify: %#v %v", verified, err)
 	}
-	if manifest.Report.Schema != 6 || manifest.Report.Tables["accounts"] != 2 || manifest.Report.Tables["web_sessions"] != 1 || manifest.Report.Tables["idempotency_results"] != 1 || manifest.Report.Tables["audit_events"] != 1 {
+	if manifest.Report.Schema != 7 || manifest.Report.Tables["accounts"] != 2 || manifest.Report.Tables["web_sessions"] != 1 || manifest.Report.Tables["idempotency_results"] != 1 || manifest.Report.Tables["audit_events"] != 1 {
 		t.Fatalf("snapshot omitted durable evidence: %#v", manifest.Report)
 	}
 	if len(manifest.Report.Confirmed) != 1 || manifest.Report.Confirmed[0].MerchandiseMinor != "599" || manifest.Report.Confirmed[0].MissingPrices != 1 || manifest.Report.Confirmed[0].TaxMinor != "0" || manifest.Report.Confirmed[0].MissingTax != 1 {

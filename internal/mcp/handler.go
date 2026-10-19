@@ -117,7 +117,7 @@ func auditSnapshotSchema() *jsonschema.Schema {
 	for _, recordType := range []reflect.Type{
 		reflect.TypeFor[sqlite.Product](), reflect.TypeFor[sqlite.List](),
 		reflect.TypeFor[sqlite.ListItem](), reflect.TypeFor[sqlite.Preferences](),
-		reflect.TypeFor[sqlite.PurchaseAudit](),
+		reflect.TypeFor[sqlite.PurchaseAudit](), reflect.TypeFor[sqlite.ShareAudit](),
 		// Previously stored purchase audits used the full record shape. Activity
 		// returns persisted JSON unchanged, so keep those historical events valid.
 		reflect.TypeFor[sqlite.Purchase](),

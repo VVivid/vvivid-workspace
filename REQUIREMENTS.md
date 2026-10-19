@@ -28,6 +28,7 @@ The app is mainly managed by an agent through MCP. The user opens a ready shoppi
 | R16 | Deploy behind existing Traefik; keep shopping data and runtime secrets on the server, persist SQLite across restart, and preserve exact retries. Do not create backups, snapshots, off-server copies, backup schedules or Mac recovery keys. | CP09, CP10 |
 | R17 | Preserve progress in files and resumable checkpoints so a new chat can continue. | All checkpoints |
 | R18 | CP00 preserves docs and reference assets; development continues from the first incomplete checkpoint without recreating the project. | CP00, all resume work |
+| R19 | Explicitly select list items and share a separate public checklist through a five-letter link for exactly six hours; preserve private owner data, checkoff, purchases and derived metrics. | Temporary sharing slice |
 
 ## Agreed reference example
 
@@ -35,7 +36,7 @@ Polar Black Cherry Seltzer, 8 × 12 fl oz cans, listed at https://www.walmart.co
 
 ## Scope decisions proposed in the spec
 
-- V1 has private per-user accounts; shared households are deferred.
+- V1 has private per-user accounts; shared households are deferred. Explicit temporary item links are an approved browser-only exception, with selected immutable snapshots and separate guest checkoff. See docs/SHARING.md.
 - Product pack/flavor variants are distinct.
 - Agents supply source-backed data; the server validates it.
 - Checkoff records picked-up intent. Purchase confirmation requires receipt data or user confirmation; no estimated price silently enters actual spending.
