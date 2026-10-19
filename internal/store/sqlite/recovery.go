@@ -3,7 +3,6 @@ package sqlite
 import (
 	"archive/tar"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -485,35 +484,4 @@ func publishFile(source, destination string) error {
 		return err
 	}
 	return nil
-}
-
-func backupBeforeMigration(ctx context.Context, path string, db *sql.DB, migrations []migration) (string, error) {
-	var exists bool
-	if err := db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='schema_migrations' AND type='table')").Scan(&exists); err != nil {
-		return "", err
-	}
-	if !exists {
-		var tableCount int
-		if err := db.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'").Scan(&tableCount); err != nil {
-			return "", err
-		}
-		if tableCount != 0 {
-			return "", fmt.Errorf("existing database has no application migration history")
-		}
-		return "", nil // A new database has no previous application state to save.
-	}
-	version, err := migrationVersion(ctx, db, migrations)
-	if err != nil {
-		return "", err
-	}
-	if version == 0 || version == len(migrations) {
-		return "", nil // No applied schema to preserve, or no upgrade to perform.
-	}
-	destination := fmt.Sprintf("%s.pre-migrate-v%d-to-v%d-%s.tar", path, version, len(migrations), rand.Text())
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-	if _, err := CreateBackup(ctx, path, destination); err != nil {
-		return "", err
-	}
-	return destination, nil
 }

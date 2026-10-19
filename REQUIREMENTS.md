@@ -1,6 +1,6 @@
 # User requirements
 
-Status: October19, 2026. CP01/02/04/05/07/08 locally complete with independent approval. CP03/06 live acceptance, CP09 process/container restart, and CP10 deployment/recovery remain pending. See CHECKPOINTS.md for actual evidence.
+Status: October 19, 2026. CP01/02/04/05/07/08/09 are locally complete with independent approval. CP03/06 live acceptance and CP10 deployment remain in progress. The current no-backup correction is in the local implementation workflow; prior image approval does not cover it. See CHECKPOINTS.md for actual evidence.
 
 ## Intended use
 
@@ -25,7 +25,7 @@ The app is mainly managed by an agent through MCP. The user opens a ready shoppi
 | R13 | Reuse existing Keycloak with OAuth authorization code + PKCE and separate shopping clients/scopes/audiences. | CP03, CP06, CP10 |
 | R14 | Go + templates + SQLite; small JS only for useful interactions. | CP01, CP05 |
 | R15 | One Go service exposes web, API and MCP, sharing business services. No separate MCP gateway. | CP01, CP06, CP10 |
-| R16 | Deploy behind existing Traefik; persist local SQLite data and verify backup/restore/restart. | CP09, CP10 |
+| R16 | Deploy behind existing Traefik; keep shopping data and runtime secrets on the server, persist SQLite across restart, and preserve exact retries. Do not create backups, snapshots, off-server copies, backup schedules or Mac recovery keys. | CP09, CP10 |
 | R17 | Preserve progress in files and resumable checkpoints so a new chat can continue. | All checkpoints |
 | R18 | CP00 preserves docs and reference assets; development continues from the first incomplete checkpoint without recreating the project. | CP00, all resume work |
 
@@ -42,6 +42,7 @@ Polar Black Cherry Seltzer, 8 × 12 fl oz cans, listed at https://www.walmart.co
 - Backend metrics are predefined computations. Agents maintain source records and preferences.
 - Server-side web sessions, optimistic concurrency, idempotent mutations, audit records and confirmed purchase snapshots are required.
 - No in-app AI chat or continuously running agent is required.
+- The user's October 19 server-only, no-backup policy supersedes the earlier backup, restore-drill, retention and recovery-key requirements. Migration startup must not create archives; failed migrations retain transactional rollback and history validation.
 
 ## Deferred
 

@@ -12,6 +12,7 @@
 - History and Insights tabs.
 - Predefined category icons, with photos/descriptions in item details.
 - Durable docs/checkpoints for a new development chat.
+- October 19: keep shopping data and runtime secrets on the server; no backups, snapshots, off-server copies, backup schedules or Mac recovery keys. This supersedes the earlier recovery/retention proposal.
 
 ## Implementation recommendations adopted in the draft
 
@@ -37,7 +38,6 @@
 | Account timezone/currency/retailer/week start | CP03 enrollment, CP08 | User selected America/New_York, USD, Walmart, Monday for their own account; no global defaults and no live enrollment |
 | Receipt/user-confirmation ingestion | CP07 | Agent supplies structured data; file upload/import pipeline not selected |
 | Partial refunds | CP07 | Define explicit return/adjustment model before supporting them; voiding a full purchase is not a partial refund |
-| Backup destination/retention/recovery targets | CP10 | Off-server consistent backup and tested restore required |
 
 Do not block local CP01 on deployment details. Resolve each choice before its dependent implementation. Record new decisions here with rationale and update SPEC.md if behavior changes.
 

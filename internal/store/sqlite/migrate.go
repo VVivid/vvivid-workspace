@@ -49,6 +49,21 @@ func loadMigrations(files fs.FS) ([]migration, error) {
 }
 
 func migrate(ctx context.Context, db *sql.DB, migrations []migration) error {
+	var hasHistory bool
+	if err := db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='schema_migrations' AND type='table')").Scan(&hasHistory); err != nil {
+		return err
+	}
+	if !hasHistory {
+		// Only a new schema may initialize migration history. An existing schema
+		// without that history cannot be identified as a supported application DB.
+		var objects int
+		if err := db.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").Scan(&objects); err != nil {
+			return err
+		}
+		if objects != 0 {
+			return fmt.Errorf("existing database has no application migration history")
+		}
+	}
 	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		version INTEGER PRIMARY KEY,
 		name TEXT NOT NULL,

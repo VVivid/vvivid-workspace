@@ -2,7 +2,7 @@
 
 Draft specification for a mobile shopping app managed primarily by AI agents through MCP. The user opens a ready shopping list, identifies products, and checks items while shopping. The agent maintains products, lists, purchase records, and preferences. The server derives metrics from purchase records.
 
-Status: October19, 2026. CP01/02/04/05/07/08 locally complete with independent approval. CP03/06 live acceptance, CP09 process/container restart, and CP10 deployment/recovery remain pending. See CHECKPOINTS.md for actual evidence.
+Status: October 19, 2026. CP01/02/04/05/07/08/09 are locally complete with independent approval. CP03/06 live acceptance and CP10 deployment remain in progress. The current no-backup correction requires its own local validation and independent review. See CHECKPOINTS.md for actual evidence.
 
 # Product behavior
 
@@ -50,7 +50,7 @@ Illustrative routes, with final host still to be selected: / for pages, /api/v1 
 
 SQLite runs in process with a persistent local data directory such as /data. Enable foreign keys on every connection, use WAL, bounded busy handling, short transactions, and a controlled write connection/pool. Keep network calls outside transactions. SQLite has no PostgreSQL-style row-level security: enforce owner predicates in repositories, composite ownership constraints, services, and tests.
 
-Persist user and web-session data and idempotency outcomes across process restarts. Use SQLite online backup or an equivalent consistent snapshot, including assets if managed locally; do not copy only a live WAL database main file. Back up off server and prove restoration. Gracefully shut down, finish or roll back writes, and close database connections.
+Persist user and web-session data, audit records, confirmed purchase snapshots and idempotency outcomes across process restarts. Gracefully shut down, finish or roll back writes, and close database connections. The user's October 19 policy keeps all shopping data and runtime secrets on the server: do not create backups, snapshots, off-server copies, backup schedules or Mac recovery keys. Startup and enrollment apply supported migrations without creating a recovery archive. Retain migration checksum/version validation and reject an existing schema without application migration history.
 
 Browser behavior needs minimal JavaScript for checkboxes, product details, search, and refreshing on page visibility/focus. Poll lightly while the list is visible; no WebSocket system is required. Show unsaved/error state on failed mutations. V1 does not promise offline editing.
 
@@ -260,6 +260,8 @@ Connection loss must never display an unsaved checkbox as synced. V1 may require
 
 - Repeated list updates, receipt imports, and purchase confirmation are idempotent.
 
+- Process/container restarts preserve records, sessions and exact retry outcomes. Fresh initialization and supported schema upgrades create no backup archive or backup scratch directory; migration failure rolls back its transaction.
+
 - Concurrent browser and agent edits produce recoverable conflicts, with no silent loss.
 
 - Checking Polar shows picked-up state without inventing a price. Confirming a sourced purchase updates History and Insights once.
@@ -284,7 +286,7 @@ Connection loss must never display an unsaved checkbox as synced. V1 may require
 
 The canonical project is /Users/oudavid/works/opensource/AgentShoppingList. Local SPEC.md, REQUIREMENTS.md, ARCHITECTURE.md, CHECKPOINTS.md, and RESUME.md are the development handoff. The Page is a reference mirror; update it deliberately when project requirements change.
 
-CP00–CP02 and CP04/CP05 are complete. CP03 local identity and the prior CP06 ten-tool slice completed independent Review; live Keycloak/phone/client acceptance remains pending. CP07 purchases, CP08 insights and all16 MCP tools now have local Builder implementation and passing checks; Translation/Review remain. CP09 whole-process acceptance and CP10 deployment/recovery remain unfinished. CHECKPOINTS.md records authoritative evidence; docs/DOMAIN.md describes current contracts.
+CP00–CP02, CP04/CP05, CP07/CP08 and CP09 are locally complete. Local identity, all 16 MCP tools and the prior release slice completed independent Review. Actual Keycloak/phone/client acceptance and CP10 deployment remain incomplete. The no-backup correction is a new local slice; its Translation, final validation and fresh Review must complete before replacement images are built. CHECKPOINTS.md records authoritative evidence; docs/DOMAIN.md describes current contracts.
 
 At a pause or new-chat handoff, update CHECKPOINTS.md and RESUME.md with completed work, remaining work, actual validation results, failures, relevant commit IDs if Git exists, and the next concrete action. Mark a checkpoint complete only after its exit criteria pass. Partial work remains in progress; resuming verifies the current files and continues unfinished work rather than restarting or deleting state.
 

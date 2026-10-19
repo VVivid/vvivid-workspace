@@ -1,6 +1,6 @@
 # Development checkpoints
 
-Updated October 19, 2026. **CP00–CP02 complete. CP03 local workflow Approved with live acceptance pending. CP04/CP05 complete; CP06 prior local slice Approved. CP07/CP08 and all16 local tools are independently Approved locally; CP09 process/container/recovery local acceptance is Approved; live acceptance remains.**
+Updated October 19, 2026. **CP00–CP02, CP04/CP05, CP07/CP08 and CP09 are locally complete. CP03/CP06 live identity/client acceptance and CP10 deployment remain in progress. The OAuth compatibility bundle is independently Approved locally and unapplied. A new local correction removes automatic migration backups under the user's server-only policy; prior application image approval does not cover that correction.**
 
 ## Progress ledger
 
@@ -16,7 +16,7 @@ Updated October 19, 2026. **CP00–CP02 complete. CP03 local workflow Approved w
 | CP07 Purchase reconciliation and history | Complete | Bounded outcomes, full immutable sources, durable SDK/reopen/legacy/bounds tests and fresh independent Review Approved at746ef30 |
 | CP08 Derived insights | Complete | Confirmed-snapshot calculations/charts and null/zero/currency/DST/overflow tests; fresh independent Review Approved |
 | CP09 End-to-end and restart verification | Complete | Actual production-process/restart/interrupted retry and two-owner/client tests on host, arm64 and emulatedamd64 containers; final checks and independent Review Approved |
-| CP10 Deployment and recovery acceptance | In progress | Local pinned image, operational health, prepared Compose and consistent backup/isolated restore; local review Approved; live/off-server acceptance pending |
+| CP10 Deployment and persistence acceptance | In progress | Prior local image/readiness/Compose review Approved; server-only no-backup correction in progress; replacement reviewed images and live acceptance pending |
 
 ## How to use checkpoints
 
@@ -151,9 +151,9 @@ Exit:
 - Obtain applicable independent review and resolve findings per the current workflow.
 - README/runbook contain exact reproducible commands and environment requirements.
 
-## CP10 Deployment and recovery acceptance
+## CP10 Deployment and persistence acceptance
 
-Deliverables: immutable container build, internal network/Traefik routes, persistent volume, runtime secret handling, migration/backup/restore runbook, final Keycloak integration.
+Deliverables: immutable container build, internal network/Traefik routes, persistent server volume, server-only runtime secret handling, migration/restart runbook, final Keycloak integration. The user's October 19 no-backup policy supersedes earlier backup/restore/retention/recovery-key deliverables.
 
 Exit:
 - Shopping origin works on the user's phone and intended remote MCP clients.
@@ -161,11 +161,14 @@ Exit:
 - Shopping grant cannot authorize SSH, and SSH grant cannot authorize shopping.
 - Existing SSHMCP authentication remains working after any OAuth proxy change.
 - Graceful shutdown/restart and readiness checks work with persistence.
-- Consistent database/asset backup is copied off server and restored in isolation; records and totals verified.
-- Migration rollback/restore limits, retention, recovery objectives and release version are recorded.
+- Fresh startup, enrollment and supported upgrades create no backup archives or backup scratch directories. Existing records, sessions, audit and exact retry outcomes remain durable.
+- Migration history guards and per-migration rollback remain intact. Record the release version and compatible rollback/forward-correction limits; there is no promised recovery point.
+- Keep shopping data and runtime secrets on the server. Do not create backups, snapshots, off-server copies, backup schedules or Mac recovery keys.
 - Distinguish published container/config from verified runtime outcome. Do not mark complete on deployment alone.
 
 ## Checkpoint evidence entry template
+
+Entries below record historical scope and executed evidence. Older backup/restore/off-server requirements and proposals are superseded by the current CP10 exits above and the October 19 user policy; they are not active operational instructions.
 
 ### CP00 update 2026-10-19
 
@@ -475,3 +478,28 @@ The user explicitly said to keep everything on the server and not back up anythi
 ### OAuth compatibility local approval — October19
 
 FreshReviewer /root/oauth_compat_review session01a15446-d097-7962-add4-fe8be9c95caa verifiedgpt-6.1-sol/max returnedApproved/noactionablefindings afterfinalrootchecks/fullchecker. Independentvet/test/race/linuxamd64build/reversal/hash/probechecks passed. Proxybundle readyforreviewable futureliveplan, notapplied. See deploy/oauth-compat/VALIDATION.md for all effective stageIDs/reports. Next removeapplicationautomaticpre-migrationbackup undernewuserpolicy, then freshapplicationworkflow/rebuild before requestlive rolloutauthorization.
+
+### CP10 update 2026-10-19 — Server-only no-backup Builder handoff
+
+- Status: In progress. The explicit user policy supersedes prior backup/snapshot/off-server/retention/recovery-key requirements. Builder code and docs are frozen for fresh Translation, coordinator final validation and independent Review. The prior application image approval does not cover this correction.
+- Runtime/Git: coordinator verified Builder `/root/no_backup_builder`, host turn_context session `01a15449-c4f9-7c00-bb85-5cdc3efa47d2`, as gpt-6.1-sol/max before edits. Baseline `7d671f6` on main; no commit or remote change. Full Modern Go Guidelines1.26 list read before Go edits.
+- Changed: removed automatic pre-migration archive creation, Store.MigrationBackup and startup/error archive claims. Moved the existing no-history/nonempty-schema guard into migration initialization; unrelated view-only schemas also fail closed. Version/name/checksum/gap/newer checks, per-migration transactions, WAL, ownership, audit and exact idempotency remain. No migration SQL, domain, UI, auth or MCP change. Existing manual recovery tools and their synthetic compatibility tests remain; no application path invokes them.
+- Current docs: REQUIREMENTS/SPEC/ARCHITECTURE, CP10 exits, README/RESUME, RUNBOOK, DEPLOYMENT-PLAN and supporting decision/dependency/auth notes now reflect server-only persistence with no production backups, schedules, off-server copies or Mac keys. Removed active manual backup/retention/restore-drill instructions; preserved earlier executed evidence as historical. Prior05ff303 images/source archives are explicitly superseded as deployment candidates.
+- Actual checks: direct cached Go1.26.9 with GOTOOLCHAIN=local/project caches/GOPROXY=off; uncached SQLite suite passed0.822s; make fmt assets check build passed formatter/CSS/vet/all ordinary tests/both commands; uncached SQLite/admin race suites passed5.432s/1.744s; make process-test executed the production commands and passed2.430s. JS parse, shell syntax and diff checks passed. Synthetic fresh/v4/current startup creates only DB/WAL/SHM files; preserved sessions/preferences/checkoff/purchase599/audit/original replay, no-history refusal, failed-migration DDL/data/history rollback and readiness failures passed. Process evidence includes actual restart, interrupted commit/retry and unchanged durable sessions/outcomes; manual backup/restore calls are synthetic test fixtures only. Detail: [docs/validation/CP10-no-backup-2026-10-19.md](docs/validation/CP10-no-backup-2026-10-19.md).
+- Failures/limits: no unresolved Builder validation failure. Fresh Translation, final coordinator checks and independent Review are not yet executed for this correction. Final images must be rebuilt/tested/scanned after approval and commit; prior05ff303 image results are historical. No new browser visual pass is needed for unchanged UI; actual live phone/client/proxy acceptance remains open.
+- Scope/processes: synthetic tests closed their subprocesses/listeners and temporary stores. No production data, backup, SSH connection, live config/infrastructure write, enrollment, deployment, image publication or commit. The coordinator separately added baseline-gateway rebuild evidence to deploy/oauth-compat/VALIDATION.md; Builder did not edit that file. The human reports a working direct SSH admin path independent of SSHMCP; this is not a coordinator-verified connection and grants no restart/live-write authority.
+- Next: fresh Translation → final coordinator validation → fresh independent Review; then approved commit and exact replacement image build/test/scan. Prepare a concrete live change set before requesting rollout authorization. Keep CP03/06/10 in progress.
+
+### CP10 update 2026-10-19 — Server-only no-backup Translation
+
+- Status: In progress. Translation completed without a correctness or readability blocker. The small production diff, migration guard comment and named regressions are clear; no implementation/test edits were warranted. Coordinator final validation, fresh independent Review and replacement image work remain.
+- Runtime: coordinator verified `/root/no_backup_translation`, host session `01a15451-7383-7783-a1bf-25e95cbad84d`, from host turn_context as gpt-6.1-sol/xhigh before evidence edits. No independent Review verdict is claimed.
+- Inspected: `shopping.run` and enrollment/disable enter `sqlite.Open`; Open loads migrations directly; `migrate` refuses unidentified nonempty schemas before history creation; `migrationVersion` validates the complete history and `applyMigration` owns each short transaction. Explicit backup calls remain only in the operator recovery command and synthetic tests. Removed automatic helper/field/log/error symbols have no remaining Go callers.
+- Actual checks: complete Modern Go1.26 list; direct cached Go1.26.9 with GOTOOLCHAIN=local/project caches/GOPROXY=off ran seven focused uncached SQLite migration/readiness tests, passed0.400s; `git diff --check` passed. These covered fresh/v4/current no-extra-files opens, durable records/original replay, unidentified table/view refusal, failed SQL/data/history rollback, drift/newer/gapped/incomplete history, closed readiness and legacy v4 preservation. No manual backup test, listener, app binary, image build or live connection ran in this stage.
+- Normal trace: v4 Open → known history validation → migrations5/6 each commit SQL and history → read pool/readiness → preserved checked quantity2, session ciphertext, purchase599, audit and exact original replay, with only DB/WAL/SHM siblings. Failure trace: unrelated view without history → guard refuses before history creation → Open closes its writer and returns a migration error; original view/data remain readable and no application tables appear. Code inspection supplies the traces; focused tests execute the stated persistence boundaries.
+- Changed only this handoff, RESUME.md and the correction validation note. Source behavior, public contracts, authorization, ownership, transaction/side-effect order and retry semantics are unchanged. No unresolved readability issue or validation failure; full final checks, fresh independent Review, replacement image tests/scans and live acceptance remain unexecuted by Translation.
+- Next: coordinator final validation → fresh independent Review. Keep CP03/06/10 in progress; no live rollout authority is added.
+
+### CP10 update — no-backup correction independently Approved
+
+Coordinator final formatter/assets/vet/all ordinary tests/both binaries and JS/shell/diff checks passed after Translation froze. Fresh reviewer `/root/no_backup_review`, host-verified session01a15454-4c22-7a60-a81f-bad627a5266f gpt-6.1-sol/max, returned Approved/no actionable findings after independent uncached SQLite/admin suites, both races, targeted vet/format/diff checks. No reviewer edits or live connections. Commit and replacement final-commit image builds/tests/scans next; CP03/06/10 live acceptance remains open.
