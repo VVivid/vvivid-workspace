@@ -43,8 +43,8 @@ func (s *Service) GetContext(ctx context.Context, p identity.Principal) (Context
 	if err != nil {
 		return Context{}, err
 	}
-	caps := []string{"products:read", "lists:read", "activity:read"}
-	for scope, name := range map[string]string{identity.ProductsWrite: "products:write", identity.ListsWrite: "lists:write", identity.PreferencesWrite: "preferences:write"} {
+	caps := []string{"products:read", "lists:read", "purchases:read", "insights:read", "activity:read"}
+	for scope, name := range map[string]string{identity.ProductsWrite: "products:write", identity.ListsWrite: "lists:write", identity.PurchasesWrite: "purchases:write", identity.PreferencesWrite: "preferences:write"} {
 		if p.Allows(scope) {
 			caps = append(caps, name)
 		}

@@ -362,7 +362,7 @@ func newTestStore(t *testing.T) (*Store, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	assertCount(t, store.read, "SELECT count(*) FROM schema_migrations", 5)
+	assertCount(t, store.read, "SELECT count(*) FROM schema_migrations", 6)
 	return store, path
 }
 

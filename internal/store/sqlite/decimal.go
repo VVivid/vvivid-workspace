@@ -34,9 +34,25 @@ func AddDecimal(left, right string) (string, error) {
 	if sum > 999_999_999_999_999 {
 		return "", fmt.Errorf("%w: quantity exceeds supported range", ErrLimit)
 	}
-	result := strconv.FormatInt(sum/1_000_000, 10)
-	if sum%1_000_000 != 0 {
-		result += "." + strings.TrimRight(fmt.Sprintf("%06d", sum%1_000_000), "0")
+	return formatMicros(sum), nil
+}
+
+func SubtractDecimal(left, right string) (string, error) {
+	l, err := decimalMicros(left)
+	if err != nil {
+		return "", err
 	}
-	return result, nil
+	r, err := decimalMicros(right)
+	if err != nil || r > l {
+		return "", fmt.Errorf("purchase quantity exceeds requested quantity")
+	}
+	return formatMicros(l - r), nil
+}
+
+func formatMicros(n int64) string {
+	result := strconv.FormatInt(n/1_000_000, 10)
+	if n%1_000_000 != 0 {
+		result += "." + strings.TrimRight(fmt.Sprintf("%06d", n%1_000_000), "0")
+	}
+	return result
 }

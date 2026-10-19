@@ -31,6 +31,7 @@ type Identity struct {
 	Manager *identity.Manager
 	Store   *sqlite.Store
 	Path    string
+	config  identity.Config
 	server  *httptest.Server
 	key     *rsa.PrivateKey
 	secret  string
@@ -72,11 +73,30 @@ func New(t *testing.T) *Identity {
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.config = *cfg
 	f.Manager, err = identity.New(t.Context(), *cfg, f.Store)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return f
+}
+
+// Reopen replaces the database connection and identity manager, preserving the
+// same database, issuer and session keys for restart/replay integration tests.
+func (f *Identity) Reopen(t *testing.T) {
+	t.Helper()
+	if err := f.Store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var err error
+	f.Store, err = sqlite.Open(t.Context(), f.Path, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Manager, err = identity.New(t.Context(), f.config, f.Store)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (f *Identity) Enroll(t *testing.T, subject string) sqlite.Owner {

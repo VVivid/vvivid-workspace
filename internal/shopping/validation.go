@@ -235,12 +235,15 @@ func validateOperations(input UpdateItemsInput) error {
 			if operation.Merge != "increment" && operation.Merge != "keep" {
 				return invalid("add requires explicit merge increment or keep")
 			}
+			if operation.ExpectedProductRevision != nil && *operation.ExpectedProductRevision < 1 {
+				return invalid("expected_product_revision must be positive when supplied")
+			}
 			continue
 		}
 		if !slices.Contains([]string{"set_quantity", "set_picked_up", "remove", "restore"}, operation.Kind) {
 			return invalid("unknown operation kind")
 		}
-		if !validID(operation.ItemID) || operation.ExpectedRevision < 1 || operation.ProductID != "" || operation.Merge != "" || operation.Retailer != nil {
+		if !validID(operation.ItemID) || operation.ExpectedRevision < 1 || operation.ProductID != "" || operation.Merge != "" || operation.Retailer != nil || operation.ExpectedProductRevision != nil {
 			return invalid("item operation requires item_id and expected_revision")
 		}
 		if operation.Kind == "set_quantity" {

@@ -1,0 +1,48 @@
+package web_test
+
+import (
+    "encoding/json"
+    "fmt"
+    "strings"
+    "testing"
+
+    "agentshoppinglist/internal/shopping"
+    "agentshoppinglist/internal/store/sqlite"
+    "agentshoppinglist/internal/testfixture"
+)
+
+func TestIndependentFiftyLineTwelveSourcePurchase(t *testing.T) {
+    _, service, principal, _, _ := setup(t)
+    draft := purchaseDraft("", "independent-50-lines-12-sources")
+    line := draft.Lines[0]
+    draft.Lines = make([]sqlite.PurchaseLineDraft, 50)
+    for i := range draft.Lines {
+        variant := testfixture.Polar()
+        variant.Name = fmt.Sprintf("Synthetic sourced product %02d", i)
+        variant.Sources = make([]sqlite.FieldSource, 12)
+        for j := range variant.Sources {
+            variant.Sources[j] = testfixture.Polar().Sources[0]
+            prefix := fmt.Sprintf("https://example.com/%02d/%02d?source=", i, j)
+            variant.Sources[j].URL = prefix + strings.Repeat("a", 2048-len(prefix))
+        }
+        saved, err := service.SaveProduct(t.Context(), principal, shopping.SaveProductInput{WriteMeta: meta(fmt.Sprintf("independent-source-product-%02d", i)), Product: variant})
+        if err != nil { t.Fatal(err) }
+        draft.Lines[i] = line
+        draft.Lines[i].ProductID = saved.Record.ID
+        draft.Lines[i].ExpectedProductRevision = saved.Record.Revision
+    }
+    // A smaller supported receipt succeeds and lets us measure the immutable
+    // line payload independently of the audit-summary cap.
+    smaller := draft
+    smaller.SourceReference = "independent-30-lines-12-sources"
+    smaller.Lines = draft.Lines[:30]
+    smallSaved, err := service.SavePurchase(t.Context(), principal, shopping.SavePurchaseInput{WriteMeta: meta("independent-smaller-draft"), Purchase: smaller})
+    if err != nil { t.Fatal(err) }
+    raw, err := json.Marshal(smallSaved.Record)
+    if err != nil { t.Fatal(err) }
+    t.Logf("30-line sourced purchase result: %d bytes", len(raw))
+    saved, err := service.SavePurchase(t.Context(), principal, shopping.SavePurchaseInput{WriteMeta: meta("independent-multi-source-draft"), Purchase: draft})
+    if err != nil { t.Fatalf("supported 50-distinct-line purchase with 12 valid field sources per product failed: %v", err) }
+    _, err = service.ConfirmPurchase(t.Context(), principal, shopping.ConfirmPurchaseInput{WriteMeta: meta("independent-multi-source-confirm"), PurchaseID: saved.Record.ID, ExpectedRevision: saved.Record.Revision})
+    if err != nil { t.Fatalf("supported 50-line confirmation failed: %v", err) }
+}
