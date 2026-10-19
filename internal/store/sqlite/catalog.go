@@ -9,29 +9,42 @@ import (
 	"strings"
 )
 
-// These initial records and insert primitives exercise the persistence boundary.
-// Product/list management, merge rules and purchase workflows belong to services
-// introduced at their checkpoints; they are not exposed by any adapter yet.
 type Product struct {
-	ID       string
-	Name     string
-	Category string
-	Revision int64
+	ID           string        `json:"id"`
+	SourceKey    *string       `json:"source_key"`
+	Name         string        `json:"name"`
+	Brand        string        `json:"brand"`
+	Flavor       string        `json:"flavor"`
+	Category     string        `json:"category"`
+	PackageCount *int64        `json:"package_count"`
+	PackageSize  *string       `json:"package_size"`
+	PackageUnit  *string       `json:"package_unit"`
+	Description  string        `json:"description"`
+	Archived     bool          `json:"archived"`
+	Revision     int64         `json:"revision"`
+	Sources      []FieldSource `json:"sources"`
+	Media        []Media       `json:"media"`
+	Nutrition    *Nutrition    `json:"nutrition"`
+	Listings     []Listing     `json:"listings"`
 }
 
 type List struct {
-	ID       string
-	Title    string
-	Revision int64
+	ID       string  `json:"id"`
+	Title    string  `json:"title"`
+	Retailer *string `json:"retailer"`
+	Status   string  `json:"status"`
+	Revision int64   `json:"revision"`
 }
 
 type ListItem struct {
-	ID        string
-	ListID    string
-	ProductID string
-	Quantity  string
-	PickedUp  bool
-	Revision  int64
+	ID        string  `json:"id"`
+	ListID    string  `json:"list_id"`
+	ProductID string  `json:"product_id"`
+	Quantity  string  `json:"quantity"`
+	PickedUp  bool    `json:"picked_up"`
+	Revision  int64   `json:"revision"`
+	RemovedAt *int64  `json:"removed_at"`
+	Retailer  *string `json:"retailer"`
 }
 
 func (tx *Tx) InsertProduct(product Product) error {

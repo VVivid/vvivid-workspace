@@ -6,56 +6,53 @@ Updated October 19, 2026, America/New_York.
 
 Project: /Users/oudavid/works/opensource/AgentShoppingList
 
-**CP00–CP02 complete after Translation/final checks/Review Approved. CP03 local identity workflow is independently Approved; live acceptance remains. V1 is not beta-ready.**
+**CP00–CP02 complete. CP03 local identity is independently Approved; live acceptance remains. CP04/CP05 complete after independent Review Approved; CP06 local tools Approved with real-client and later-tool acceptance pending. V1 is not beta-ready.**
 
-Go1.26.5 serves the embedded four-tab shell. SQLite startup applies four checksum migrations, enables private WAL persistence and closes after HTTP shutdown. Exact dependency pins are in go.mod and docs/DEPENDENCIES.md.
+Continue the user's overall deployable daily-use v1 goal after each local stage; checkpoint boundaries are not a request to stop. The current slice intentionally leaves purchase confirmation/History and derived Insights for CP07/08, then full end-to-end/restart/deployment/recovery acceptance. Live identity/client checks remain separate and unexecuted.
 
-Tenant-safe initial records, composite FKs, audit/idempotency and immutable purchase snapshots remain intact. CP03 adds a complete optional Keycloak bundle, code+PKCE/state/nonce, one-use encrypted login attempts, AES-GCM persistent sessions/external keys, secure host cookies, CSRF/exact Origin, refresh/logout/revocation, and strict API/MCP access JWT verification. Shared verified Principal resolves only active enrolled owners. Operator shopping-admin enroll/disable requires explicit subject/preferences; login never enrolls. No seeded users, runtime identity bypass or shopping API/MCP tools exist. Domain workflows remain later checkpoints. Readiness stays503.
+Baseline Git commit `a3f8c76` on `main` contains the foundation/identity tree; no remote. Later local changes implement product variants/sourced details, explicit active-list selection, atomic revisioned list batches, soft removal with picked-up evidence, before/after audit and durable idempotency. Migration5 preserves existing records and never guesses an active list. `.gitattributes` enforces LF for source/text without changing global Git settings.
 
-Git remains main, no commits/remote. Reference assets preserved. No live Keycloak, OAuth proxy, Traefik or deployment changes.
+Go1.26.5 serves embedded templates/CSS/minimal JS, a browser-session API and protected official SDK v1.8.0 stateless MCP from one application. Browser and MCP call the same scope/owner services. Ten tools are implemented: context, product search/read/save/archive, list read/save/update, preferences and activity. Purchase/insight tools are unexposed; the UI tabs remain truthful empty views. No seeded production users/data, runtime fixture identity, separate gateway or arbitrary fetch/execute/SQL. Readiness stays503.
+
+Existing CP03 security remains: code+PKCE/state/nonce, one-use encrypted login attempts, external AES-GCM keyring and durable sessions, secure host cookies, exact Origin/CSRF, refresh/logout/revocation, strict access JWT audience/client/scope checks, explicit operator enrollment/disable and active owner resolution. No live infrastructure changes.
 
 ## Read in order
 
 1. AGENTS.md and this file.
-2. CHECKPOINTS.md for acceptance/stage evidence.
+2. CHECKPOINTS.md for status and stage evidence.
 3. REQUIREMENTS.md, SPEC.md, ARCHITECTURE.md, docs/KEYCLOAK.md.
-4. docs/DECISIONS.md and docs/DEPENDENCIES.md.
-5. docs/AUTH.md, README.md and docs/validation/CP03-2026-10-19.md for setup/results.
+4. docs/DOMAIN.md for the implemented local contract/reading order and docs/validation/CP04-CP06-2026-10-19.md for executed evidence.
+5. docs/AUTH.md, docs/DECISIONS.md, docs/DEPENDENCIES.md and README.md for configuration/remaining choices.
 
 ## Next action
 
-Continue preparatory CP04–CP06 product/list services, mobile UI/API and built-in MCP over the verified Principal. CP03 local code completed Builder, Translation, final checks/build and independent Review Approved; keep CP03 In progress until actual Keycloak/phone/client acceptance passes. Preserve all work.
+Coordinator runs final validation/build on the CP04–CP06 local slice and obtains fresh independent Review. Translation completed after Builder corrected independent price/availability labels and rejected-write refresh failure handling. Do not call Builder or Translation checks an independent review. Keep CP03/CP06 live integration In progress. After local approval continue CP07/08, preserving current files/data and user scope; do not recreate the project.
 
 ## Actual validation
 
-- Modern Go Guidelines read for Go1.26.5 before Go edits.
-- Project-cache make fmt/assets/check/build passed formatting/CSS/vet/full tests and both binaries; identity/store/admin race tests passed. New exact go-oidc3.21.0/go-jose4.1.4/OAuth2v0.37.0 pins; sqlite/libc retained.
-- Real loopback issuer fixtures execute discovery/code/PKCE/state/nonce/exchange/JWKS, two-user enrollment/isolation, invalid claims/signatures/scopes, CSRF/origin/Host, durable store+Manager reopen, refresh races/failures/target/subject, logout, operator disable and signing/session-key rotation. Existing persistence regressions pass.
-- Built binary twice8091/same temporary empty DB: schema4/WAL/0600/zero accounts, shell/live200, ready503, unconfigured auth/API/MCP404, SIGTERM0 both. Partial identity config exit1 before listening. Processes/tempDB cleaned.
-- Sandbox DNS/loopback failures resolved by scoped escalation; no unresolved Builder failures. Actual browser/phone/Keycloak/Codex/ChatGPT auth and CP09 process acceptance remain unexecuted.
-- Coordinator verified old8090 preview stopped: no listener/connection refused. Session37805 expired; final exit code unavailable. No Builder-owned process remains.
+- Modern Go Guidelines read for Go1.26 before edits; official SDK primary release/docs checked and exact v1.8.0 dependencies pinned.
+- Project-cache `make fmt assets`, `node --check web/static/app.js`, `GOPROXY=off make check build` and race tests for browser/MCP/identity/store/admin passed. Existing snapshot/auth/session/security regressions pass.
+- Real loopback OIDC/browser/official SDK integration executed all10 tools, scopes/CSRF/audience/two-user isolation, source validation, exact decimals/variants/null facts, bounded catalog/activity pagination, atomic rollback, idempotent retries, browser/MCP concurrent revision race, explicit selection and archive/restore rules. Reopening SQLite preserved replay outcomes without modifying later state; v4→v5 preserved old shopping rows.
+- Coordinator built-in browser checked360/390 widths, tap targets, real Polar fixture photo/details, dialog keyboard/Escape/focus, persistent checks, quantity/search/add/remove,503 unsynced/Retry and final focus restoration. Screenshots/evidence linked in the validation note. These are synthetic local records, not production or retailer verification.
+- Fresh Translation independently inspected the corrected listing labels and write/refresh flow, expanded dense JavaScript branches and browser API input literals without changing behavior, then passed Modern Go guidance, `gofmt`, JavaScript parse and uncached `go test ./internal/web -count=1`. The sandbox listener denial was resolved with scoped local escalation. Coordinator separately browser-checked null-price/known-stock, known/zero-price/unknown-stock and409-write+503-refresh recovery before Translation; final full validation/review remain.
+- Initial sandbox dependency DNS/listener denial resolved by scoped local escalations. Schema4→5 expectations and SDK audit-output schema inference issue were fixed; final checks passed. No unresolved Builder check failure.
+- Final opt-in test preview session94993 remains at127.0.0.1:8092 for coordinator follow-up. It injects a genuine OIDC-created synthetic session through a wrapper compiled only into the test binary before production authentication executes. Production has no fixture switch. Stop this process after QA. Earlier previews were intentionally restarted to load corrections; the current preview predates Translation's readability-only JavaScript edits. Old foundation8090 remains stopped. No production application server runs for this slice.
 
-Use GOMODCACHE=$PWD/.cache/go-mod GOCACHE=$PWD/.cache/go-build for validation in this restricted workspace. See evidence note for exact commands and traces.
+Use `GOMODCACHE=$PWD/.cache/go-mod GOCACHE=$PWD/.cache/go-build` in the restricted workspace. Loopback tests may require scoped escalation. See the evidence note for commands and actual cases.
 
-## Context to preserve
+## Context and remaining inputs
 
-- User opens a ready Walmart list, recognizes products and checks them; agents manage records.
-- Four compact tabs, no dashboard. Category icons on rows; product photos belong in details.
-- Polar Black Cherry Seltzer 8 × 12 fl oz is a recognition example, never a fabricated purchase.
-- Browser/MCP share ownership, validation, revision and idempotency services.
-- Checkoff records picked-up intent; confirmed purchases produce spending/quantity metrics.
-- Reuse Keycloak/Traefik with separate shopping clients/scopes/audiences; no separate MCP gateway.
-- Existing OAuth proxy is SSH-specific. Client registration alone is not shopping integration proof.
-- October18 Keycloak observations remain unrefreshed, not current runtime acceptance.
+- User opens a ready Walmart list and checks products; agents manage records. Four compact tabs, no dashboard. Fixed category icons on rows; exact photos belong in details.
+- Checkoff records picked-up intent; it never creates a purchase or actual price. Soft removal preserves evidence. Future confirmed purchases alone produce History/Insights metrics.
+- Explicit merge increment/keep, expected list/item/selection revisions and account-wide idempotency are shared by browser and MCP.
+- User chose https://shopping.vvivid.dev, own-account-only initial enrollment, Codex and ChatGPT. Own-account preferences explicitly selected: America/New_York, USD, Walmart, Monday. These are not global defaults and no live account is enrolled.
+- Exact subject, registrations/callbacks, live issuer/resource/proxy compatibility, optional background consent, remote repository and recovery targets remain pending. October18 Keycloak observations are historical, not refreshed runtime evidence.
+- Automatic approval review rejected the earlier production SSHMCP connection as outside local authorization. No connection opened or indirect retry/bypass occurred. Local artifacts/tests are authorized; live identity/Traefik/DNS/proxy/enrollment/deployment requires the separately recorded bounded authorization.
 
-## Open decisions
+## Stage evidence
 
-User selected https://shopping.vvivid.dev, own-account-only initial enrollment, and Codex plus ChatGPT. Exact registrations/callbacks/subject and explicit timezone/currency/retailer/week start remain inputs, with no chat-derived defaults. Live issuer/resource/proxy compatibility, optional background consent, remote repository and recovery targets remain pending. See docs/DECISIONS.md and AUTH.md. Prepared config is not runtime proof.
+CP03 Builder/Translation/Review runtime evidence is in CHECKPOINTS.md. Coordinator verified CP04–CP06 Builder `/root/shopping_builder`, host turn_context session01a1527f-e94d-74c3-a912-9ec17a0f5097, as gpt-6.1-sol/max before implementation, and fresh Translation `/root/shopping_translation_final`, host turn_context session01a15292-7794-7b23-ac8d-81a50e4a15eb, as gpt-6.1-sol/xhigh before edits. Review for this slice must supply actual independent runtime evidence and a verdict.
 
-## Latest coordinator handoff
+## Latest coordinator result — CP04–CP06
 
-CP02 remains Approved; its P3 sidecar-ignore follow-up is fixed in CP03. Local CP03 Builder checks/smoke pass; Translation/review pending. Coordinator verified Builder host turn_context session01a15270-47c7-7ac2-942c-3a7daebbf320 as gpt-6.1-sol/max. Continue the overall goal after local review.
-
-Automatic approval review rejected the production SSHMCP connection as outside local authorization; no connection opened or bypass was attempted. Request explicit bounded live infrastructure authorization when the prepared local result is concrete. Hostname/enrollment/client choices above are answered and authorize preparation, not live infrastructure mutation. No live enrollment, secrets, clients, proxy/DNS/Traefik or deployment changes occurred.
-
-Latest CP03 local review found no blocking issues and Approved. Final tests passed after scoped loopback retry; runtime stage IDs/settings are in CHECKPOINTS.md. No listeners remain. Next local domain/adapters can proceed while live integration is pending.
+CP04/CP05 are complete after corrections, final Translation, final build/tests/browser checks, and fresh independent Review Approved (no blocking findings). CP06 local10tool slice is Approved; actual-client and purchase/insight tools pending. Runtime model/effort verification IDs for every original/correction stage are in CHECKPOINTS.md. Continue CP07/CP08 locally while live CP03/06 remain pending. Test preview51151 on8092 is synthetic; all failure controls restored. Existing base commit a3f8c76; next snapshot follows this approval. No live infra changes.

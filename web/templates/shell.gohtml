@@ -6,40 +6,49 @@
   <meta name="color-scheme" content="light">
   <title>{{.Current.Title}} · Shopping</title>
   <link rel="stylesheet" href="/static/app.css">
+  {{if .SignedIn}}<meta name="csrf-token" content="{{.CSRF}}"><script src="/static/app.js" defer></script>{{end}}
 </head>
 <body class="min-h-dvh bg-background text-foreground antialiased">
   <a class="skip-link" href="#content">Skip to content</a>
   <div class="shopping-app mx-auto w-full bg-white">
     <header class="flex items-center gap-3">
-      <span class="app-icon grid place-items-center rounded-xl" aria-hidden="true">
-        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12l2 14H4L6 7Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>
-      </span>
+      <span class="app-icon grid place-items-center rounded-xl" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12l2 14H4L6 7Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg></span>
       <h1 class="text-2xl font-semibold tracking-tight">Shopping</h1>
+      {{if .SignedIn}}<form class="signout" method="post" action="/auth/logout"><input type="hidden" name="csrf_token" value="{{.CSRF}}"><button class="quiet-button" type="submit">Sign out</button></form>{{end}}
     </header>
     <nav class="segmented-tabs grid grid-cols-4 gap-1 rounded-xl p-1" aria-label="Shopping views">
-      {{range .Pages}}
-      <a
-        class="flex min-h-11 items-center justify-center rounded-lg text-xs font-medium{{if eq .Path $.Current.Path}} selected{{end}}"
-        href="{{.Path}}"
-        {{if eq .Path $.Current.Path}}aria-current="page"{{end}}
-      >{{.Title}}</a>
-      {{end}}
+      {{range .Pages}}<a class="flex min-h-11 items-center justify-center rounded-lg text-xs font-medium{{if eq .Path $.Current.Path}} selected{{end}}" href="{{.Path}}" {{if eq .Path $.Current.Path}}aria-current="page"{{end}}>{{.Title}}</a>{{end}}
     </nav>
-    <main id="content" tabindex="-1">
-      <h2 class="text-sm font-semibold">{{.Current.Title}}</h2>
-      <div class="empty-state flex flex-col items-center text-center">
-        <svg class="mb-4" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 7h12l2 14H4L6 7Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>
-        <p class="max-w-64 text-sm leading-relaxed">{{.Current.Message}}</p>
-        {{if .SignedIn}}
-        <form method="post" action="/auth/logout" class="mt-4">
-          <input type="hidden" name="csrf_token" value="{{.CSRF}}">
-          <button type="submit" class="min-h-11 rounded-lg px-4 text-sm font-medium">Sign out</button>
-        </form>
-        {{else if .SignIn}}
-        <a href="/auth/login" class="mt-4 flex min-h-11 items-center rounded-lg px-4 text-sm font-medium">Sign in</a>
-        {{end}}
-      </div>
+    <div id="sync-status" class="sync-status" role="status" aria-live="polite" hidden><span></span> <button type="button" id="retry-write" hidden>Retry</button> <button type="button" id="refresh-view" hidden>Refresh</button></div>
+    <main id="content" tabindex="-1" data-view="{{.Current.Path}}"{{if .List.List}} data-list-id="{{.List.List.ID}}" data-list-revision="{{.List.List.Revision}}"{{end}}>
+      <h2 class="section-title">{{.Current.Title}}{{if and .SignedIn (eq .Current.Path "/")}}{{if .List.List}} <span>{{.List.List.Title}}</span>{{end}}{{end}}</h2>
+      {{if .Error}}<p class="page-error" role="alert">{{.Error}}</p>
+      {{else if not .SignedIn}}
+        <div class="empty-state flex flex-col items-center text-center"><p class="max-w-64 text-sm leading-relaxed">{{.Current.Message}}</p>{{if .SignIn}}<a class="primary-button" href="/auth/login">Sign in</a>{{end}}</div>
+      {{else if eq .Current.Path "/"}}
+        {{if .List.List}}
+          {{if .List.Items}}<ul class="product-list" aria-label="Shopping list">{{range .List.Items}}
+            <li class="product-row{{if .PickedUp}} picked-up{{end}}" data-item-id="{{.ID}}" data-revision="{{.Revision}}">
+              <button class="product-details" type="button" data-product-id="{{.Product.ID}}" aria-label="Details for {{.Product.Name}}">{{template "category-icon" .Product}}<span class="product-label"><strong>{{.Product.Name}}</strong><small>{{pack .Product}}{{if .Product.Archived}} · Archived{{end}}{{if .Retailer}} · {{.Retailer}}{{end}}</small></span></button>
+              <button class="quantity-button" type="button" data-edit-quantity aria-label="Change quantity for {{.Product.Name}}" data-quantity="{{.Quantity}}">×{{.Quantity}}</button>
+              <label class="check-target"><input type="checkbox" data-picked-up aria-label="Picked up {{.Product.Name}}"{{if .PickedUp}} checked{{end}}><span aria-hidden="true"></span></label>
+            </li>{{end}}</ul>{{else}}<p class="empty-state">Your list is empty.</p>{{end}}
+          <a href="/products" class="add-products">＋ Add products</a>
+        {{else}}<p class="empty-state">No active list. Ask your agent to prepare one.</p><a href="/products" class="add-products">View saved products</a>{{end}}
+      {{else if eq .Current.Path "/products"}}
+        <form class="search-form" role="search" method="get" action="/products"><label class="sr-only" for="product-search">Search saved products</label><input id="product-search" name="q" type="search" placeholder="Search products" value="{{.Query}}" maxlength="200"><button type="submit" class="quiet-button">Search</button></form>
+        {{if .Products.Products}}<ul class="product-list" aria-label="Saved products">{{range .Products.Products}}
+          <li class="product-row"><button class="product-details" type="button" data-product-id="{{.ID}}" aria-label="Details for {{.Name}}">{{template "category-icon" .}}<span class="product-label"><strong>{{.Name}}</strong><small>{{pack .}}</small></span></button>{{if $.List.List}}<button class="add-button" type="button" data-add-product="{{.ID}}" aria-label="Add {{.Name}} to list">＋</button>{{end}}</li>
+        {{end}}</ul>{{else}}<p class="empty-state">No saved products{{if .Query}} match your search{{end}}.</p>{{end}}
+        {{if .Products.NextCursor}}<a class="more-link" href="/products?q={{.Query}}&amp;cursor={{.Products.NextCursor}}">More products</a>{{end}}
+        {{if not .List.List}}<p class="subtle-note">Ask your agent to select an active list before adding products.</p>{{end}}
+      {{else}}<p class="empty-state">{{.Current.Message}}</p>{{end}}
     </main>
   </div>
+  {{if .SignedIn}}
+  <noscript><p class="no-script">JavaScript is needed to save list changes and open product details.</p></noscript>
+  <dialog id="product-dialog" aria-labelledby="product-title"><div class="dialog-top"><h2 id="product-title">Product details</h2><button type="button" class="close-button" data-close-dialog aria-label="Close product details">×</button></div><div id="product-detail-content"></div></dialog>
+  <dialog id="quantity-dialog" aria-labelledby="quantity-title"><form id="quantity-form"><div class="dialog-top"><h2 id="quantity-title">Quantity</h2><button type="button" class="close-button" data-close-dialog aria-label="Close quantity editor">×</button></div><label for="quantity-value">Requested quantity</label><input id="quantity-value" name="quantity" type="text" inputmode="decimal" required maxlength="16" pattern="(0|[1-9][0-9]{0,8})(\.[0-9]{1,6})?"><div class="quantity-actions"><button type="button" class="remove-button" id="remove-item">Remove</button><button type="submit" class="primary-button">Save</button></div></form></dialog>
+  {{end}}
 </body>
 </html>{{end}}

@@ -2,7 +2,7 @@
 
 Draft specification for a mobile shopping app managed primarily by AI agents through MCP. The user opens a ready shopping list, identifies products, and checks items while shopping. The agent maintains products, lists, purchase records, and preferences. The server derives metrics from purchase records.
 
-Status: October 19, 2026. CP01/02 contain a Go shell and tenant-safe SQLite. CP03 local identity Builder checks pass; review/live OAuth integration remain. Domain workflows and beta acceptance are pending. See CHECKPOINTS.md for evidence.
+Status: October19, 2026. CP01/02 complete; CP03 local identity independently Approved with live integration pending. CP04–CP06 local Builder implementation/checks pass; Translation/review and real-client acceptance remain. Planned purchases/insights/deployment remain pending. See CHECKPOINTS.md and docs/DOMAIN.md for actual local behavior/evidence.
 
 # Product behavior
 
@@ -274,7 +274,7 @@ Connection loss must never display an unsaved checkbox as synced. V1 may require
 
 The canonical project is /Users/oudavid/works/opensource/AgentShoppingList. Local SPEC.md, REQUIREMENTS.md, ARCHITECTURE.md, CHECKPOINTS.md, and RESUME.md are the development handoff. The Page is a reference mirror; update it deliberately when project requirements change.
 
-CP00–CP02 are complete. CP03 local identity implementation has passed Builder, Translation and final validation; independent review and live Keycloak/phone/client acceptance remain pending. CP04 product/list services, CP05 mobile templates/API, CP06 MCP, CP07 purchases, CP08 insights, CP09 end-to-end/restart and CP10 deployment/recovery remain unimplemented. CHECKPOINTS.md records authoritative evidence.
+CP00–CP02 are complete. CP03 local identity completed Builder, Translation, final validation and independent Review Approved; live Keycloak/phone/client acceptance remains pending. CP04 product/list, CP05 mobile templates/API and CP06 built-in MCP have local Builder implementation and passing checks; Translation/review remain, and CP06 actual selected-client OAuth acceptance remains unexecuted. CP07 purchases, CP08 insights, CP09 complete end-to-end/restart and CP10 deployment/recovery remain unimplemented. CHECKPOINTS.md records authoritative evidence; docs/DOMAIN.md describes current mutation/selection/source contracts.
 
 At a pause or new-chat handoff, update CHECKPOINTS.md and RESUME.md with completed work, remaining work, actual validation results, failures, relevant commit IDs if Git exists, and the next concrete action. Mark a checkpoint complete only after its exit criteria pass. Partial work remains in progress; resuming verifies the current files and continues unfinished work rather than restarting or deleting state.
 

@@ -34,7 +34,7 @@
 | OAuth proxy extension vs isolated route | CP03 | Reuse same Keycloak; preserve SSH behavior |
 | App enrollment | CP03 | Own account only initially, local operator CLI; exact subject/preferences pending |
 | First agent clients and offline grants | CP03/06 | Codex and ChatGPT selected; registrations/callbacks pending; offline consent unselected |
-| Account timezone/currency/week start | CP03 enrollment, CP08 | CP02 requires explicit validated per-user inputs; no inferred global defaults |
+| Account timezone/currency/retailer/week start | CP03 enrollment, CP08 | User selected America/New_York, USD, Walmart, Monday for their own account; no global defaults and no live enrollment |
 | Receipt/user-confirmation ingestion | CP07 | Agent supplies structured data; file upload/import pipeline not selected |
 | Partial refunds | CP07 | Define explicit return/adjustment model before supporting them; voiding a full purchase is not a partial refund |
 | Backup destination/retention/recovery targets | CP10 | Off-server consistent backup and tested restore required |
@@ -68,3 +68,11 @@ Stock UI/domain, shared households, automatic Walmart login/order import, arbitr
 - Exact distinct API/MCP resources and clients; RS256 Keycloak access JWTs enforce issuer/audience/type/time/scope. Browser read/list permissions only. Shared verified Principal resolves active enrolled owners.
 - Operator enroll/disable CLI, no HTTP/MCP enrollment. Browser refresh rechecks grants at most60seconds apart on requests; bearer revocation bound300seconds. Confirm actual Keycloak behavior before release.
 - Prepare isolated shopping client/resource bindings without changing the SSH proxy speculatively. JSON fragments are not a realm import. See AUTH.md.
+
+## CP04–CP06 local choices
+
+- Explicit per-owner active-list selection with its own expected revision; list creation never selects implicitly. Version5 preserves old lists and checked evidence without guessing a selection.
+- Exact decimal list quantities, explicit increment/keep merges, 1–50 atomic operations and500 retained items per list. Increment retains picked-up intent; soft removal never erases it.
+- Field provenance for current product details, separate image/nutrition/listing observations, and null unknown facts. No server-side retailer/media fetching.
+- Browser templates/API and official SDK v1.8.0 stateless MCP call the same scope/owner services. Ten implemented tools only; purchase/insight tools remain deferred until real implementation. Protocol cache hints are private and stale; HTTP responses use no-store.
+- Own-account enrollment preferences explicitly selected: America/New_York, USD, Walmart, Monday. Operator subject, callbacks and actual live registrations remain pending. These preferences never seed other accounts.

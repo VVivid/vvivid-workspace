@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 	_ "time/tzdata" // Keep per-account IANA timezones available in minimal images.
+	"unicode"
 )
 
 // Owner is an opaque enrolled account handle. Resolve it only after verifying a
@@ -25,11 +26,11 @@ type ExternalIdentity struct {
 }
 
 type Preferences struct {
-	Timezone          string
-	Currency          string
-	PreferredRetailer string
-	WeekStart         string
-	Revision          int64
+	Timezone          string `json:"timezone"`
+	Currency          string `json:"currency"`
+	PreferredRetailer string `json:"preferred_retailer"`
+	WeekStart         string `json:"week_start"`
+	Revision          int64  `json:"revision"`
 }
 
 // EnrollAccount is an explicit provisioning operation, not a login fallback.
@@ -139,7 +140,7 @@ func (preferences Preferences) validate() error {
 	if _, err := time.LoadLocation(preferences.Timezone); err != nil {
 		return fmt.Errorf("unknown timezone %q", preferences.Timezone)
 	}
-	if len(preferences.Currency) != 3 || !strings.Contains(currencyCodes, " "+preferences.Currency+" ") {
+	if !ValidCurrency(preferences.Currency) {
 		return fmt.Errorf("currency must be a supported ISO 4217 code")
 	}
 	switch preferences.WeekStart {
@@ -147,10 +148,17 @@ func (preferences Preferences) validate() error {
 	default:
 		return fmt.Errorf("an explicit week start is required")
 	}
-	if strings.TrimSpace(preferences.PreferredRetailer) == "" || len(preferences.PreferredRetailer) > 128 {
+	if strings.TrimSpace(preferences.PreferredRetailer) == "" || strings.TrimSpace(preferences.PreferredRetailer) != preferences.PreferredRetailer ||
+		len(preferences.PreferredRetailer) > 128 || strings.ContainsFunc(preferences.PreferredRetailer, unicode.IsControl) {
 		return fmt.Errorf("preferred retailer must contain 1–128 characters")
 	}
 	return nil
+}
+
+func (preferences Preferences) Validate() error { return preferences.validate() }
+
+func ValidCurrency(value string) bool {
+	return len(value) == 3 && strings.Contains(currencyCodes, " "+value+" ")
 }
 
 // Codes are data validation, not an exchange-rate or decimal-place definition.

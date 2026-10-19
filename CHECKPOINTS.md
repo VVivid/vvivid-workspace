@@ -1,6 +1,6 @@
 # Development checkpoints
 
-Updated October19, 2026. **CP00–CP02 complete. CP03 local Builder checks pass; Translation/review and live acceptance remain.**
+Updated October 19, 2026. **CP00–CP02 complete. CP03 local workflow Approved with live acceptance pending. CP04/CP05 complete; CP06 local tools Approved with actual-client and later-tool acceptance pending.**
 
 ## Progress ledger
 
@@ -9,10 +9,10 @@ Updated October19, 2026. **CP00–CP02 complete. CP03 local Builder checks pass;
 | CP00 Requirements and handoff | Complete | This document set, updated spec Page, preserved reference prototype; see RESUME.md |
 | CP01 Go foundation | Complete | Embedded shell; Translation/final checks/independent Review Approved |
 | CP02 Tenant-safe SQLite persistence | Complete | Final checks, isolation/idempotency/race tests; independent Review Approved |
-| CP03 Identity and authorization | In progress | Local protocol/session/security checks pass; Translation/review/live acceptance pending |
-| CP04 Product and list services | Not started | Reference demo only |
-| CP05 Mobile templates and Web API | Not started | React prototype is not a Go implementation |
-| CP06 Built-in MCP | Not started | No shopping MCP endpoint exists |
+| CP03 Identity and authorization | In progress | Local workflow independently Approved; live Keycloak/phone/client acceptance pending |
+| CP04 Product and list services | Complete | Shared services, source/variant/revision/isolation/replay tests; independent Review Approved |
+| CP05 Mobile templates and Web API | Complete | Built-in browser 360/390px interactions/failures, final checks, independent Review Approved |
+| CP06 Built-in MCP | In progress | Local official SDK 10-tool slice Approved; purchase/insight tools and actual clients pending |
 | CP07 Purchase reconciliation and history | Not started | Demo fixtures only |
 | CP08 Derived insights | Not started | Demo calculations only |
 | CP09 End-to-end and restart verification | Not started | None |
@@ -259,3 +259,46 @@ Exit:
 - User confirmed https://shopping.vvivid.dev, only their account initially, Codex and ChatGPT first clients. Preparation reflects these choices, without secrets or applied infrastructure changes.
 - No application listeners remain. CP01 session37805 expired; original Builder verified no listener8090 and connection refused. All CP03 temporary processes/databases cleaned.
 - Next: preparatory CP04–CP06 local product/list services, mobile adapters and built-in MCP over verified principals. Keep live CP03 integration open. No remote connection retry until explicit bounded authorization; earlier automatic rejection remains recorded.
+
+### CP04–CP06 update 2026-10-19 — Local Builder handoff
+
+- Status: In progress. Local Builder implementation/checks pass; Translation, final coordinator validation and fresh independent Review remain. CP03/CP06 live integration stays open. No beta verdict.
+- Git/stage: baseline commit a3f8c76 on main, no remote. Coordinator verified Builder /root/shopping_builder host turn_context session01a1527f-e94d-74c3-a912-9ec17a0f5097 as gpt-6.1-sol/max before editing. Added .gitattributes LF rules without changing global settings.
+- Changed: migration5 for field sources, item retailer restrictions, before/after audit and explicit active-list selection; shared scope/owner services; source-backed product variants/media/nutrition/listings; atomic bounded list batches, exact decimals, revisions, idempotency, soft remove/restore; mobile My list/Products templates/API, fixed SVG category icons, accessible details, server-authoritative JS/network errors/focus refresh; official SDK v1.8.0 stateless protected MCP with ten typed tools/private cache hints. History/Insights remain empty, purchase/insight tools unexposed, readiness503.
+- Executed: Modern Go Guidelines; pinned dependency resolution/tidy; project-cache make fmt/assets, node --check, GOPROXY=off make check/build, and race tests for web/identity/store/admin. Full tests/vet/both binaries pass. Source URL, unknown facts, variants, all ten SDK tools, two-user scopes/ownership, CSRF/audience, atomic rollback/retry, cursor pages, browser/MCP revision races, selection/archive/restore and SQLite reopen replay/v4 upgrade cases pass.
+- Coordinator built-in browser:360×800/390×844 no overflow,44px targets; Polar photo/details/null facts; dialog Tab/Escape/focus; persistent check, quantity2→3, remove/search/add;503 showed unsynced state and disabled competing writes; Retry saved authoritative state; final save preserved checkbox focus. Screenshots and exact case evidence: [docs/validation/CP04-CP06-2026-10-19.md](docs/validation/CP04-CP06-2026-10-19.md).
+- Resolved failures: sandbox DNS/loopback required scoped local escalation; old migration-count assertions4→5; all-tool test found audit JSON bytes incorrectly inferred as array, fixed with known snapshot schema union. Final checks pass. Actual selected-client OAuth/phone/deployed proxy, purchases/metrics, whole-app process restart and recovery remain unexecuted.
+- User confirmed own-account preferences America/New_York, USD, Walmart, Monday; no global default/live enrollment. No live infrastructure, SSHMCP, identity registration/proxy/Traefik/DNS/deployment changes.
+- Process: final synthetic visual test preview session13624 remains on127.0.0.1:8092 for coordinator QA; test-only wrapper obtains/injects a genuine local OIDC session before production auth. No production bypass or fixture switch. Old preview44712 intentionally terminated for final embedded JS restart. Stop13624 after QA.
+- Next: Translation, coordinator final validation and fresh Review; after local approval continue CP07/08 under the ongoing daily-use v1 goal. [docs/DOMAIN.md](docs/DOMAIN.md) records current contracts and future audit-schema extension point.
+
+### CP04–CP06 update 2026-10-19 — Translation after Builder corrections
+
+- Status: In progress. Translation completed; coordinator final validation/build and fresh independent Review remain. No CP03/CP06 live or beta acceptance claim.
+- Runtime: coordinator verified fresh Translation `/root/shopping_translation_final`, host turn_context session01a15292-7794-7b23-ac8d-81a50e4a15eb, as gpt-6.1-sol/xhigh before edits. Baseline remains a3f8c76 on main; no new commit.
+- Builder corrections inspected: product details render observed price and local availability independently, including null and zero prices; rejected writes report a refresh only when the reload succeeds, and failed manual refresh retains its Refresh action. Coordinator executed browser checks for these corrections before this pass, with fixture controls restored.
+- Translation edits: expanded JavaScript async/error/event branches and documented the pending-write/reload constraints; expanded browser POST/PATCH/DELETE service input literals so list/item revisions and operation fields are visible. Preserved expressions, validation, authorization, retry key/body, transaction boundaries and side-effect order. No new correctness issue or unresolved readability blocker found.
+- Checks actually run: Modern Go Guidelines for internal/web/api.go, gofmt on that file, `node --check web/static/app.js`, and uncached `GOCACHE=$PWD/.cache/go-build GOMODCACHE=$PWD/.cache/go-mod GOPROXY=off go test ./internal/web -count=1`. Sandbox denied the local fixture listener; scoped escalation rerun passed in0.502s. Full build/test/race and fresh rendered-browser checks after this readability-only pass remain coordinator work.
+- Normal trace inspected: checkbox → PATCH with explicit picked_up/list+item revisions → shared authorization/validation → atomic item/list revision, audit and replay commit → authoritative page refresh → Saved/focus restoration. Failure trace inspected: stale revision → rollback/409 → page reload503 → explicit refresh-failed message and Refresh action; manual success reloads authoritative state. These traces are code inspection, not additional browser execution.
+- Process: original Builder owns current synthetic preview session94993 on127.0.0.1:8092; it predates Translation's readability-only JavaScript edits. No production listener or live infrastructure change was made.
+- Next: coordinator final formatting/assets/build/tests and fresh independent Review; continue CP07/08 after local approval.
+
+### CP04–CP06 update 2026-10-19 — Local workflow Approved
+
+- CP04 and CP05: Complete. CP06: In progress (local implemented tools Approved; actual clients and later purchase/insight tools pending). Fresh independent reviewer found no blocking issues and returned Approved for the local slice. Full v1 is not beta-ready; CP03 live acceptance remains open.
+- Translation found two correctness issues before editing; each returned through separate Builder correction and fresh Translation: independent price/availability labels; false refreshed claim after409+page503. Coordinator executed all four listing cases and conflict/failure/recovery in the built-in browser. Final Translation expanded JS control flow and API inputs without semantic changes.
+- Coordinator final `GOCACHE=$PWD/.cache/go-build GOMODCACHE=$PWD/.cache/go-mod GOPROXY=off make fmt assets check build` and `node --check web/static/app.js` passed. On exact post-Translation preview, labels, details/Escape, save/focus,409+page503 warning and restored manualRefresh passed. Reviewer independently passed uncached SQLite tests, vet, formatting, JS parse and diff checks.
+- Host session turn_context verified each stage below; model always gpt-6.1-sol.
+
+| Stage | Agent | Runtime session | Effort |
+| --- | --- | --- | --- |
+| Builder | /root/shopping_builder | 01a1527f-e94d-74c3-a912-9ec17a0f5097 | max |
+| Translation (returned correctness issue) | /root/shopping_translation | 01a1528c-f501-7cd2-8c7f-a5f022d2ad5f | xhigh |
+| Correction Builder | /root/shopping_correction_builder | 01a1528d-a874-71e1-8e5e-a71c1b1b6aeb | max |
+| Translation (returned correctness issue) | /root/shopping_translation_retry | 01a1528f-731e-7dc3-85a4-d38176d0f092 | xhigh |
+| Correction Builder | /root/refresh_correction_builder | 01a15290-5694-7c71-9e20-bebdf551c759 | max |
+| Final Translation | /root/shopping_translation_final | 01a15292-7794-7b23-ac8d-81a50e4a15eb | xhigh |
+| Independent Review | /root/shopping_review | 01a15294-d75d-7b33-9c23-ad46665a0d42 | max |
+
+- Process: test-only preview session51151 on127.0.0.1:8092, original Builder-owned. All test controls restored; this is synthetic data, no production bypass. Prior fixture processes terminated intentionally for updated embedded assets.
+- Next: CP07 purchase reconciliation/history and CP08 derived insights over shared services, then remaining local MCP tools, end-to-end/recovery/deployment artifacts. Do not retry live infrastructure until explicit bounded authorization; prior auto-review rejection still applies.

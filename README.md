@@ -2,9 +2,9 @@
 
 A mobile shopping list managed primarily by AI agents through built-in MCP. Open the list at Walmart, identify the right product, and check it off. Agents maintain product details, lists, purchase history, and preferences; the server computes insights.
 
-**Status: CP01–CP02 complete. CP03 local identity code is independently Approved; live integration remains. V1 is not beta-ready.**
+**Status: CP01–CP02 complete; CP03 local identity Approved with live acceptance pending. CP04/CP05 complete; CP06 local tools independently Approved with real-client/later-tool acceptance pending. V1 is not beta-ready.**
 
-The Go application serves an embedded mobile shell, migrates persistent SQLite, and optionally connects a complete Keycloak configuration for sign-in and encrypted durable sessions. No accounts/data are seeded and no shopping API/MCP tools exist yet. `/health/ready` remains503 while acceptance is incomplete.
+The Go application serves mobile My list/Products views, a narrow browser API and ten built-in MCP tools over shared owner/scope-checked services. Optional complete Keycloak configuration enables sign-in, encrypted durable sessions and bearer authentication. No production accounts/data are seeded. History/Insights remain empty until purchase workflows are implemented. `/health/ready` remains503 while acceptance is incomplete. See [docs/DOMAIN.md](docs/DOMAIN.md) for the implemented local contract.
 
 ## Start or resume
 
@@ -63,14 +63,14 @@ The default listener is local. The user selected `https://shopping.vvivid.dev`; 
 
 | Route | Current behavior |
 | --- | --- |
-| `/`, `/products`, `/history`, `/insights` | Shell with sign-in/out when identity is configured; shopping views pending |
-| `/static/app.css` | Embedded compiled CSS |
+| `/`, `/products`, `/history`, `/insights` | Authenticated list/catalog and empty purchase views; sign-in/out when identity is configured |
+| `/static/app.css`, `/static/app.js` | Embedded compiled CSS and small browser interaction script |
 | `/health/live` | 200 while HTTP is serving |
 | `/health/ready` | 503: live identity/domain acceptance is incomplete |
 | `/auth/login`, `/auth/callback`, `/auth/logout` | Configured-only OIDC+PKCE and durable CSRF-protected sessions |
 | `/.well-known/oauth-protected-resource/mcp`, `.../api/v1` | Configured-only exact resource metadata |
-| `/api/v1/*`, `/mcp` | No domain handlers yet; no authentication bypass |
+| `/api/v1/*`, `/mcp` | Configured-only shopping adapters; see DOMAIN.md for current routes/tools and validation |
 
 SQLite uses WAL, one writer, a bounded read-only pool and per-connection foreign keys. Embedded migrations reject altered history/newer schemas. No accounts are seeded; identity lookup never enrolls automatically. Data files are Git-ignored. Restricted local validation can use `GOMODCACHE=$PWD/.cache/go-mod GOCACHE=$PWD/.cache/go-build make check build`.
 
-Initial enrollment is only the user's own account; initial MCP clients are Codex and ChatGPT. Exact registrations/callbacks, subject and explicit preferences remain operator inputs. No deployment or shopping OAuth clients have been created. Follow [CHECKPOINTS.md](CHECKPOINTS.md) and [RESUME.md](RESUME.md) for verification and next work.
+Initial enrollment is only the user's own account; initial MCP clients are Codex and ChatGPT. Own-account preferences are America/New_York, USD, Walmart, Monday week start; these are user selections, not global defaults. Exact registrations/callbacks and subject remain operator inputs. No deployment or shopping OAuth clients have been created. Follow [CHECKPOINTS.md](CHECKPOINTS.md) and [RESUME.md](RESUME.md) for verification and next work.

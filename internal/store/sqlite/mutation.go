@@ -35,6 +35,7 @@ type Tx struct {
 	identity ExternalIdentity
 	now      int64
 	affected []affectedRecord
+	changes  []Change
 }
 
 type affectedRecord struct {
@@ -94,8 +95,12 @@ func (s *Store) Write(ctx context.Context, owner Owner, mutation Mutation, apply
 	if err != nil {
 		return MutationResult{}, err
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO audit_events(owner_id, id, actor_issuer, actor_subject, actor_client, operation, affected_records_json, request_id, occurred_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, owner.id, rand.Text(), mutationTx.identity.Issuer, mutationTx.identity.Subject, mutation.ClientID, mutation.Operation, string(affected), mutation.RequestID, mutationTx.now); err != nil {
+	changes, err := json.Marshal(mutationTx.changes)
+	if err != nil || len(changes) > 256<<10 {
+		return MutationResult{}, fmt.Errorf("audit summary is too large")
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO audit_events(owner_id, id, actor_issuer, actor_subject, actor_client, operation, affected_records_json, request_id, occurred_at, summary_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, owner.id, rand.Text(), mutationTx.identity.Issuer, mutationTx.identity.Subject, mutation.ClientID, mutation.Operation, string(affected), mutation.RequestID, mutationTx.now, string(changes)); err != nil {
 		return MutationResult{}, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO idempotency_results(owner_id, key, operation, payload_hash, result, created_at)

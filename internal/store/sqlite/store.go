@@ -21,6 +21,7 @@ var (
 	ErrOwnerRequired       = errors.New("enrolled owner is required")
 	ErrConflict            = errors.New("record revision changed")
 	ErrIdempotencyConflict = errors.New("idempotency key was used for another request")
+	ErrLimit               = errors.New("supported record limit exceeded")
 )
 
 // Store has one write connection and a bounded read-only pool. Neither pool is

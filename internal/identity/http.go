@@ -109,8 +109,15 @@ func (m *Manager) resourceMetadata(resource string) http.HandlerFunc {
 		}{
 			Resource:             resource,
 			AuthorizationServers: []string{m.cfg.Issuer},
-			Scopes:               []string{Read},
+			Scopes:               resourceScopes(resource, m.cfg.APIAudience),
 			BearerMethods:        []string{"header"},
 		})
 	}
+}
+
+func resourceScopes(resource, api string) []string {
+	if resource == api {
+		return []string{Read, ListsWrite}
+	}
+	return []string{Read, ProductsWrite, ListsWrite, PurchasesWrite, PreferencesWrite}
 }
