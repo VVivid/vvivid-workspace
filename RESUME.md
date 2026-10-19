@@ -2,7 +2,15 @@
 
 Updated October 19, 2026, America/New_York.
 
-## Latest request: owner share response/retry correction
+## Current deployment: temporary item sharing released
+
+User authorized commit, merge and deployment. Sharing feature commit `43be95d` is merged into main at `b73962278a3530259baf107c3d949cc4e9c06ca3` and pushed. Beta `0.1.0-beta.3`, application `b739622`, is healthy at https://shopping.vvivid.dev. Final independent Review Approved; full checks/build, 52 script regressions, exact amd64 image container tests and offline vulnerability scan passed (zero known vulnerabilities with the dated database). Migration 6 → 7 preserved all original rows, secrets, volume and routing; no production backups or data copies were made.
+
+Live readiness/auth/privacy checks passed. Authenticated live Share selection, zero/one-item creation gating and Cancel passed without creating a personal public share. Actual production guest write and six-hour wait were not performed. See [rollout evidence](docs/validation/SHARING-DEPLOYMENT-2026-10-19.md) for exact artifact identities, checks and limits. Use My list → Share → select items → Create link → Copy link. Anyone with the link can use its separate checklist for six hours.
+
+Next: owner uses sharing and supplies feedback; no further deployment is needed. Existing CP03/06/10 beta acceptance gaps remain open. Earlier deployment/version/next-action sections below are historical; this entry supersedes them. Subsequent handoff documentation commits do not change the running application commit.
+
+## Previous request: owner share response/retry correction
 
 The user explicitly authorized “Yes fix this too and rerun the review.” Owner correction Builder and fresh Translation finished in `/Users/oudavid/.codex/worktrees/temporary-item-sharing/AgentShoppingList`, branch `codex/temporary-item-sharing`, baseline `259cd3e`. Coordinator post-Translation final validation passed, and fresh independent Review returned Approved with no blocking findings. The local sharing feature and both retry corrections are complete; earlier Denied findings below are historical. All changes remain uncommitted in this worktree and nothing is deployed.
 

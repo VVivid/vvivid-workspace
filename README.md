@@ -1,6 +1,6 @@
 # AgentShoppingList
 
-V1 beta is deployed at https://shopping.vvivid.dev. Browser sign-in/refresh, Codex and ChatGPT MCP reads/writes, and live restart persistence have been verified. The active Example Walmart list contains three sourced, unchecked sample groceries; no purchase or spending was invented. Current build: `0.1.0-beta.2` / application `7970b5c`. Physical-phone and real-receipt checks remain beta follow-up. See [RESUME.md](RESUME.md) for current evidence and limits.
+V1 beta is deployed at https://shopping.vvivid.dev. Current build: `0.1.0-beta.3` / application `b739622`, including six-hour public sharing of selected shopping items. Browser sign-in/refresh, Codex and ChatGPT MCP reads/writes, and live restart persistence were verified in prior beta acceptance; sharing rollout preservation, readiness and live selection controls passed. Physical-phone and real-receipt checks remain beta follow-up. See [RESUME.md](RESUME.md) and the [sharing rollout](docs/validation/SHARING-DEPLOYMENT-2026-10-19.md) for evidence and limits.
 
 A mobile shopping list managed primarily by AI agents through built-in MCP. Open the list at Walmart, identify the right product, and check it off. Agents maintain product details, lists, purchase history, and preferences; the server computes insights.
 

@@ -1,6 +1,6 @@
 # Temporary item sharing
 
-Local feature contract, October 19, 2026. Both retry corrections passed sequential Builder/Translation, final coordinator checks/build and fresh independent Review (Approved, no blocking findings). All52 script regressions pass. Local changes remain uncommitted in codex/temporary-item-sharing; no deployment or live-data validation occurred. Earlier findings are retained as history.
+Deployed October 19, 2026 at https://shopping.vvivid.dev as `0.1.0-beta.3` / application `b739622`. Both retry corrections passed sequential Builder/Translation, final coordinator checks/build and fresh independent Review (Approved, no blocking findings); all 52 script regressions pass. Feature commit `43be95d` was merged and pushed. Exact-image container checks, offline vulnerability scan and production preservation/readiness checks passed. See [rollout evidence](validation/SHARING-DEPLOYMENT-2026-10-19.md). Earlier handoffs and findings below are historical.
 
 ## Owner flow
 

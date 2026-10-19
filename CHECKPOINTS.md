@@ -1,5 +1,12 @@
 # Development checkpoints
 
+### October 19, 2026 — Sharing committed, merged and deployed
+
+- Status: sharing slice complete and deployed as beta.3/application `b739622`; feature `43be95d`, merge `b73962278a3530259baf107c3d949cc4e9c06ca3`, origin/main verified. Independent Review Approved; full checks/build and 52 script regressions passed.
+- Exact merged amd64 image passed container journey/restart tests and offline pinned Trivy scan (zero known vulnerabilities). Existing deployment migrated schema 6 → 7; server-memory comparisons confirmed unchanged original rows, secrets, volume and routing. No production backups or off-server data copies.
+- Live readiness, authentication, public privacy headers and cross-origin rejection passed. Authenticated Share selection/creation gating/Cancel passed without creating a personal public link or changing list state. Production guest writes and actual six-hour wait were not executed.
+- Evidence: [rollout report](docs/validation/SHARING-DEPLOYMENT-2026-10-19.md). Next: owner daily use and feedback. CP03/06/10 remaining beta exits stay open. Earlier in-progress/no-deployment entries below are historical.
+
 ### October 19, 2026 — Authorized owner response/retry correction Translation handoff
 
 - Status: In progress. Translation independently inspected the actual owner script, its template/HTTP consumers, new owner regressions and existing guest regressions. No correctness issue or unresolved readability blocker was discovered. Coordinator post-Translation final validation and fresh read-only independent Review remain; no approval verdict is claimed.
