@@ -15,6 +15,14 @@
       "post.logout.redirect.uris": "https://shopping.vvivid.dev/",
       "access.token.lifespan": "300"
     },
+    "protocolMappers": [
+      {
+        "name": "shopping-subject",
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-sub-mapper",
+        "config": {"access.token.claim": "true", "introspection.token.claim": "true"}
+      }
+    ],
     "defaultClientScopes": ["shopping-api-audience", "shopping:read", "shopping:lists:write"],
     "optionalClientScopes": []
   },
@@ -31,6 +39,14 @@
     "redirectUris": ["REPLACE_WITH_VERIFIED_CODEX_CALLBACK"],
     "webOrigins": [],
     "attributes": {"pkce.code.challenge.method": "S256", "access.token.lifespan": "300"},
+    "protocolMappers": [
+      {
+        "name": "shopping-subject",
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-sub-mapper",
+        "config": {"access.token.claim": "true", "introspection.token.claim": "true"}
+      }
+    ],
     "defaultClientScopes": ["shopping-mcp-audience"],
     "optionalClientScopes": ["shopping:read", "shopping:products:write", "shopping:lists:write", "shopping:purchases:write", "shopping:preferences:write"]
   },
@@ -47,6 +63,14 @@
     "redirectUris": ["REPLACE_WITH_VERIFIED_CHATGPT_CALLBACK"],
     "webOrigins": [],
     "attributes": {"pkce.code.challenge.method": "S256", "access.token.lifespan": "300"},
+    "protocolMappers": [
+      {
+        "name": "shopping-subject",
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-sub-mapper",
+        "config": {"access.token.claim": "true", "introspection.token.claim": "true"}
+      }
+    ],
     "defaultClientScopes": ["shopping-mcp-audience"],
     "optionalClientScopes": ["shopping:read", "shopping:products:write", "shopping:lists:write", "shopping:purchases:write", "shopping:preferences:write"]
   }
