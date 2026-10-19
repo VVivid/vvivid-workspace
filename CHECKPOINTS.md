@@ -571,3 +571,7 @@ Owner said It is good now and asked whether to call this version1. Coordinator r
 ### GitHub publication preparation
 
 User authorized git@github.com:VVivid/AgentShoppingList.git. Empty destination verified with successful SSH ls-remote; origin configured. README stale deployment/no-remote claims corrected. Full254 historical-blob credential-pattern/runtime-path scan found0matches/0runtimepathcandidates; ignored caches/binaries/dependencies/data excluded. Standard cachedGo1.26.9 makeassets/check/build, JS/shell/diff checks passed. Application/build inputs unchanged from deployed7970b5c. Publish main and matching v0.1.0-beta.2 annotated tag next; preserve all history, no force push.
+
+### GitHub publication verified
+
+Pushed main and annotated v0.1.0-beta.2 to git@github.com:VVivid/AgentShoppingList.git without force. Remote ls-remote verified releasecommit9e5eee537f012cb07863e22543e4aed6b6b49b53 for main and peeledtag; annotatedtagobjectdddbbbf6c2a400649b9747c40d66a5c26a3b2c5d. Main tracks origin/main; publication result recorded in a follow-up documentation commit. No deployment, registry publication, production data export or credential change. Existing unexecuted beta checks remain unchanged.
