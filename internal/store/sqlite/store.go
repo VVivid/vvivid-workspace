@@ -29,6 +29,9 @@ var (
 type Store struct {
 	read  *sql.DB
 	write *sql.DB
+	// MigrationBackup is the verified pre-upgrade archive, if startup upgraded
+	// an existing schema. Operators retain/copy it before deploying again.
+	MigrationBackup string
 }
 
 func Open(ctx context.Context, path string, busyTimeout time.Duration) (_ *Store, err error) {
@@ -78,8 +81,12 @@ func Open(ctx context.Context, path string, busyTimeout time.Duration) (_ *Store
 	if err != nil {
 		return nil, err
 	}
+	store.MigrationBackup, err = backupBeforeMigration(ctx, path, writer, migrations)
+	if err != nil {
+		return nil, fmt.Errorf("pre-migration backup: %w", err)
+	}
 	if err := migrate(ctx, writer, migrations); err != nil {
-		return nil, fmt.Errorf("migrate database: %w", err)
+		return nil, fmt.Errorf("migrate database (verified recovery archive %q): %w", store.MigrationBackup, err)
 	}
 	reader, err := sql.Open("sqlite", dataSource(path, busyTimeout, true))
 	if err != nil {

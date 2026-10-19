@@ -17,6 +17,9 @@ import (
 
 type Service struct{ store *sqlite.Store }
 
+// Ready checks the shared durable store used by both authenticated adapters.
+func (s *Service) Ready(ctx context.Context) error { return s.store.Ready(ctx) }
+
 func New(store *sqlite.Store) *Service { return &Service{store: store} }
 
 func (s *Service) require(ctx context.Context, p identity.Principal, scope string) error {

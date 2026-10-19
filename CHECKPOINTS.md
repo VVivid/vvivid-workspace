@@ -1,6 +1,6 @@
 # Development checkpoints
 
-Updated October 19, 2026. **CP00–CP02 complete. CP03 local workflow Approved with live acceptance pending. CP04/CP05 complete; CP06 prior local slice Approved. CP07/CP08 and all16 local tools are independently Approved locally; process/container/recovery and live acceptance remain.**
+Updated October 19, 2026. **CP00–CP02 complete. CP03 local workflow Approved with live acceptance pending. CP04/CP05 complete; CP06 prior local slice Approved. CP07/CP08 and all16 local tools are independently Approved locally; CP09 process/container/recovery local acceptance is Approved; live acceptance remains.**
 
 ## Progress ledger
 
@@ -12,11 +12,11 @@ Updated October 19, 2026. **CP00–CP02 complete. CP03 local workflow Approved w
 | CP03 Identity and authorization | In progress | Local workflow independently Approved; live Keycloak/phone/client acceptance pending |
 | CP04 Product and list services | Complete | Shared services, source/variant/revision/isolation/replay tests; independent Review Approved |
 | CP05 Mobile templates and Web API | Complete | Built-in browser 360/390px interactions/failures, final checks, independent Review Approved |
-| CP06 Built-in MCP | In progress | Prior10-tool slice Approved; all16 tools now pass Builder SDK tests; Translation/Review and actual clients pending |
-| CP07 Purchase reconciliation and history | In progress | Bounded purchase outcomes and50-product/12-source SDK/reopen regressions pass after Translation; final validation/fresh Review pending |
+| CP06 Built-in MCP | In progress | All16 local tools independently Approved; actual selected clients/proxy acceptance pending |
+| CP07 Purchase reconciliation and history | Complete | Bounded outcomes, full immutable sources, durable SDK/reopen/legacy/bounds tests and fresh independent Review Approved at746ef30 |
 | CP08 Derived insights | Complete | Confirmed-snapshot calculations/charts and null/zero/currency/DST/overflow tests; fresh independent Review Approved |
-| CP09 End-to-end and restart verification | Not started | None |
-| CP10 Deployment and recovery acceptance | Not started | No shopping infrastructure changes |
+| CP09 End-to-end and restart verification | Complete | Actual production-process/restart/interrupted retry and two-owner/client tests on host, arm64 and emulatedamd64 containers; final checks and independent Review Approved |
+| CP10 Deployment and recovery acceptance | In progress | Local pinned image, operational health, prepared Compose and consistent backup/isolated restore; local review Approved; live/off-server acceptance pending |
 
 ## How to use checkpoints
 
@@ -379,3 +379,33 @@ Pause cleanup: original Builder stopped test preview76489; lsof verified no list
 - Host runtime metadata verified Builder01a152b6-c50c-75b0-b777-fec93e3f7b0c gpt-6.1-sol/max, Translation01a152bd-b497-7670-b514-f27f1de06bbf gpt-6.1-sol/xhigh, Review01a152bf-e1f8-7aa3-8b12-f7ec984bb030 gpt-6.1-sol/max.
 - CP07/08 local exits passed; CP06 actual clients and CP03 live identity remain pending. CP09 process/container restart and CP10 readiness/build/recovery/live acceptance are still required for v1. No live infrastructure, enrollment or deployment changes; no application listener remains.
 - Next: commit approved local slice, then sequential workflow for CP09/10 local release/recovery implementation.
+
+
+### CP09–CP10 update 2026-10-19 — Local release Builder handoff
+
+- Status: In progress. Local release code/tests are frozen for sequential Translation, final coordinator validation and fresh independent Review. CP03/06 actual identity/client/proxy and CP10 live/off-server/phone acceptance remain pending. Baseline746ef30; no new commit or remote.
+- Runtime: coordinator verified Builder /root/release_builder, host turn_context01a152c2-3819-7320-ada1-057f155709b8, gpt-6.1-sol/max before edits; complete Modern Go1.26 guidance read.
+- Changed: Go1.26.9 patch/advisory pin; operational DB/current migration readiness independent of transient issuer outages; build metadata/loopback healthcheck; maintained SQLite online backup API and verified0600 atomic no-overwrite tar/isolated restore with no implicit migration; current/known-old schema/hash/integrity/FK/every-table/confirmed-total verification; mandatory verified pre-migration recovery point; immutable pinned Go/Node24.22.0/Tailwind4.3.0/distroless nonroot multi-platform image; credential-free required-variable Compose/Traefik preparation with no host ports/read-only root/private secret mounts/persistent named volume; recovery runbook and real production-command/container tests. No new domain migration or UI change.
+- Executed: make fmt assets check build, JS/shell parse/diff checks; final web/shopping/SQLite/identity/admin race suites; active-WAL/concurrent consistency, recovery corruption/refusal/known-prefix/no-migration/pre-upgrade/failure tests; real host production-binary OIDC/SDK/browser/two-owner journey, revision conflict, graceful restart, post-commit response loss+crash/concurrent replay, writer-blocked precommit interruption+retry, durable sessions/preferences and active-process CLI recovery. All passed. Full detail in docs/validation/CP09-CP10-2026-10-19.md.
+- Images: localarm64 sha256:c59726998cd6a7c9756aa62eb1a8e999eb258ba31417bee35d69d83619c42a60; localamd64 sha256:c0eb0e0b8a035ef379925ac04c145252ecc538c2bf1debc7f3456f554af30510. Version0.1.0-local, commit746ef30-dirty, built_at2026-10-19T06:14:33Z, Go1.26.9. Both final candidate images passed the actual production journey in nonroot/read-only/network-none containers, isolated restore and actual container stop/start with identical counts/totals. amd64 runtime used local emulation, not the unverified server. CA150 certificates and New_York timezone file directly inspected.
+- Prepared config: missing required Compose inputs failed closed; synthetic-only render/security assertions passed. No service/network/volume created by Compose. Actual infrastructure values/host mounted-secret ownership remain unverified.
+- Advisory evidence: current coordinator Go1.26.9 source govulncheckv1.9.0 exit0/zero findings, official DB2026-10-08T22:31:09Z; npm audit0. Go1.26.5 had18 reachable standard-library advisories and was patched. Automatic approval review rejected DockerScout because it may transmit private image/package metadata to Docker without specifically authorized destination/payload. It was not run or bypassed; image/base-package scan remains pending.
+- Failures resolved: initial duplicate interface/unused import; restricted loopback listener via scoped local permission; shared architecture test/report paths and in-flight script-name change via architecture-specific outputs/platforms and final sequential successful runs. No unresolved Builder test/build failure.
+- Processes/scope: all test child processes/OIDC/listeners and owned shopping Docker containers/volumes cleaned; filtered inventory empty. Local images/cached evidence remain. No live Keycloak/Traefik/DNS/proxy/enrollment/secret/server/production migration/data/deployment/publish or commit action.
+- Next: Translation, final coordinator validation, fresh independent Review; then final approved commit/image rebuild and separately bounded live acceptance. CP10 also requires authorized image advisory validation, encrypted off-server copy, separate recovery keys/config and timed restore drill. Runbook proposes daily backup/RPO24h/RTO1h and7daily/4weekly/6monthly retention; these remain unscheduled/unverified targets.
+
+### CP09/CP10 update 2026-10-19 — Translation handoff
+
+- Status: In progress. Translation is complete; coordinator final validation and fresh independent Review remain. Live CP03/06 and deployment/off-server/phone acceptance remain open.
+- Scope: independently read the actual release implementation and consumers. Clarified `shopping-admin` recovery command dispatch, named SQLite online-backup retry/error constants and separated pre-migration errors from no-upgrade cases; expanded the synthetic sourced-purchase fixture. Behavior, contracts, authorization, transactions, replay and side-effect ordering are preserved. No correctness blocker or unresolved readability issue found in this pass.
+- Actual checks: full Modern Go Guidelines1.26 list; gofmt on edited Go files; `git diff --check`; `sh -n scripts/test-container.sh`; Go1.26.9/project caches/`GOPROXY=off go test -count=1 ./internal/store/sqlite ./cmd/shopping-admin ./internal/acceptance` passed (0.805s/0.516s/0.571s). The acceptance package's whole-process test was intentionally skipped without opt-in; this is not a new process/container execution claim.
+- Stage: coordinator verified Translation `/root/release_translation`, host turn_context session `01a152cf-c014-7cb2-ad25-7c6f2033fb36`, gpt-6.1-sol/xhigh before edits.
+- Next: coordinator fmt/assets/check/build plus relevant final process/recovery/image acceptance on the edited source, then fresh read-only Review. Builder image IDs/evidence describe pre-Translation candidates and must not be treated as final edited-source images. No commits, listeners, containers, production data or live infrastructure changes from Translation. Docker Scout rejection remains unchanged and was not retried.
+
+### CP09/10 update 2026-10-19 — Local release Approved
+
+- Fresh independent Review /root/release_review returned Approved with no actionable findings after post-Translation coordinator full checks, actual process journey and both rebuilt container suites. CP09 local exit passed; CP10 remains in progress for live acceptance.
+- Builder /root/release_builder session01a152c2-3819-7320-ada1-057f155709b8 gpt-6.1-sol/max; Translation /root/release_translation01a152cf-c014-7cb2-ad25-7c6f2033fb36 gpt-6.1-sol/xhigh; Review /root/release_review01a152d2-4330-7130-9c4a-6fa56977614a gpt-6.1-sol/max verified from host turn_context.
+- Final sourceGo1.26.9govulncheck0, npm0; safer network-disabled pinnedTrivy0.76.0 scans of both candidate images report0 OS/Go vulnerabilities with today's publicDB. Scout was rejected/unexecuted; offline alternative eliminated metadata egress, no socket/credentials/network during candidate scans. Detailed hashes/commands/dataflow in docs/validation/CP09-CP10-2026-10-19.md.
+- Local readiness, onlinebackup/isolatedrestore/pre-migration recovery, nonrootmultiarchitectureimages and exactprocess/container crash/retry/state acceptance passed. No task-owned testcontainers/volumes/listeners remain. No live server/Keycloak/Traefik/DNS/enrollment/deployment or offservercopy.
+- Next: commit approvedcode, rebuild/test/scan finalcommit images, then request bounded productioninventory authorization to resolve exact live deployment inputs. CP03/06/10 actualissuer/proxy/client/phone/SSHisolation and encryptedoffserverrestore remain incomplete.

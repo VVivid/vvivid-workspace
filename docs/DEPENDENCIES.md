@@ -4,9 +4,10 @@ Selected October 19, 2026 from current primary documentation. These versions are
 
 | Component | Pin | Where used |
 | --- | --- | --- |
-| Go | 1.26.5 | Installed toolchain verified; `go.mod` and `.go-version` |
+| Go | 1.26.9 | Patched project toolchain, `go.mod`, `.go-version` and immutable Docker build stage |
 | Module | `agentshoppinglist` | Local imports; no invented remote repository path |
 | Tailwind CSS and CLI | 4.3.0 | Exact `package.json` versions and npm lockfile; build-time only |
+| Node | 24.22.0 | Exact immutable build-stage tag/digest; no Node in runtime |
 | Official MCP Go SDK | `github.com/modelcontextprotocol/go-sdk` v1.8.0 | CP06 typed stateless HTTP adapter in go.mod/go.sum |
 | SQLite driver | `modernc.org/sqlite` v1.60.1 | CP02 store/go.mod/go.sum, exact upstream libc v1.77.1 retained |
 | OIDC discovery/ID-token/JWKS | `github.com/coreos/go-oidc/v3` v3.21.0 | CP03 exact issuer, web ID tokens and rotating keys |
@@ -37,3 +38,9 @@ CP02 must test fresh creation, upgrade with preserved records, rollback on failu
 - [Official MCP Go SDK v1.8.0](https://github.com/modelcontextprotocol/go-sdk/releases/tag/v1.8.0).
 - [SQLite driver v1.60.1 documentation](https://pkg.go.dev/modernc.org/sqlite@v1.60.1).
 - [SQLite WAL](https://sqlite.org/wal.html) and [online backup](https://sqlite.org/backup.html).
+
+## CP09/10 release refresh, October19
+
+Go1.26.5 source govulncheck found18 reachable standard-library advisories. [Go release history](https://go.dev/doc/devel/release) documents1.26.9 security fixes; the project now pins1.26.9. The coordinator acquired that toolchain in the project cache and ran govulncheckv1.9.0 against the official vulnerability database with zero findings. The npm lockfile audit also returned zero findings. Repeat scans against final source/binaries before release; these do not replace an image/base-package scan. Docker Scout metadata transmission was rejected by automatic approval review, so that scan remains pending specific authorization or a separately reviewed offline method.
+
+Docker registry index digests pinned in Dockerfile were read from the registries on October19: Go1.26.9-bookworm `sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c`, Node24.22.0-bookworm-slim `sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5`, distroless static-debian13 nonroot `sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3`. Those indices support Linuxamd64/arm64. Pinning is build reproducibility, not a vulnerability verdict. The runtime has CA certificates, timezone data and no Node/build toolchain; Go also embeds timezone data. See [distroless upstream](https://github.com/GoogleContainerTools/distroless) and [Dockerfile](../Dockerfile).
