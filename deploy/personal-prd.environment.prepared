@@ -1,5 +1,5 @@
 # FICTIONAL EXAMPLE ONLY; not deployable configuration. Customize privately before use.
-# Exact local amd64 image config ID; transfer/load verification remains pending.
+# Placeholder digest; replace with a verified immutable image digest.
 SHOPPING_IMAGE=sha256:0000000000000000000000000000000000000000000000000000000000000000
 SHOPPING_ORIGIN=https://shopping.example.com
 SHOPPING_HOST=shopping.example.com
