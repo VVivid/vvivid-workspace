@@ -27,8 +27,9 @@ var (
 // Store has one write connection and a bounded read-only pool. Neither pool is
 // exposed: every personal repository operation must carry an Owner.
 type Store struct {
-	read  *sql.DB
-	write *sql.DB
+	read     *sql.DB
+	write    *sql.DB
+	shareNow func() time.Time
 }
 
 func Open(ctx context.Context, path string, busyTimeout time.Duration) (_ *Store, err error) {
@@ -59,7 +60,7 @@ func Open(ctx context.Context, path string, busyTimeout time.Duration) (_ *Store
 	if err != nil {
 		return nil, err
 	}
-	store := &Store{write: writer}
+	store := &Store{write: writer, shareNow: time.Now}
 	defer func() {
 		if err != nil {
 			err = errors.Join(err, store.Close())
