@@ -1,0 +1,19 @@
+[
+  {"name": "shopping:read", "protocol": "openid-connect", "attributes": {"include.in.token.scope": "true", "display.on.consent.screen": "true", "consent.screen.text": "Read your shopping records"}},
+  {"name": "shopping:products:write", "protocol": "openid-connect", "attributes": {"include.in.token.scope": "true", "display.on.consent.screen": "true", "consent.screen.text": "Manage your product details"}},
+  {"name": "shopping:lists:write", "protocol": "openid-connect", "attributes": {"include.in.token.scope": "true", "display.on.consent.screen": "true", "consent.screen.text": "Manage your shopping lists"}},
+  {"name": "shopping:purchases:write", "protocol": "openid-connect", "attributes": {"include.in.token.scope": "true", "display.on.consent.screen": "true", "consent.screen.text": "Record and reconcile your purchases"}},
+  {"name": "shopping:preferences:write", "protocol": "openid-connect", "attributes": {"include.in.token.scope": "true", "display.on.consent.screen": "true", "consent.screen.text": "Update your shopping preferences"}},
+  {
+    "name": "shopping-api-audience",
+    "protocol": "openid-connect",
+    "attributes": {"include.in.token.scope": "false", "display.on.consent.screen": "false"},
+    "protocolMappers": [{"name": "shopping-api-only", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper", "config": {"included.custom.audience": "https://shopping.vvivid.dev/api/v1", "id.token.claim": "false", "access.token.claim": "true"}}]
+  },
+  {
+    "name": "shopping-mcp-audience",
+    "protocol": "openid-connect",
+    "attributes": {"include.in.token.scope": "false", "display.on.consent.screen": "false"},
+    "protocolMappers": [{"name": "shopping-mcp-only", "protocol": "openid-connect", "protocolMapper": "oidc-audience-mapper", "config": {"included.custom.audience": "https://shopping.vvivid.dev/mcp", "id.token.claim": "false", "access.token.claim": "true"}}]
+  }
+]

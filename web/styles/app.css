@@ -1,0 +1,43 @@
+@import "tailwindcss" source(none);
+@source "../templates";
+
+@theme {
+  --color-background: #f4f5f2;
+  --color-foreground: #27332b;
+}
+
+@layer base {
+  :root {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { -webkit-tap-highlight-color: transparent; }
+  a:focus-visible { outline: 2px solid #729278; outline-offset: 3px; }
+}
+
+@layer components {
+  .shopping-app {
+    max-width: 420px;
+    min-height: 682px;
+    margin-block: 64px;
+    padding: 28px 24px;
+    border: 1px solid #e4e8e0;
+    border-radius: 22px;
+    box-shadow: 0 12px 48px #30442c06;
+  }
+  .app-icon { width: 35px; height: 37px; background: #eff3ec; color: #59775d; }
+  .segmented-tabs { margin-block: 26px 30px; background: #f2f4f0; }
+  .segmented-tabs a { color: #65715e; text-decoration: none; }
+  .segmented-tabs .selected { background: #fff; color: #3f5342; box-shadow: 0 1px 4px #293d2510; }
+  .empty-state { padding: 56px 0; color: #687c5d; }
+  .skip-link { position: absolute; top: 8px; left: 8px; padding: 10px; background: #fff; transform: translateY(-160%); z-index: 1; }
+  .skip-link:focus { transform: translateY(0); }
+  @media (max-width: 520px) {
+    .shopping-app { max-width: 440px; min-height: 100dvh; margin-block: 0; padding: 27px 23px max(24px, env(safe-area-inset-bottom)); border: 0; border-radius: 0; box-shadow: none; }
+  }
+  @media (max-width: 360px) {
+    .shopping-app { padding-inline: 18px; }
+  }
+}
