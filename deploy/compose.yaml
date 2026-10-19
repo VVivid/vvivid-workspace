@@ -1,0 +1,62 @@
+# Preparation only. Resolve every required value from the existing deployment.
+# No host port is published. One replica owns this local SQLite volume.
+services:
+  shopping:
+    image: ${SHOPPING_IMAGE:?Set an immutable release image reference with digest}
+    restart: unless-stopped
+    user: "65532:65532"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    stop_grace_period: 20s
+    environment:
+      SHOPPING_HTTP_ADDR: ":8090"
+      SHOPPING_SHUTDOWN_TIMEOUT: 15s
+      SHOPPING_DB_PATH: /data/shopping.sqlite
+      SHOPPING_DB_BUSY_TIMEOUT: 2s
+      SHOPPING_ORIGIN: ${SHOPPING_ORIGIN:?Set the exact approved HTTPS origin}
+      SHOPPING_OIDC_ISSUER: ${SHOPPING_OIDC_ISSUER:?Set the verified existing Keycloak issuer}
+      SHOPPING_WEB_CLIENT_ID: ${SHOPPING_WEB_CLIENT_ID:?Set the registered shopping web client}
+      SHOPPING_WEB_CLIENT_SECRET_FILE: /run/secrets/web-client
+      SHOPPING_SESSION_KEYS_FILE: /run/secrets/session-keys
+      SHOPPING_API_AUDIENCE: ${SHOPPING_API_AUDIENCE:?Set exact origin plus /api/v1}
+      SHOPPING_MCP_AUDIENCE: ${SHOPPING_MCP_AUDIENCE:?Set exact origin plus /mcp}
+      SHOPPING_MCP_CLIENT_IDS: ${SHOPPING_MCP_CLIENT_IDS:?Set registered shopping MCP clients}
+    volumes:
+      - shopping-data:/data
+    secrets:
+      - source: web-client
+        target: web-client
+      - source: session-keys
+        target: session-keys
+    networks: [traefik]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${SHOPPING_TRAEFIK_NETWORK:?Set the existing internal Traefik network}
+      traefik.http.routers.shopping.rule: Host(`${SHOPPING_HOST:?Set hostname matching SHOPPING_ORIGIN}`)
+      traefik.http.routers.shopping.entrypoints: ${SHOPPING_TRAEFIK_HTTPS_ENTRYPOINT:?Set the existing HTTPS entrypoint}
+      traefik.http.routers.shopping.tls: "true"
+      traefik.http.routers.shopping.tls.certresolver: ${SHOPPING_TRAEFIK_CERTRESOLVER:?Set the existing approved certificate resolver}
+      traefik.http.services.shopping.loadbalancer.server.port: "8090"
+    healthcheck:
+      test: [CMD, /shopping, healthcheck, ready]
+      interval: 30s
+      timeout: 3s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  shopping-data:
+    name: ${SHOPPING_DATA_VOLUME:?Set the dedicated persistent shopping volume name}
+
+networks:
+  traefik:
+    external: true
+    name: ${SHOPPING_TRAEFIK_NETWORK:?Set the existing internal Traefik network}
+
+secrets:
+  web-client:
+    file: ${SHOPPING_WEB_CLIENT_SECRET_HOST_FILE:?Set absolute private host secret path readable by uid65532}
+  session-keys:
+    file: ${SHOPPING_SESSION_KEYS_HOST_FILE:?Set absolute private host keyring path readable by uid65532}

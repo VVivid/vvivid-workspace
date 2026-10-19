@@ -3,6 +3,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"fmt"
 	"html/template"
@@ -151,11 +152,15 @@ func NewHandler(logger *slog.Logger, auth *identity.Manager, service *shopping.S
 		_, _ = w.Write([]byte("{\"status\":\"ok\"}\n"))
 	})
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, r *http.Request) {
-		// Live identity/client and complete purchase/recovery acceptance remain
-		// incomplete. Local service checks must not imply production readiness.
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte("{\"status\":\"not_ready\"}\n"))
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+		defer cancel()
+		if auth == nil || service == nil || service.Ready(ctx) != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("{\"status\":\"not_ready\"}\n"))
+			return
+		}
+		_, _ = w.Write([]byte("{\"status\":\"ready\"}\n"))
 	})
 	var routes http.Handler = mux
 	formAction := "'self'"

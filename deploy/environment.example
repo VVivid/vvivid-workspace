@@ -1,0 +1,17 @@
+# Credential-free template. Supply exact existing infrastructure values.
+# Copy outside source control; the application does not read this file itself.
+# Do not use placeholders against live infrastructure.
+SHOPPING_IMAGE=
+SHOPPING_ORIGIN=https://shopping.vvivid.dev
+SHOPPING_HOST=shopping.vvivid.dev
+SHOPPING_OIDC_ISSUER=
+SHOPPING_WEB_CLIENT_ID=
+SHOPPING_API_AUDIENCE=https://shopping.vvivid.dev/api/v1
+SHOPPING_MCP_AUDIENCE=https://shopping.vvivid.dev/mcp
+SHOPPING_MCP_CLIENT_IDS=
+SHOPPING_WEB_CLIENT_SECRET_HOST_FILE=
+SHOPPING_SESSION_KEYS_HOST_FILE=
+SHOPPING_TRAEFIK_NETWORK=
+SHOPPING_TRAEFIK_HTTPS_ENTRYPOINT=
+SHOPPING_TRAEFIK_CERTRESOLVER=
+SHOPPING_DATA_VOLUME=

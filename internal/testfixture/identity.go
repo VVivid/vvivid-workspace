@@ -8,12 +8,14 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,16 +30,18 @@ const Origin = "https://shopping.example"
 type grant struct{ subject, nonce, challenge string }
 
 type Identity struct {
-	Manager *identity.Manager
-	Store   *sqlite.Store
-	Path    string
-	config  identity.Config
-	server  *httptest.Server
-	key     *rsa.PrivateKey
-	secret  string
-	mu      sync.Mutex
-	codes   map[string]grant
-	refresh map[string]grant
+	Manager     *identity.Manager
+	Store       *sqlite.Store
+	Path        string
+	config      identity.Config
+	server      *httptest.Server
+	key         *rsa.PrivateKey
+	secret      string
+	mu          sync.Mutex
+	codes       map[string]grant
+	refresh     map[string]grant
+	environment map[string]string
+	unavailable atomic.Bool
 }
 
 func New(t *testing.T) *Identity {
@@ -69,6 +73,7 @@ func New(t *testing.T) *Identity {
 		t.Fatal(err)
 	}
 	settings := map[string]string{"SHOPPING_ORIGIN": Origin, "SHOPPING_OIDC_ISSUER": f.server.URL, "SHOPPING_WEB_CLIENT_ID": "shopping-web", "SHOPPING_WEB_CLIENT_SECRET_FILE": secretPath, "SHOPPING_API_AUDIENCE": Origin + "/api/v1", "SHOPPING_MCP_AUDIENCE": Origin + "/mcp", "SHOPPING_MCP_CLIENT_IDS": "shopping-codex,shopping-chatgpt", "SHOPPING_SESSION_KEYS_FILE": keyPath}
+	f.environment = settings
 	cfg, err := identity.LoadConfig(func(name string) (string, bool) { v, ok := settings[name]; return v, ok })
 	if err != nil {
 		t.Fatal(err)
@@ -80,6 +85,12 @@ func New(t *testing.T) *Identity {
 	}
 	return f
 }
+
+// Environment supplies only synthetic, test-owned file references to a separate
+// production binary. The fixture server stays outside that binary.
+func (f *Identity) Environment() map[string]string { return maps.Clone(f.environment) }
+
+func (f *Identity) SetUnavailable(unavailable bool) { f.unavailable.Store(unavailable) }
 
 // Reopen replaces the database connection and identity manager, preserving the
 // same database, issuer and session keys for restart/replay integration tests.
@@ -144,6 +155,10 @@ func (f *Identity) sign(claims map[string]any) string {
 }
 
 func (f *Identity) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	if f.unavailable.Load() {
+		http.Error(w, "synthetic identity outage", http.StatusServiceUnavailable)
+		return
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")

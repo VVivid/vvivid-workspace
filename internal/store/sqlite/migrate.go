@@ -57,38 +57,8 @@ func migrate(ctx context.Context, db *sql.DB, migrations []migration) error {
 	) STRICT`); err != nil {
 		return fmt.Errorf("create migration history: %w", err)
 	}
-	rows, err := db.QueryContext(ctx, "SELECT version, name, checksum FROM schema_migrations ORDER BY version")
+	applied, err := migrationVersion(ctx, db, migrations)
 	if err != nil {
-		return err
-	}
-	applied := 0
-	for rows.Next() {
-		var version int
-		var name, checksum string
-		if err := rows.Scan(&version, &name, &checksum); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		if version > len(migrations) {
-			_ = rows.Close()
-			return fmt.Errorf("database schema version %d is newer than supported version %d", version, len(migrations))
-		}
-		if version != applied+1 {
-			_ = rows.Close()
-			return fmt.Errorf("migration history is not consecutive at version %d", version)
-		}
-		expected := migrations[version-1]
-		if name != expected.name || checksum != expected.checksum {
-			_ = rows.Close()
-			return fmt.Errorf("migration %d history differs from embedded SQL", version)
-		}
-		applied++
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return err
-	}
-	if err := rows.Close(); err != nil {
 		return err
 	}
 	for _, migration := range migrations[applied:] {
@@ -97,6 +67,45 @@ func migrate(ctx context.Context, db *sql.DB, migrations []migration) error {
 		}
 	}
 	return nil
+}
+
+// migrationVersion checks history without creating, migrating or changing it.
+func migrationVersion(ctx context.Context, db queryer, migrations []migration) (int, error) {
+	rows, err := db.QueryContext(ctx, "SELECT version, name, checksum FROM schema_migrations ORDER BY version")
+	if err != nil {
+		return 0, err
+	}
+	applied := 0
+	for rows.Next() {
+		var version int
+		var name, checksum string
+		if err := rows.Scan(&version, &name, &checksum); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		if version > len(migrations) {
+			_ = rows.Close()
+			return 0, fmt.Errorf("database schema version %d is newer than supported version %d", version, len(migrations))
+		}
+		if version != applied+1 {
+			_ = rows.Close()
+			return 0, fmt.Errorf("migration history is not consecutive at version %d", version)
+		}
+		expected := migrations[version-1]
+		if name != expected.name || checksum != expected.checksum {
+			_ = rows.Close()
+			return 0, fmt.Errorf("migration %d history differs from embedded SQL", version)
+		}
+		applied++
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+	return applied, nil
 }
 
 func applyMigration(ctx context.Context, db *sql.DB, migration migration) error {

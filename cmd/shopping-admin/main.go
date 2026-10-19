@@ -23,6 +23,12 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, output io.Writer) (err error) {
+	if len(args) > 0 {
+		switch args[0] {
+		case "backup", "verify", "restore", "inspect", "version":
+			return recoveryCommand(ctx, args, output)
+		}
+	}
 	if len(args) == 0 || (args[0] != "enroll" && args[0] != "disable") {
 		return fmt.Errorf("usage: shopping-admin enroll|disable --db PATH --issuer URL --subject-file PATH [--timezone IANA --currency ISO --retailer NAME --week-start DAY]")
 	}
