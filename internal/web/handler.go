@@ -32,19 +32,42 @@ var pages = []page{
 }
 
 type pageData struct {
-	Current  page
-	Pages    []page
-	SignIn   bool
-	SignedIn bool
-	CSRF     string
-	List     sqlite.ListView
-	Products shopping.ProductPage
-	Query    string
-	Error    string
+	Current     page
+	Pages       []page
+	SignIn      bool
+	SignedIn    bool
+	CSRF        string
+	List        sqlite.ListView
+	Products    shopping.ProductPage
+	Query       string
+	Error       string
+	Purchases   shopping.PurchasePage
+	Purchase    *sqlite.Purchase
+	Insights    shopping.Insights
+	Timezone    string
+	Reorderable map[string]int64
 }
 
 func NewHandler(logger *slog.Logger, auth *identity.Manager, service *shopping.Service) (http.Handler, error) {
-	templates, err := template.New("shopping").Funcs(template.FuncMap{"pack": packText}).ParseFS(webassets.Files, "templates/*.gohtml")
+	templates, err := template.New("shopping").Funcs(template.FuncMap{
+		"pack":             packText,
+		"snapshotPack":     snapshotPack,
+		"money":            moneyText,
+		"code":             currencyCode,
+		"purchaseDate":     purchaseDate,
+		"weeklyChart":      weeklyChart,
+		"dictPurchase":     dictPurchase,
+		"chartY":           func(height int) int { return 80 - max(height, 1) },
+		"chartHeight":      func(height int) int { return max(height, 1) },
+		"canBuyAgain":      canBuyAgain,
+		"buyAgainRetailer": buyAgainRetailer,
+		"sourceKind":       sourceKindText,
+		"categoryName":     categoryText,
+		"spendText":        spendText,
+		"quantityText":     quantityText,
+		"categoryMaximum":  categoryMaximum,
+		"quantityMaximum":  quantityMaximum,
+	}).ParseFS(webassets.Files, "templates/*.gohtml")
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
@@ -74,11 +97,35 @@ func NewHandler(logger *slog.Logger, auth *identity.Manager, service *shopping.S
 					}
 					context, loadErr := service.GetContext(r.Context(), principal)
 					if loadErr == nil {
+						data.Timezone = context.Preferences.Timezone
 						data.List, loadErr = service.GetList(r.Context(), principal, shopping.ListInput{Retailer: context.Preferences.PreferredRetailer})
 					}
 					if loadErr == nil && current.Path == "/products" {
 						data.Query = r.URL.Query().Get("q")
 						data.Products, loadErr = service.SearchProducts(r.Context(), principal, shopping.SearchInput{Query: data.Query, Cursor: r.URL.Query().Get("cursor")})
+					}
+					if loadErr == nil && current.Path == "/history" {
+						purchaseIDs := []string{}
+						if id := r.URL.Query().Get("purchase"); id != "" {
+							purchase, err := service.GetPurchase(r.Context(), principal, id)
+							loadErr = err
+							data.Purchase = &purchase
+							purchaseIDs = append(purchaseIDs, purchase.ID)
+						} else {
+							data.Purchases, loadErr = service.SearchPurchases(r.Context(), principal, shopping.SearchPurchasesInput{
+								Status: "confirmed",
+								Cursor: r.URL.Query().Get("cursor"),
+							})
+							for _, purchase := range data.Purchases.Purchases {
+								purchaseIDs = append(purchaseIDs, purchase.ID)
+							}
+						}
+						if loadErr == nil {
+							data.Reorderable, loadErr = service.ReorderableLines(r.Context(), principal, purchaseIDs)
+						}
+					}
+					if loadErr == nil && current.Path == "/insights" {
+						data.Insights, loadErr = service.GetInsights(r.Context(), principal, shopping.InsightsInput{})
 					}
 					if loadErr != nil {
 						data.Error = shopping.SafeError(loadErr)

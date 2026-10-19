@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"agentshoppinglist/internal/shopping"
 	"agentshoppinglist/internal/store/sqlite"
@@ -39,9 +40,11 @@ func TestMobilePreview(t *testing.T) {
 		sqlite.Listing{Retailer: "Fixture observed price, unknown stock", ProductURL: source, StoreLocation: store, PriceMinor: new(int64(599)), Currency: new("USD"), ObservedAt: observed, Availability: "unknown"},
 		sqlite.Listing{Retailer: "Fixture zero price, unknown stock", ProductURL: source, PriceMinor: new(int64(0)), Currency: new("USD"), ObservedAt: observed, Availability: "unknown"},
 	)
-	if _, err := service.SaveProduct(t.Context(), p, shopping.SaveProductInput{WriteMeta: meta("preview-listings"), Product: polar, ExpectedRevision: polar.Revision}); err != nil {
+	updatedPolar, err := service.SaveProduct(t.Context(), p, shopping.SaveProductInput{WriteMeta: meta("preview-listings"), Product: polar, ExpectedRevision: polar.Revision})
+	if err != nil {
 		t.Fatal(err)
 	}
+	polar = updatedPolar.Record
 	for i, name := range []string{"Avocados", "Oat milk", "Free-range eggs", "Sourdough bread", "Strawberries"} {
 		product := testfixture.Polar()
 		product.Name = name
@@ -68,6 +71,22 @@ func TestMobilePreview(t *testing.T) {
 			t.Fatal(err)
 		}
 		list = added.Record
+	}
+	// These records exist only in this opt-in test database. They exercise the
+	// real confirmation/read services and are labelled synthetic in their source.
+	for i := range 6 {
+		draft := purchaseDraft(polar.ID, fmt.Sprintf("synthetic-preview-purchase-%d", i))
+		draft.Lines[0].ExpectedProductRevision = polar.Revision
+		draft.PurchasedAt = time.Now().AddDate(0, 0, -(i*7 + 1)).UnixMilli()
+		draft.SourceEvidence = "Synthetic visual fixture purchase; not a receipt or a real user purchase."
+		if i == 1 {
+			draft.Lines[0].UnitPriceMinor, draft.Lines[0].LineTotalMinor, draft.Lines[0].DiscountMinor, draft.Lines[0].TaxMinor = nil, nil, nil, nil
+			draft.Lines[0].TaxTreatment = "unknown"
+		}
+		if i == 2 {
+			draft.Lines[0].UnitPriceMinor, draft.Lines[0].LineTotalMinor = new(int64(0)), new(int64(0))
+		}
+		saveAndConfirm(t, service, p, fmt.Sprintf("preview-purchase-%d", i), draft)
 	}
 	cookie := f.Cookie(t, "alice")
 	handler := newHandler(t, f, service)

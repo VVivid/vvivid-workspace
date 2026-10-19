@@ -21,14 +21,15 @@ type ListView struct {
 }
 
 type ItemOperation struct {
-	Kind             string  `json:"kind"`
-	ItemID           string  `json:"item_id,omitempty"`
-	ProductID        string  `json:"product_id,omitempty"`
-	ExpectedRevision int64   `json:"expected_revision"`
-	Quantity         *string `json:"quantity"`
-	PickedUp         *bool   `json:"picked_up"`
-	Merge            string  `json:"merge,omitempty"`
-	Retailer         *string `json:"retailer"`
+	Kind                    string  `json:"kind"`
+	ItemID                  string  `json:"item_id,omitempty"`
+	ProductID               string  `json:"product_id,omitempty"`
+	ExpectedRevision        int64   `json:"expected_revision"`
+	Quantity                *string `json:"quantity"`
+	PickedUp                *bool   `json:"picked_up"`
+	Merge                   string  `json:"merge,omitempty"`
+	Retailer                *string `json:"retailer"`
+	ExpectedProductRevision *int64  `json:"expected_product_revision,omitempty"`
 }
 
 func readList(ctx context.Context, q queryer, owner Owner, id string) (List, error) {
@@ -260,6 +261,15 @@ func (tx *Tx) availableProduct(id string) error {
 func (tx *Tx) addItem(listID string, op ItemOperation, id string) error {
 	if err := tx.availableProduct(op.ProductID); err != nil {
 		return err
+	}
+	if op.ExpectedProductRevision != nil {
+		var revision int64
+		if err := tx.sql.QueryRowContext(tx.ctx, `SELECT revision FROM products WHERE owner_id=? AND id=?`, tx.owner.id, op.ProductID).Scan(&revision); err != nil {
+			return err
+		}
+		if revision != *op.ExpectedProductRevision {
+			return ErrConflict
+		}
 	}
 	var existingID string
 	err := tx.sql.QueryRowContext(tx.ctx, `SELECT id FROM list_items WHERE owner_id=? AND list_id=? AND product_id=? AND removed_at IS NULL ORDER BY created_at,id LIMIT 1`, tx.owner.id, listID, op.ProductID).Scan(&existingID)

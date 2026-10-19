@@ -40,6 +40,45 @@ func registerAPI(mux *http.ServeMux, auth *identity.Manager, service *shopping.S
 		data, err := service.GetProduct(r.Context(), p, r.PathValue("product_id"))
 		respond(w, data, err)
 	})
+	read("GET /api/v1/purchases", func(w http.ResponseWriter, r *http.Request) {
+		p, _ := identity.FromContext(r.Context())
+		limit, err := queryLimit(r)
+		if err != nil {
+			respond(w, nil, err)
+			return
+		}
+		from, to, err := queryDates(r)
+		if err != nil {
+			respond(w, nil, err)
+			return
+		}
+		data, err := service.SearchPurchases(r.Context(), p, shopping.SearchPurchasesInput{
+			From:            from,
+			To:              to,
+			Retailer:        r.URL.Query().Get("retailer"),
+			ProductID:       r.URL.Query().Get("product_id"),
+			SourceReference: r.URL.Query().Get("source_reference"),
+			Status:          r.URL.Query().Get("status"),
+			Cursor:          r.URL.Query().Get("cursor"),
+			Limit:           limit,
+		})
+		respond(w, data, err)
+	})
+	read("GET /api/v1/purchases/{purchase_id}", func(w http.ResponseWriter, r *http.Request) {
+		p, _ := identity.FromContext(r.Context())
+		data, err := service.GetPurchase(r.Context(), p, r.PathValue("purchase_id"))
+		respond(w, data, err)
+	})
+	read("GET /api/v1/insights", func(w http.ResponseWriter, r *http.Request) {
+		p, _ := identity.FromContext(r.Context())
+		from, to, err := queryDates(r)
+		if err != nil {
+			respond(w, nil, err)
+			return
+		}
+		data, err := service.GetInsights(r.Context(), p, shopping.InsightsInput{From: from, To: to, Interval: r.URL.Query().Get("interval")})
+		respond(w, data, err)
+	})
 	read("GET /api/v1/lists/active", func(w http.ResponseWriter, r *http.Request) {
 		p, _ := identity.FromContext(r.Context())
 		retailer := r.URL.Query().Get("retailer")
@@ -56,11 +95,12 @@ func registerAPI(mux *http.ServeMux, auth *identity.Manager, service *shopping.S
 	})
 	write("POST /api/v1/lists/{list_id}/items", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
-			ProductID            string  `json:"product_id"`
-			Quantity             string  `json:"quantity"`
-			Merge                string  `json:"merge"`
-			Retailer             *string `json:"retailer"`
-			ExpectedListRevision int64   `json:"expected_list_revision"`
+			ProductID               string  `json:"product_id"`
+			Quantity                string  `json:"quantity"`
+			Merge                   string  `json:"merge"`
+			Retailer                *string `json:"retailer"`
+			ExpectedListRevision    int64   `json:"expected_list_revision"`
+			ExpectedProductRevision *int64  `json:"expected_product_revision"`
 		}
 		if err := decode(w, r, &in); err != nil {
 			respond(w, nil, err)
@@ -72,11 +112,12 @@ func registerAPI(mux *http.ServeMux, auth *identity.Manager, service *shopping.S
 			ListID:           r.PathValue("list_id"),
 			ExpectedRevision: in.ExpectedListRevision,
 			Operations: []sqlite.ItemOperation{{
-				Kind:      "add",
-				ProductID: in.ProductID,
-				Quantity:  new(in.Quantity),
-				Merge:     in.Merge,
-				Retailer:  in.Retailer,
+				Kind:                    "add",
+				ProductID:               in.ProductID,
+				Quantity:                new(in.Quantity),
+				Merge:                   in.Merge,
+				Retailer:                in.Retailer,
+				ExpectedProductRevision: in.ExpectedProductRevision,
 			}},
 		})
 		respond(w, data, err)
@@ -137,6 +178,20 @@ func registerAPI(mux *http.ServeMux, auth *identity.Manager, service *shopping.S
 		})
 		respond(w, data, err)
 	})
+}
+
+func queryDates(r *http.Request) (int64, int64, error) {
+	values := [2]int64{}
+	for i, key := range []string{"from", "to"} {
+		if raw := r.URL.Query().Get(key); raw != "" {
+			value, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil {
+				return 0, 0, &shopping.ValidationError{Message: "Dates must use Unix milliseconds."}
+			}
+			values[i] = value
+		}
+	}
+	return values[0], values[1], nil
 }
 
 func requestMeta(w http.ResponseWriter, r *http.Request) shopping.WriteMeta {

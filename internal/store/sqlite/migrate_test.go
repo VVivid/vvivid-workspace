@@ -47,7 +47,7 @@ func TestFreshSchemaAndUpgradePreserveAccount(t *testing.T) {
 	if err := migrate(t.Context(), store.write, migrations); err != nil {
 		t.Fatalf("repeat migration: %v", err)
 	}
-	assertCount(t, store.write, "SELECT count(*) FROM schema_migrations", 5)
+	assertCount(t, store.write, "SELECT count(*) FROM schema_migrations", len(migrations))
 	rows, err := store.read.QueryContext(t.Context(), "PRAGMA foreign_key_check")
 	if err != nil {
 		t.Fatal(err)

@@ -115,7 +115,7 @@
         pendingWrite = null;
         const refreshed = await refreshView();
         if (refreshed) {
-          message(error.status === 409 ? "The list changed. Refreshed; review it and try again." : error.message);
+          message(error.status === 409 ? "The item or list changed. Refreshed; review it and try again." : error.message);
         } else {
           const reason = error.status === 409 ? "The list changed." : error.message;
           message(`${reason} Refresh failed; use Refresh to load the current list before trying again.`, false, true);
@@ -268,7 +268,14 @@
     }
     if (target.dataset.addProduct) {
       const list = listContext();
-      mutate("POST", `/api/v1/lists/${encodeURIComponent(list.id)}/items`, { product_id: target.dataset.addProduct, quantity: "1", merge: "increment", retailer: null, expected_list_revision: list.revision });
+      mutate("POST", `/api/v1/lists/${encodeURIComponent(list.id)}/items`, {
+        product_id: target.dataset.addProduct,
+        quantity: target.dataset.addQuantity || "1",
+        merge: "increment",
+        retailer: target.dataset.addRetailer || null,
+        expected_list_revision: list.revision,
+        expected_product_revision: target.dataset.addProductRevision ? Number(target.dataset.addProductRevision) : null,
+      });
     }
   });
   document.addEventListener("change", event => {

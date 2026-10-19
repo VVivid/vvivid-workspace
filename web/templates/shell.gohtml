@@ -42,6 +42,14 @@
         {{end}}</ul>{{else}}<p class="empty-state">No saved products{{if .Query}} match your search{{end}}.</p>{{end}}
         {{if .Products.NextCursor}}<a class="more-link" href="/products?q={{.Query}}&amp;cursor={{.Products.NextCursor}}">More products</a>{{end}}
         {{if not .List.List}}<p class="subtle-note">Ask your agent to select an active list before adding products.</p>{{end}}
+      {{else if eq .Current.Path "/history"}}
+        {{if .Purchase}}{{template "purchase" (dictPurchase .Purchase .List .Timezone .Reorderable)}}<a class="more-link" href="/history">All purchases</a>
+        {{else if .Purchases.Purchases}}
+          <div class="purchase-history">{{range .Purchases.Purchases}}{{template "purchase" (dictPurchase . $.List $.Timezone $.Reorderable)}}{{end}}</div>
+          {{if .Purchases.NextCursor}}<a class="more-link" href="/history?cursor={{.Purchases.NextCursor}}">Earlier purchases</a>{{end}}
+        {{else}}<p class="empty-state">No confirmed purchases yet.</p>{{end}}
+        <p class="subtle-note">Recorded purchases only. Checking your list does not record a purchase.</p>
+      {{else if eq .Current.Path "/insights"}}{{template "insights" .Insights}}
       {{else}}<p class="empty-state">{{.Current.Message}}</p>{{end}}
     </main>
   </div>

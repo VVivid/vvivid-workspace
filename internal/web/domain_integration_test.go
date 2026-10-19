@@ -21,7 +21,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const allScopes = identity.Read + " " + identity.ProductsWrite + " " + identity.ListsWrite + " " + identity.PreferencesWrite
+const allScopes = identity.Read + " " + identity.ProductsWrite + " " + identity.ListsWrite + " " + identity.PurchasesWrite + " " + identity.PreferencesWrite
 
 func meta(key string) shopping.WriteMeta {
 	return shopping.WriteMeta{RequestID: "request-" + key, IdempotencyKey: key}
@@ -232,15 +232,12 @@ func TestBrowserAndOfficialMCPProtocolShareConcurrencyRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 10 {
+	if len(tools.Tools) != 16 {
 		t.Fatalf("got %d tools", len(tools.Tools))
 	}
 	for _, tool := range tools.Tools {
 		if tool.OutputSchema == nil || tool.InputSchema == nil {
 			t.Fatalf("untyped tool %s", tool.Name)
-		}
-		if strings.Contains(tool.Name, "purchase") || tool.Name == "get_insights" {
-			t.Fatal("unfinished tool exposed")
 		}
 	}
 	contextResult := call(t, session, "get_context", map[string]any{})

@@ -1,0 +1,109 @@
+{{define "purchase"}}
+<details class="purchase-record" data-purchase-id="{{.Purchase.ID}}">
+  <summary>
+    <strong>{{.Purchase.Retailer}}</strong>
+    <span>{{purchaseDate .Purchase.PurchasedAt .Timezone}}</span>
+    {{if ne .Purchase.Status "confirmed"}}<small>{{.Purchase.Status}}</small>{{end}}
+  </summary>
+  {{if .Purchase.StoreLocation}}<p class="detail-note">{{.Purchase.StoreLocation}}</p>{{end}}
+  <ul class="purchase-lines" aria-label="Purchased items">
+    {{range .Purchase.Lines}}
+    <li class="purchase-line">
+      {{template "category-icon" .}}
+      <div class="purchase-line-label">
+        <strong>{{.Name}}</strong>
+        <small>{{snapshotPack .}} · {{.Quantity}} {{.QuantityUnit}} bought</small>
+        <span>{{money .LineTotalMinor (code $.Purchase.Currency)}} merchandise</span>
+        {{if .DiscountMinor}}<small>Allocated discount: {{money .DiscountMinor (code $.Purchase.Currency)}}</small>{{end}}
+        {{if .TaxMinor}}
+          <small>Tax: {{money .TaxMinor (code $.Purchase.Currency)}}</small>
+        {{else}}
+          <small>Tax unknown</small>
+        {{end}}
+        {{if and (index $.Reorderable .ID) (canBuyAgain . $.List $.Purchase.Retailer)}}
+          <button class="buy-again" type="button" data-add-product="{{.ProductID}}" data-add-product-revision="{{index $.Reorderable .ID}}" data-add-quantity="{{.Quantity}}" data-add-retailer="{{buyAgainRetailer . $.List $.Purchase.Retailer}}" aria-label="Buy {{.Name}} again">Buy again</button>
+        {{end}}
+      </div>
+    </li>
+    {{end}}
+  </ul>
+  <div class="purchase-source">
+    <p>{{sourceKind .Purchase.SourceKind}} · {{.Purchase.SourceReference}}</p>
+    <p>{{.Purchase.SourceEvidence}}</p>
+    {{if .Purchase.SourceURL}}<a href="{{.Purchase.SourceURL}}" target="_blank" rel="noopener noreferrer">Purchase source</a>{{end}}
+    {{if .Purchase.ReplacesID}}<p>Corrected purchase. Previous list reconciliation is retained; list changes are separate.</p>{{end}}
+    {{if .Purchase.VoidReason}}<p>Void reason: {{.Purchase.VoidReason}}</p>{{end}}
+  </div>
+</details>
+{{end}}
+
+{{define "insights"}}
+<p class="insight-intro">Recorded purchases only · {{.Timezone}}</p>
+{{if .Spend}}
+<section class="insight-section" aria-labelledby="weekly-heading">
+  <h3 id="weekly-heading">Weekly merchandise</h3>
+  <p>After discounts, before tax. Current and partial weeks are labelled below.</p>
+  {{range weeklyChart .}}
+  <figure class="spend-chart">
+    <figcaption>{{.Currency}} · known amounts</figcaption>
+    <svg viewBox="0 0 280 105" role="img" aria-label="Weekly recorded merchandise in {{.Currency}}">
+      {{range .Points}}
+        {{if .Known}}
+          <rect x="{{.X}}" y="{{chartY .Height}}" width="22" height="{{chartHeight .Height}}" rx="3"><title>{{.Label}}: {{.Amount}}</title></rect>
+        {{else}}
+          <text x="{{.X}}" y="79" class="unknown-marker">?</text>
+        {{end}}
+        <text x="{{.X}}" y="101">{{.Label}}</text>
+      {{end}}
+    </svg>
+  </figure>
+  {{end}}
+  <div class="weekly-values">
+    {{range .Weeks}}
+    <div>
+      <strong>{{.LocalStart}}{{if not .CompleteCalendarWeek}} · Partial{{end}}</strong>
+      {{if .Spend}}
+        {{range .Spend}}<span>{{spendText .}}</span>{{end}}
+      {{else}}
+        <span>No records · coverage unknown</span>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+</section>
+<section class="insight-section" aria-labelledby="category-heading">
+  <h3 id="category-heading">Merchandise by category</h3>
+  <p>The same recorded amounts as weekly spending.</p>
+  <ul class="category-spend">
+    {{range .Categories}}
+    <li>
+      <span>{{categoryName .Category}}</span>
+      <strong>{{money .MerchandiseMinor .Currency}}</strong>
+      {{if .MerchandiseMinor}}<meter min="0" max="{{categoryMaximum $ .Currency}}" value="{{.MerchandiseMinor}}" aria-label="{{categoryName .Category}} recorded merchandise in {{.Currency}}"></meter>{{end}}
+      {{if .MissingMerchandiseLines}}<small>{{spendText .Spend}}</small>{{end}}
+    </li>
+    {{end}}
+  </ul>
+</section>
+<section class="insight-section" aria-labelledby="quantity-heading">
+  <h3 id="quantity-heading">Quantities bought</h3>
+  <p>Compatible quantities from saved pack details. Bought, not consumed.</p>
+  {{range .Weeks}}
+    {{if .Quantities}}
+    <div class="quantity-week">
+      <strong>{{.LocalStart}}{{if not .CompleteCalendarWeek}} · Partial{{end}}</strong>
+      {{range .Quantities}}
+        <span>{{categoryName .Category}} · {{quantityText .Quantity}} {{.Unit}} bought</span>
+        <meter min="0" max="{{quantityMaximum $ .Category .Unit}}" value="{{.Quantity}}" aria-label="{{categoryName .Category}} quantity bought in {{.Unit}}"></meter>
+      {{end}}
+    </div>
+    {{end}}
+  {{end}}
+  {{if .UnavailableQuantityLines}}<p>{{.UnavailableQuantityLines}} lines lack comparable pack or unit details.</p>{{end}}
+</section>
+<p class="subtle-note">{{range .Spend}}{{.Currency}}: {{money .TaxMinor .Currency}} recorded tax{{if .MissingTaxLines}} · {{.MissingTaxLines}} lines with unknown tax{{end}}. {{end}}Missing prices are excluded from known amounts. Missing historical coverage is unknown.</p>
+{{else}}
+  <p class="empty-state">No confirmed purchases in this period.</p>
+  <p class="subtle-note">No records means unknown coverage. It does not establish zero spending.</p>
+{{end}}
+{{end}}

@@ -6,53 +6,82 @@ Updated October 19, 2026, America/New_York.
 
 Project: /Users/oudavid/works/opensource/AgentShoppingList
 
-**CP00–CP02 complete. CP03 local identity is independently Approved; live acceptance remains. CP04/CP05 complete after independent Review Approved; CP06 local tools Approved with real-client and later-tool acceptance pending. V1 is not beta-ready.**
+**CP01/02/04/05 complete. CP07/08 local implementation independently Approved; CP03/06 live acceptance remains pending. Continue CP09 whole-process restart and CP10 local release/recovery preparation. V1 is not deployed or beta-ready.**
 
-Continue the user's overall deployable daily-use v1 goal after each local stage; checkpoint boundaries are not a request to stop. The current slice intentionally leaves purchase confirmation/History and derived Insights for CP07/08, then full end-to-end/restart/deployment/recovery acceptance. Live identity/client checks remain separate and unexecuted.
+Continue the user's full deployable daily-use v1 goal after each local stage. Checkpoint boundaries are not stop requests. Preserve files/data and continue; do not recreate the app. No live infrastructure change is authorized by this local handoff.
 
-Baseline Git commit `a3f8c76` on `main` contains the foundation/identity tree; no remote. Later local changes implement product variants/sourced details, explicit active-list selection, atomic revisioned list batches, soft removal with picked-up evidence, before/after audit and durable idempotency. Migration5 preserves existing records and never guesses an active list. `.gitattributes` enforces LF for source/text without changing global Git settings.
+Git: `main`, baseline `21d4f35` (shared shopping/mobile/MCP), previous `a3f8c76` (foundation/identity), no remote. Current CP07/08 changes are uncommitted. Migration6 extends existing purchase tables without resetting products/lists/accounts or inventing receipt evidence. The app still reports readiness503.
 
-Go1.26.5 serves embedded templates/CSS/minimal JS, a browser-session API and protected official SDK v1.8.0 stateless MCP from one application. Browser and MCP call the same scope/owner services. Ten tools are implemented: context, product search/read/save/archive, list read/save/update, preferences and activity. Purchase/insight tools are unexposed; the UI tabs remain truthful empty views. No seeded production users/data, runtime fixture identity, separate gateway or arbitrary fetch/execute/SQL. Readiness stays503.
-
-Existing CP03 security remains: code+PKCE/state/nonce, one-use encrypted login attempts, external AES-GCM keyring and durable sessions, secure host cookies, exact Origin/CSRF, refresh/logout/revocation, strict access JWT audience/client/scope checks, explicit operator enrollment/disable and active owner resolution. No live infrastructure changes.
+Go1.26.5 serves four compact template views, narrow browser API and protected stateless official SDK v1.8.0 MCP in one application. Authentication/per-owner scopes, durable encrypted sessions, audit and account-wide idempotency are preserved. No production data/fixture identity is seeded.
 
 ## Read in order
 
-1. AGENTS.md and this file.
-2. CHECKPOINTS.md for status and stage evidence.
-3. REQUIREMENTS.md, SPEC.md, ARCHITECTURE.md, docs/KEYCLOAK.md.
-4. docs/DOMAIN.md for the implemented local contract/reading order and docs/validation/CP04-CP06-2026-10-19.md for executed evidence.
-5. docs/AUTH.md, docs/DECISIONS.md, docs/DEPENDENCIES.md and README.md for configuration/remaining choices.
+1. AGENTS.md, this file and CHECKPOINTS.md.
+2. REQUIREMENTS.md, SPEC.md, ARCHITECTURE.md, docs/KEYCLOAK.md.
+3. docs/DOMAIN.md for current service/price/reconciliation/insights contracts.
+4. docs/validation/CP07-CP08-2026-10-19.md and prior CP04–CP06 evidence.
+5. docs/AUTH.md, docs/DECISIONS.md, docs/DEPENDENCIES.md and README.md.
 
 ## Next action
 
-Coordinator runs final validation/build on the CP04–CP06 local slice and obtains fresh independent Review. Translation completed after Builder corrected independent price/availability labels and rejected-write refresh failure handling. Do not call Builder or Translation checks an independent review. Keep CP03/CP06 live integration In progress. After local approval continue CP07/08, preserving current files/data and user scope; do not recreate the project.
+Continue CP09 whole-process/two-user web+MCP restart and interrupted retry verification, then CP10 local immutable container, real readiness, consistent backup/restore and deployment artifacts. Preserve all existing records and source evidence. Live infrastructure access still requires bounded authorization after local artifacts are reviewable.
+
+Latest correction completed Builder → Translation → final validation → fresh independent Review. Purchase writes now persist explicit bounded outcomes; full source arrays remain on owner-scoped reads. Exact replay uses saved outcomes, never current mutable rows. See docs/validation/CP07-result-correction-2026-10-19.md.
+
+## Implemented in this slice
+
+- Sourced revisioned purchase drafts, confirmation, full void with reason, and atomic replacement supersede. Each line pins `expected_product_revision`; catalog drift before confirmation conflicts instead of changing receipt pack facts silently.
+- Confirmed product/pack/category/source/price snapshots remain immutable after catalog edits, replacement or void. Source identity is unique per owner/retailer/source-kind/reference lineage, including retries and voids.
+- Original confirmation atomically compares linked product/list/item revisions, preserves checked/removed evidence and reconciles partial quantities. Replacement returns original reconciliation evidence with `reconciliation_applied:false`; corrections and voids never repeat/reverse list changes. Any needed list adjustment is a separate explicit mutation. Partial refunds are deferred.
+- Known unit price × quantity rounds half up before allocated discount. Merchandise line totals exclude tax; tax is separately known or null. Unknown values remain null, distinct from zero. No price is inferred from checkoff.
+- History reads current confirmed records and sourced snapshots. Buy again uses the existing list-add service only for compatible pack counts/current variant facts; it allows description-only edits, hides changed packs/measured lines, and pins the current product revision against click-time drift.
+- Insights derive solely from current confirmed snapshots: separate currencies, matching weekly/category merchandise basis, tax/missing counts, rational compatible-unit quantities, checked integer money sums and timezone/week-start/DST boundaries. Coverage is recorded purchases only; absent weeks are unknown. Human charts round quantity labels and say bought.
+- All16 typed MCP tools are exposed; browser purchase/metric writes remain absent. Actual nonempty purchase/insight and confirmation/replacement/void audit outputs passed official SDK schema validation.
+- Purchase audit events now retain complete editable draft inputs and compact immutable purchase/reconciliation references, counts and state transitions. Full catalog/source/price snapshots and reconciliation before/after evidence remain in their authoritative owner-qualified tables. Older full-Purchase audit JSON remains readable and accepted by the SDK output schema. The256KiB audit cap and50-line purchase limit are unchanged.
 
 ## Actual validation
 
-- Modern Go Guidelines read for Go1.26 before edits; official SDK primary release/docs checked and exact v1.8.0 dependencies pinned.
-- Project-cache `make fmt assets`, `node --check web/static/app.js`, `GOPROXY=off make check build` and race tests for browser/MCP/identity/store/admin passed. Existing snapshot/auth/session/security regressions pass.
-- Real loopback OIDC/browser/official SDK integration executed all10 tools, scopes/CSRF/audience/two-user isolation, source validation, exact decimals/variants/null facts, bounded catalog/activity pagination, atomic rollback, idempotent retries, browser/MCP concurrent revision race, explicit selection and archive/restore rules. Reopening SQLite preserved replay outcomes without modifying later state; v4→v5 preserved old shopping rows.
-- Coordinator built-in browser checked360/390 widths, tap targets, real Polar fixture photo/details, dialog keyboard/Escape/focus, persistent checks, quantity/search/add/remove,503 unsynced/Retry and final focus restoration. Screenshots/evidence linked in the validation note. These are synthetic local records, not production or retailer verification.
-- Fresh Translation independently inspected the corrected listing labels and write/refresh flow, expanded dense JavaScript branches and browser API input literals without changing behavior, then passed Modern Go guidance, `gofmt`, JavaScript parse and uncached `go test ./internal/web -count=1`. The sandbox listener denial was resolved with scoped local escalation. Coordinator separately browser-checked null-price/known-stock, known/zero-price/unknown-stock and409-write+503-refresh recovery before Translation; final full validation/review remain.
-- Initial sandbox dependency DNS/listener denial resolved by scoped local escalations. Schema4→5 expectations and SDK audit-output schema inference issue were fixed; final checks passed. No unresolved Builder check failure.
-- Final opt-in test preview session94993 remains at127.0.0.1:8092 for coordinator follow-up. It injects a genuine OIDC-created synthetic session through a wrapper compiled only into the test binary before production authentication executes. Production has no fixture switch. Stop this process after QA. Earlier previews were intentionally restarted to load corrections; the current preview predates Translation's readability-only JavaScript edits. Old foundation8090 remains stopped. No production application server runs for this slice.
+- Full Modern Go Guidelines list for Go1.26 read before edits.
+- `gofmt`, CSS rebuild, `node --check web/static/app.js`, project-cache `GOPROXY=off make check build` passed (format/vet/all tests/both binaries).
+- Race suite passed: `go test -race ./internal/web ./internal/shopping ./internal/store/sqlite ./internal/identity ./cmd/shopping-admin`.
+- Real loopback local OIDC/session + official SDK/browser tests executed agent Polar creation/list → browser sourced photo/check → no spend from checkoff → sourced confirmation → History/Insights once. Also scopes/two-user reads, atomic later-item rollback, partial remainder, source collision/concurrent confirmation, replacement changed quantity without list replay, immutable old/current snapshots, full void, reopen replay after later void, null/zero/discount/tax/currencies/category reconciliation, product drift and safe reorders,167/169hour DST weeks, unknown coverage, exact unit conversion and overflow failure.
+- Coordinator built-in browser on final preview at360/390px: no horizontal overflow; human source/category labels; unknown-only versus knownzero; partial/coverage labels; weekly/category totals reconcile; rounded quantity and actual meter bars; History snapshots/source; Buy again increased Polar1→2 once. Screenshots are in the validation note.
+- Initial schema-version assertion5→6 failure was corrected. Initial restricted httptest listener denial was resolved by scoped local escalation; final checks pass. No unresolved Builder validation failure.
 
-Use `GOMODCACHE=$PWD/.cache/go-mod GOCACHE=$PWD/.cache/go-build` in the restricted workspace. Loopback tests may require scoped escalation. See the evidence note for commands and actual cases.
+Use `GOMODCACHE=$PWD/.cache/go-mod GOCACHE=$PWD/.cache/go-build`. Loopback tests may require scoped local escalation. No network research runs inside purchase transactions.
 
-## Context and remaining inputs
+Correction validation executed: exact reviewer reproduction failed before the fix (`audit summary is too large` after50-line original confirmation), then passed unchanged after it. Durable maximum ASCII/HTML-escaped/Unicode cases exercise50 linked lines,300/150/150-byte name/brand/flavor,2048-byte catalog/receipt URLs,2000-byte receipt evidence,200-byte receipt/line references,128-byte retailer,200-byte location and1000-byte void reason. Largest audit60428 bytes for ASCII/Unicode and207706 for HTML escaping, below262144. Draft revisions, stale replacement/no reserved key, replacement/void/replay with byte-identical reconciled list state, complete immutable sources, draft before/after evidence and historical SDK activity all passed. `make check build` and race suites for web/shopping/SQLite passed. No post-Translation validation or new independent verdict yet.
 
-- User opens a ready Walmart list and checks products; agents manage records. Four compact tabs, no dashboard. Fixed category icons on rows; exact photos belong in details.
-- Checkoff records picked-up intent; it never creates a purchase or actual price. Soft removal preserves evidence. Future confirmed purchases alone produce History/Insights metrics.
-- Explicit merge increment/keep, expected list/item/selection revisions and account-wide idempotency are shared by browser and MCP.
-- User chose https://shopping.vvivid.dev, own-account-only initial enrollment, Codex and ChatGPT. Own-account preferences explicitly selected: America/New_York, USD, Walmart, Monday. These are not global defaults and no live account is enrolled.
-- Exact subject, registrations/callbacks, live issuer/resource/proxy compatibility, optional background consent, remote repository and recovery targets remain pending. October18 Keycloak observations are historical, not refreshed runtime evidence.
-- Automatic approval review rejected the earlier production SSHMCP connection as outside local authorization. No connection opened or indirect retry/bypass occurred. Local artifacts/tests are authorized; live identity/Traefik/DNS/proxy/enrollment/deployment requires the separately recorded bounded authorization.
+## Processes and authorization
 
-## Stage evidence
+No application or fixture preview is running. Original Builder stopped preview76489 after the prior review; correction Builder again verified `lsof -nP -iTCP:8092 -sTCP:LISTEN` returns no listener. Local test-only OIDC/SDK listeners close when their tests finish. No production application listener was started for this correction.
 
-CP03 Builder/Translation/Review runtime evidence is in CHECKPOINTS.md. Coordinator verified CP04–CP06 Builder `/root/shopping_builder`, host turn_context session01a1527f-e94d-74c3-a912-9ec17a0f5097, as gpt-6.1-sol/max before implementation, and fresh Translation `/root/shopping_translation_final`, host turn_context session01a15292-7794-7b23-ac8d-81a50e4a15eb, as gpt-6.1-sol/xhigh before edits. Review for this slice must supply actual independent runtime evidence and a verdict.
+User chose `https://shopping.vvivid.dev`, own-account-only initial enrollment, Codex/ChatGPT, and own preferences America/New_York, USD, Walmart, Monday. These are not global defaults and no live account is enrolled. Exact subject/registrations/callbacks, live issuer/resource/proxy compatibility, optional background consent, remote repository and recovery targets remain pending. October18 Keycloak observations are historical.
 
-## Latest coordinator result — CP04–CP06
+Automatic approval review rejected an earlier production SSHMCP connection as outside local authorization; it was not retried or bypassed. Local artifacts/tests are authorized. Live identity/Traefik/DNS/proxy/enrollment/deployment needs the separately recorded bounded authorization. No live infrastructure, OAuth registration, secret or deployment changes occurred.
 
-CP04/CP05 are complete after corrections, final Translation, final build/tests/browser checks, and fresh independent Review Approved (no blocking findings). CP06 local10tool slice is Approved; actual-client and purchase/insight tools pending. Runtime model/effort verification IDs for every original/correction stage are in CHECKPOINTS.md. Continue CP07/CP08 locally while live CP03/06 remain pending. Test preview51151 on8092 is synthetic; all failure controls restored. Existing base commit a3f8c76; next snapshot follows this approval. No live infra changes.
+## Latest independent review — Denied
+
+P2: a supported50-line linked purchase replacement exceeded the256KiB audit summary cap because ConfirmPurchase stored four full snapshots and repeated reconciliation evidence. Existing suites passed; reviewer isolated overlay reproduced failure. Evidence: CHECKPOINTS.md and docs/validation/CP07-review-boundary-reproduction.go.txt. The user subsequently authorized correction. Builder has fixed and tested the audit projection; this historical Denied verdict remains the latest independent verdict until the fresh workflow completes.
+
+Next: Translation, final validation and fresh Review of the corrected code; then resume CP09/10 local release/recovery preparation. Current CP07/08 changes are uncommitted over21d4f35. Docker Desktop29.8.2 was started locally earlier; no application container or live deployment. Live CP03/06/10 acceptance still pending and prior automatic rejection of production shell access remains in effect.
+
+Pause cleanup: no correction processes remain, and8092 has no listener. No live infrastructure, deployment, migration or data reset occurred.
+
+## Latest result-boundary review — Denied
+
+The prior256KiB audit defect is corrected and independently verified. A new P2 blocks supported50-product purchases with12 source URLs of2048 bytes each: SavePurchase full source snapshots exceed Store.Write1MiB persisted-result cap.30-line independent case804145 bytes passed;50-line case fails. Evidence: docs/validation/CP07-result-boundary-reproduction.go.txt. Current source/replay shape must be aligned without discarding immutable evidence or shrinking50-line support just to pass.
+
+That review stopped the earlier workflow for the user's next instruction. The authorized result correction now returns/persists explicit `shopping.PurchaseOutcome` records for save/confirm/void. Receipt/header facts, line identity/package/quantity/price snapshots and full reconciliation remain in outcomes; per-line `sources_snapshot` is available through full owner-authorized `get_purchase`/browser reads. No cap or supported50-line/12-source limit changed; replay reads the original persisted outcome, including historical full-record JSON, instead of current mutable rows.
+
+New actual Builder evidence: unchanged independent reproduction now passes;50 distinct products with12 unique2048-byte sources each pass all purchase writes/full reads through official SDK for ASCII/escaped/Unicode data. Largest persisted outcomes118131/412781 bytes; full immutable records1430181/7763831 bytes. Conservative escaped128-byte-ID outcome bound874618 bytes is below1MiB. All six original attempts replay exactly after database/identity-manager/handler reopen through fresh SDK clients; draft edits, catalog drift, supersede, void, foreign ownership and write-only/read scopes are covered. Maximally escaped product creation is staged through the service because it exceeds the existing128KiB MCP request-body cap; ASCII/Unicode product creation and every purchase operation use SDK. This is not whole-process/container or actual Codex/ChatGPT acceptance.
+
+`GOPROXY=off make check build`, relevant web/shopping/SQLite race suite, targeted reproduction/new regressions and formatting/diff checks passed Builder validation using project caches. Post-Translation final coordinator checks/Review remain required. All current work is preserved uncommitted over21d4f35. No application listeners or live changes; release/container/recovery and live acceptance remain incomplete.
+
+Result correction Translation completed: coordinator verified `/root/purchase_result_translation`, host `turn_context` session `01a152bd-b497-7670-b514-f27f1de06bbf`, as gpt-6.1-sol/xhigh. Descriptive outcome locals, explicit field mappings and expanded conservative fixture preserve behavior. Post-edit bound test (874618 bytes), source-rich durable SDK/reopen/legacy tests and audit regressions pass; initial restricted loopback bind was resolved by scoped local escalation. No correctness/readability blocker was found in this correction's scope. Final coordinator checks/build and fresh independent Review remain required; CP06/07/08 stay In progress. See docs/validation/CP07-result-correction-2026-10-19.md for actual normal/failure traces and validation.
+
+## Latest local verdict — Approved
+
+Fresh read-only Review /root/purchase_result_review found no blocking findings and independently reran original reproduction, maximum-source SDK/reopen/legacy/audit regressions and web/shopping/SQLite suites. Coordinator final make fmt assets check build, JavaScript parsing and diff checks passed after Translation. Largest actual outcome412781 bytes; conservative escaped bound874618 below unchanged1MiB. Full source-bearing evidence retained. This supersedes the historical Denied entries above for the local code only.
+
+Runtime verified from host turn_context: Builder /root/purchase_result_builder session01a152b6-c50c-75b0-b777-fec93e3f7b0c gpt-6.1-sol/max; Translation /root/purchase_result_translation session01a152bd-b497-7670-b514-f27f1de06bbf gpt-6.1-sol/xhigh; Review /root/purchase_result_review session01a152bf-e1f8-7aa3-8b12-f7ec984bb030 gpt-6.1-sol/max. No application listeners or live infrastructure changes.

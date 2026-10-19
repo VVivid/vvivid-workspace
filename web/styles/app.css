@@ -96,4 +96,33 @@
   .quantity-actions { display: flex; align-items: center; justify-content: space-between; }
   .remove-button { min-height: 44px; color: #9c6357; font-size: 12px; margin-top: 14px; }
   .no-script { margin: 20px; font-size: 13px; }
+  .purchase-record { border-bottom: 1px solid #e8ece4; padding-block: 10px; }
+  .purchase-record summary { min-height: 50px; cursor: pointer; padding-block: 7px; font-size: 13px; }
+  .purchase-record summary span, .purchase-record summary small { display: block; margin-top: 5px; color: #7a8771; font-size: 11px; }
+  .purchase-lines { padding: 0; list-style: none; }
+  .purchase-line { display: flex; gap: 11px; padding-block: 12px; }
+  .purchase-line-label { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+  .purchase-line-label strong, .purchase-line-label small, .purchase-line-label span { display: block; font-size: 12px; line-height: 1.7; }
+  .purchase-line-label small { color: #7a8771; font-size: 11px; }
+  .buy-again { min-height: 44px; color: #6d895c; font-size: 12px; padding-right: 12px; }
+  .purchase-source { font-size: 11px; line-height: 1.7; color: #7a8771; overflow-wrap: anywhere; margin-block: 12px; }
+  .purchase-source a { display: inline-block; padding-block: 10px; text-decoration: underline; }
+  .insight-intro, .insight-section > p { font-size: 11px; color: #7a8771; line-height: 1.7; }
+  .insight-section { margin-top: 25px; }
+  .insight-section h3 { font-size: 13px; font-weight: 600; margin-bottom: 7px; }
+  .spend-chart { margin-block: 14px; }
+  .spend-chart figcaption { font-size: 11px; color: #7a8771; }
+  .spend-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .spend-chart rect { fill: #98af87; }
+  .spend-chart text { fill: #7a8771; font-size: 7px; }
+  .spend-chart .unknown-marker { font-size: 14px; }
+  .weekly-values > div, .quantity-week { margin-top: 10px; font-size: 11px; line-height: 1.7; }
+  .weekly-values span, .quantity-week span { display: block; color: #7a8771; }
+  .category-spend { padding: 0; list-style: none; font-size: 12px; }
+  .category-spend li { display: grid; grid-template-columns: 1fr auto; gap: 4px; padding-block: 10px; border-bottom: 1px solid #eef0ea; }
+  .category-spend small { grid-column: 1 / -1; color: #7a8771; font-size: 11px; }
+  .category-spend meter { grid-column: 1 / -1; }
+  .insight-section meter { display: block; width: 100%; height: 9px; margin-block: 6px; accent-color: #98af87; }
+  .insight-section meter::-webkit-meter-bar { background: #f0f3ec; border: none; border-radius: 5px; }
+  .insight-section meter::-webkit-meter-optimum-value { background: #98af87; border-radius: 5px; }
 }

@@ -2,7 +2,7 @@
 
 Draft specification for a mobile shopping app managed primarily by AI agents through MCP. The user opens a ready shopping list, identifies products, and checks items while shopping. The agent maintains products, lists, purchase records, and preferences. The server derives metrics from purchase records.
 
-Status: October19, 2026. CP01/02 complete; CP03 local identity independently Approved with live integration pending. CP04–CP06 local Builder implementation/checks pass; Translation/review and real-client acceptance remain. Planned purchases/insights/deployment remain pending. See CHECKPOINTS.md and docs/DOMAIN.md for actual local behavior/evidence.
+Status: October19, 2026. CP01/02/04/05/07/08 locally complete with independent approval. CP03/06 live acceptance, CP09 process/container restart, and CP10 deployment/recovery remain pending. See CHECKPOINTS.md for actual evidence.
 
 # Product behavior
 
@@ -152,7 +152,13 @@ Tools have typed input and output schemas, explicit field validation, bounded re
 
 A product update returns its current ID and revision. Creation supports a stable external source key to prevent duplicates. All writes include a request ID, idempotency key, and relevant expected revisions. Atomic batches either all apply or none apply.
 
+Purchase writes return a bounded `PurchaseOutcome`: authoritative receipt/header, line IDs/revisions, product identity/package/quantity/price facts and reconciliation before/after evidence. Per-line field-source arrays are available through `get_purchase`, whose full immutable record remains unchanged. Persist the outcome itself with the write so retries return the original attempt after later draft edits, corrections, voids and restarts. Retain support for50 lines and12 source URLs per product without increasing the1MiB persisted-result cap.
+
 Confirmed purchase corrections use a replacement draft plus an atomic supersede operation in confirm_purchase. The previous version remains auditable and only the current confirmed version contributes to metrics.
+
+Each line pins `expected_product_revision`. A catalog edit between draft save and confirmation conflicts atomically; the agent must explicitly revise the draft. Confirmation snapshots that pinned product's identity, package and field sources. Prices use exact integer minor units: unit price is before allocated discount; line total is merchandise after allocated discount and excludes tax. Known unit/line prices require an explicit discount (including zero); fractional minor units round half up before subtracting discount. Tax is separately known with `tax_treatment:excluded`, or null with `tax_treatment:unknown`. An unknown amount never becomes zero or an inferred total.
+
+Replacement drafts retain the same retailer/source identity and contain no new list links. Their confirmation supersedes the current purchase but never repeats or reverses list reconciliation, including when corrected purchase quantities differ. The result returns `reconciliation_applied:false`, original reconciliation purchase ID and preserved before/after evidence. Any list correction is a separate explicit revisioned/idempotent list mutation. Full void also preserves this evidence and never resurrects list rows. Partial refunds are deferred.
 
 Read and write scopes are separate; a write scope does not implicitly grant reading. An agent normally receives shopping:read plus the specific write scopes the user grants. Browser clients cannot request product or purchase write scopes.
 
@@ -175,6 +181,10 @@ Checking an item records picked-up intent immediately and durably. It does not e
 Only reconcile items at the expected revisions. If the user changed an item meanwhile, return a conflict without partially confirming or clearing it.
 
 Removing or archiving a checked item preserves the picked-up event for later reconciliation. A future Clear checked action must not silently erase that evidence.
+
+Linked purchase quantities use `pack` (count of that saved product variant), current list/item revisions and matching retailer context. A full purchase soft-removes its linked item; a partial purchase reduces its quantity while retaining picked-up intent. An explicitly removed item stays removed, including its remaining evidence. Archived lists can be reconciled at their expected revisions. A conflict rolls back purchase status, every linked item/list change, audit and idempotency result together.
+
+History Buy again uses the ordinary list-add service for compatible pack-count lines only. It compares current brand/flavor/count/exact package size/unit with the snapshot, rejects archived products and pins the current product revision in the add request. Harmless description/source/nutrition edits do not disable it. A changed pack or measured purchase (for example500g) requires an agent's explicit list update; it is never reinterpreted as500 product variants.
 
 A receipt identifier is unique per owner and retailer/source when available. Repeated imports and retried confirmation must not double-count. Purchases without known prices may still be confirmed as purchases, but their missing amounts remain explicit in insights.
 
@@ -274,7 +284,7 @@ Connection loss must never display an unsaved checkbox as synced. V1 may require
 
 The canonical project is /Users/oudavid/works/opensource/AgentShoppingList. Local SPEC.md, REQUIREMENTS.md, ARCHITECTURE.md, CHECKPOINTS.md, and RESUME.md are the development handoff. The Page is a reference mirror; update it deliberately when project requirements change.
 
-CP00–CP02 are complete. CP03 local identity completed Builder, Translation, final validation and independent Review Approved; live Keycloak/phone/client acceptance remains pending. CP04 product/list, CP05 mobile templates/API and CP06 built-in MCP have local Builder implementation and passing checks; Translation/review remain, and CP06 actual selected-client OAuth acceptance remains unexecuted. CP07 purchases, CP08 insights, CP09 complete end-to-end/restart and CP10 deployment/recovery remain unimplemented. CHECKPOINTS.md records authoritative evidence; docs/DOMAIN.md describes current mutation/selection/source contracts.
+CP00–CP02 and CP04/CP05 are complete. CP03 local identity and the prior CP06 ten-tool slice completed independent Review; live Keycloak/phone/client acceptance remains pending. CP07 purchases, CP08 insights and all16 MCP tools now have local Builder implementation and passing checks; Translation/Review remain. CP09 whole-process acceptance and CP10 deployment/recovery remain unfinished. CHECKPOINTS.md records authoritative evidence; docs/DOMAIN.md describes current contracts.
 
 At a pause or new-chat handoff, update CHECKPOINTS.md and RESUME.md with completed work, remaining work, actual validation results, failures, relevant commit IDs if Git exists, and the next concrete action. Mark a checkpoint complete only after its exit criteria pass. Partial work remains in progress; resuming verifies the current files and continues unfinished work rather than restarting or deleting state.
 

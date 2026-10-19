@@ -2,9 +2,9 @@
 
 A mobile shopping list managed primarily by AI agents through built-in MCP. Open the list at Walmart, identify the right product, and check it off. Agents maintain product details, lists, purchase history, and preferences; the server computes insights.
 
-**Status: CP01–CP02 complete; CP03 local identity Approved with live acceptance pending. CP04/CP05 complete; CP06 local tools independently Approved with real-client/later-tool acceptance pending. V1 is not beta-ready.**
+Status: October19, 2026. CP01/02/04/05/07/08 locally complete with independent approval. CP03/06 live acceptance, CP09 process/container restart, and CP10 deployment/recovery remain pending. See CHECKPOINTS.md for actual evidence.
 
-The Go application serves mobile My list/Products views, a narrow browser API and ten built-in MCP tools over shared owner/scope-checked services. Optional complete Keycloak configuration enables sign-in, encrypted durable sessions and bearer authentication. No production accounts/data are seeded. History/Insights remain empty until purchase workflows are implemented. `/health/ready` remains503 while acceptance is incomplete. See [docs/DOMAIN.md](docs/DOMAIN.md) for the implemented local contract.
+The Go application serves four compact mobile views, a narrow browser API and16 built-in MCP tools over shared owner/scope-checked services. Agents maintain sourced purchase drafts, confirmation and full void/replacement corrections; History uses immutable confirmed snapshots and Insights computes recorded spending/compatible quantities. Optional complete Keycloak configuration enables sign-in, encrypted durable sessions and bearer authentication. No production accounts/data are seeded. `/health/ready` remains503 while acceptance is incomplete. See [docs/DOMAIN.md](docs/DOMAIN.md) for the implemented local contract.
 
 ## Start or resume
 
@@ -63,7 +63,7 @@ The default listener is local. The user selected `https://shopping.vvivid.dev`; 
 
 | Route | Current behavior |
 | --- | --- |
-| `/`, `/products`, `/history`, `/insights` | Authenticated list/catalog and empty purchase views; sign-in/out when identity is configured |
+| `/`, `/products`, `/history`, `/insights` | Authenticated list/catalog, confirmed purchase history and recorded-purchase charts; sign-in/out when identity is configured |
 | `/static/app.css`, `/static/app.js` | Embedded compiled CSS and small browser interaction script |
 | `/health/live` | 200 while HTTP is serving |
 | `/health/ready` | 503: live identity/domain acceptance is incomplete |
