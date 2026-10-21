@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 	"strings"
 	"time"
@@ -15,10 +16,42 @@ type purchaseView struct {
 	List        sqlite.ListView
 	Timezone    string
 	Reorderable map[string]int64
+	TotalText   string
 }
 
 func dictPurchase(purchase sqlite.Purchase, list sqlite.ListView, timezone string, reorderable map[string]int64) purchaseView {
-	return purchaseView{Purchase: new(purchase), List: list, Timezone: timezone, Reorderable: reorderable}
+	return purchaseView{
+		Purchase:    new(purchase),
+		List:        list,
+		Timezone:    timezone,
+		Reorderable: reorderable,
+		TotalText:   purchaseTotalText(purchase),
+	}
+}
+
+func purchaseTotalText(purchase sqlite.Purchase) string {
+	if purchase.Status != "confirmed" || purchase.Currency == nil || !sqlite.ValidCurrency(*purchase.Currency) || len(purchase.Lines) == 0 {
+		return "—"
+	}
+	var total int64
+	for _, line := range purchase.Lines {
+		if line.TaxTreatment != "excluded" {
+			return "—"
+		}
+		// Line totals already include allocated discounts. Only separately
+		// recorded tax is added; missing amounts cannot form a complete total.
+		for _, amount := range []*int64{line.LineTotalMinor, line.TaxMinor} {
+			if amount == nil || *amount < 0 || *amount > math.MaxInt64-total {
+				return "—"
+			}
+			total += *amount
+		}
+	}
+	text := moneyText(new(total), *purchase.Currency)
+	if *purchase.Currency == "USD" {
+		return "$" + strings.TrimPrefix(text, "USD ")
+	}
+	return text
 }
 
 func canBuyAgain(line sqlite.PurchaseLine, list sqlite.ListView, retailer string) bool {

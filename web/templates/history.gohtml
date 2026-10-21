@@ -1,8 +1,11 @@
 {{define "purchase"}}
 <details class="purchase-record" data-purchase-id="{{.Purchase.ID}}">
   <summary>
-    <strong>{{.Purchase.Retailer}}</strong>
-    <span>{{purchaseDate .Purchase.PurchasedAt .Timezone}}</span>
+    <span class="purchase-heading">
+      <strong>{{.Purchase.Retailer}}</strong>
+      <strong class="purchase-total"{{if eq .TotalText "—"}} aria-label="Total unavailable"{{end}}>{{.TotalText}}</strong>
+    </span>
+    <span class="purchase-date">{{purchaseDate .Purchase.PurchasedAt .Timezone}}</span>
     {{if ne .Purchase.Status "confirmed"}}<small>{{.Purchase.Status}}</small>{{end}}
   </summary>
   {{if .Purchase.StoreLocation}}<p class="detail-note">{{.Purchase.StoreLocation}}</p>{{end}}
