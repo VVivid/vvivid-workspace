@@ -1,5 +1,12 @@
 # Development checkpoints
 
+### October21 — History price UI deployed beta.4
+
+- Reviewed application51ed114 deployed following owner authorization; beta0.1.0-beta.4 exact amd64 image healthy. Container/process/restart tests and offline dated scan passed (zero known vulnerabilities).
+- Server-memory comparison confirmed all table rows, secrets, volume/mounts/environment values, routing and data filenames unchanged; schema7/no migration. First rollout automatically restored old image on list-order-only environment mismatch, values independently verified identical, corrected comparison and same image retry passed. No production backup or data copy.
+- Public TLS/readiness/auth-boundary and CSS checks passed. Actual owner's signed-in History refresh shows aligned prices, dates and functional receipt expand/collapse; no synthetic live writes. [Full rollout evidence](docs/validation/HISTORY-DEPLOYMENT-2026-10-21.md).
+- GitHub push to main was rejected by automatic approval review for missing explicit remote-write authorization, not retried/bypassed. Remote maincee0d4f; release/local handoff retained. Next owner use and optional explicit publication approval. Aisles/reordering, other approved worktree and CP03/06/10 follow-up unchanged.
+
 ### October21 — History price UI locally Approved
 
 History layout implementation is complete locally: right-aligned price, date below, native expansion retained; complete confirmed merchandise plus tax only, unknown `—`, known-zero `$0.00`. Builder → Translation → final checks/browser → fresh independent Review completed; exact final verdict **Approved**, no blocking findings. Offline `make assets check build` passed (52 Node tests, formatting,vet,all Go packages,both binaries); actual synthetic app browser320/390 showed aligned prices/no horizontal overflow, Enter/click expansion, preserved details/Buy again and accessible unknown text. Runtime-verified gpt-6.1-sol stages: Builder max, Translation xhigh, Review max. Evidence and agent/session identities: [History validation](docs/validation/HISTORY-TOTALS-2026-10-21.md).

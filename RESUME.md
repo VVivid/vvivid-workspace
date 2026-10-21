@@ -1,5 +1,11 @@
 # Resume AgentShoppingList
 
+## October21 — History price UI deployed
+
+Owner authorized deployment. Reviewed History commit `51ed114` is live as `0.1.0-beta.4` at https://shopping.vvivid.dev/history. Exact committed amd64 image passed container/process/restart acceptance and offline dated vulnerability scan (zero known findings). Final rollout verified all table rows, secrets, data filenames, existing volume/environment values and routing unchanged; schema7, healthy exact version/image. No production backup or data copy. Live owner's signed-in browser confirmed aligned prices and receipt expansion/collapse. [Deployment evidence](docs/validation/HISTORY-DEPLOYMENT-2026-10-21.md) includes artifact identities and the first auto-restored attempt caused by environment list-order comparison; the corrected map comparison passed with identical values.
+
+Automatic approval review rejected direct `git push origin main`, requiring explicit remote-write authorization. It was not retried or bypassed; local release/deployment records retained and remote main remainscee0d4f. Next: owner uses updated History; obtain explicit push approval if repository publication is wanted. Aisles/reordering remain preview-only, separate shared-product-details worktree preserved, CP03/06/10 beta gaps unchanged. Earlier History local-only entries below are historical; deployed application51ed114 is unaffected by later handoff-only commits.
+
 ## October21 — History price UI locally Approved
 
 History layout implementation is complete locally: right-aligned price, date below, native expansion retained; complete confirmed merchandise plus tax only, unknown `—`, known-zero `$0.00`. Builder → Translation → final checks/browser → fresh independent Review completed; exact final verdict **Approved**, no blocking findings. Offline `make assets check build` passed (52 Node tests, formatting,vet,all Go packages,both binaries); actual synthetic app browser320/390 showed aligned prices/no horizontal overflow, Enter/click expansion, preserved details/Buy again and accessible unknown text. Runtime-verified gpt-6.1-sol stages: Builder max, Translation xhigh, Review max. Evidence and agent/session identities: [History validation](docs/validation/HISTORY-TOTALS-2026-10-21.md).
