@@ -1,5 +1,39 @@
 # Development checkpoints
 
+### October21 — History price UI locally Approved
+
+History layout implementation is complete locally: right-aligned price, date below, native expansion retained; complete confirmed merchandise plus tax only, unknown `—`, known-zero `$0.00`. Builder → Translation → final checks/browser → fresh independent Review completed; exact final verdict **Approved**, no blocking findings. Offline `make assets check build` passed (52 Node tests, formatting,vet,all Go packages,both binaries); actual synthetic app browser320/390 showed aligned prices/no horizontal overflow, Enter/click expansion, preserved details/Buy again and accessible unknown text. Runtime-verified gpt-6.1-sol stages: Builder max, Translation xhigh, Review max. Evidence and agent/session identities: [History validation](docs/validation/HISTORY-TOTALS-2026-10-21.md).
+
+Uncommitted/undeployed on basecee0d4f. Temporary browser/fixture closed and viewport reset; no live data/infrastructure changes. Next commit/integrate/release when requested. Aisles and agent reordering remain preview-only; separate shared-product-details worktree and CP03/06/10 beta gaps preserved. This entry supersedes earlier in-progress History handoffs below.
+
+### October21 — History price UI Translation handoff
+
+- Status: In progress. Translation independently traced authenticated History reads, the total helper, template/styles and regressions. No correctness issue or unresolved readability blocker was discovered; no source/test/asset edit was warranted. Only this handoff, RESUME.md and [History validation](docs/validation/HISTORY-TOTALS-2026-10-21.md) changed during this stage.
+- Inspected normal trace: owner-authorized confirmed read → `dictPurchase` → recorded net merchandise plus separate tax → `$11.33` → collapsed heading/date; expansion retains immutable details. Missing merchandise or tax returns accessible `—` without a partial total or write. Existing load failures render the page-error branch.
+- Executed: `git diff --check` passed. No stage test/build/browser run. Default `go version` attempted auto-download and hit a sandbox module-cache-lock restriction; coordinator final checks will use the established cached toolchain. Runtime: coordinator-verified host `turn_context`, `/root/history_translation`, session01a15f10-5d31-76c2-957a-f34787ffb5eb, effective gpt-6.1-sol/xhigh; exact session filename recorded in validation.
+- Next: coordinator final required checks/browser validation, then fresh independent Review. Basecee0d4f/rootmain; no new commit,push,deployment,live data/infrastructure action,listener or dependency link. Existing notes, separate shared-product-details worktree and CP03/06/10 gaps preserved.
+
+### October21 — History price UI Builder handoff
+
+- Status: In progress. Owner approved implementation of the History preview only; Builder source/checks are complete, Translation/coordinator final-browser validation/fresh independent Review remain. Base `cee0d4f` on root `main`; no new commit.
+- Changed: right-aligned collapsed History amount beside retailer, date underneath, no visible Total label, accessible `—` when unavailable. Native expansion, status and expanded line/source/Buy again remain. Display-only checked sum uses each recorded after-discount merchandise amount plus separate recorded tax, only for confirmed purchases with supported currency and every amount known; no discount double-subtraction, inferred price or partial sum. Known zero displays `$0.00`; other currencies reuse current formatting.
+- Executed: full Modern Go1.26 guidance;21 total correctness +5 real authenticated-handler scenarios passed (9 route responses). Cached Go1.26.9/Node24.19.0 offline `make assets check build` passed: Tailwind4.3.0 CSS,52 existing Node regressions,formatting,vet,all ordinary Go tests (web7.782s),both binaries. Initial OIDC fixture loopback bind denial resolved by scoped local-test escalation. Diff checks passed. No Builder browser/layout/race/process/container or live receipt acceptance run.
+- Runtime: coordinator verified `/root/history_builder`, host `turn_context` session01a15f07-aa25-7a00-9d8e-f2a03af257ff, effective gpt-6.1-sol/max before edits. Evidence and reading order: [History validation](docs/validation/HISTORY-TOTALS-2026-10-21.md).
+- Side effects: local History helper/template/styles/generated CSS/tests/handoff and ignored build binaries only. No aisles/reorder tools/schema/API/MCP,commit,push,deployment,live data/infrastructure or separate shared-product-details worktree change. No persistent preview listener started. Existing notes and CP03/06/10 gaps preserved.
+- Next: fresh Translation, coordinator final checks and synthetic mobile fixture checks, fresh read-only independent Review. Do not claim local completion or deployment acceptance before those stages pass.
+
+### October21 — Aisles, shopping order and History price preview
+
+- Status: requested conversation UI preview complete; application feature not implemented. Fragment: `/Users/oudavid/.codex/visualizations/2026/10/21/01a15ee1-698e-7ce1-ace4-3a35c9fa7fd8/shopping-aisles-history.html`.
+- Sample data only: aisle metadata beneath names, unknown aisle, adjacent-aisle order with cold/frozen last, right-aligned collapsed History amounts without extra labels and `—` for unavailable total. Receipt sample sums include tax. Four existing tabs retained; no reorder controls or automatic retailer lookup.
+- Executed: visualize renderer, literal-fragment readback, Node syntax; actual in-app browser check/uncheck, details/Close/Escape, all tabs, expanded/collapsed receipts, retained checkoff across navigation and reload. Measured document clientWidth/scrollWidth320/320 and390/390; price right edges306 at320 and372 at390. Visually inspected narrow list and History. Initial Playwright navigation blocked/setContent crashed; in-app browser used successfully. No app tests/build or independent implementation review claimed for the mockup.
+- Side effects: preview fragment and these handoff additions only; original application code, local approved sharing worktree and production preserved. Temporary loopback server stopped; browser tab closed and viewport reset. Basecee0d4f; no commit or deployment. Next: UI feedback before backend/MCP/schema changes. Existing CP03/06/10 exits unchanged.
+
+### October19 — Shared product details feature locally Approved
+
+- Requested public-viewer detail modal implemented in `/Users/oudavid/.codex/worktrees/temporary-item-sharing/AgentShoppingList`, branch codex/shared-product-details/basecee0d4f. Final independent Review Approved, full checks/build and64 script regressions plus actual390px synthetic browser checks passed. See worktree validation/RESUME for exact evidence and limits.
+- New links snapshot rich selected details; legacy links retain basic facts. Uncommitted/unmerged/undeployed; existing beta.3 remains live. No production data changes or remaining test listener/dependency link. Next integration/release when requested; CP03/06/10 beta gaps unchanged.
+
 ### October 19, 2026 — Sharing committed, merged and deployed
 
 - Status: sharing slice complete and deployed as beta.3/application `b739622`; feature `43be95d`, merge `b73962278a3530259baf107c3d949cc4e9c06ca3`, origin/main verified. Independent Review Approved; full checks/build and 52 script regressions passed.

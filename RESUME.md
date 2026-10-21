@@ -1,6 +1,38 @@
 # Resume AgentShoppingList
 
+## October21 — History price UI locally Approved
+
+History layout implementation is complete locally: right-aligned price, date below, native expansion retained; complete confirmed merchandise plus tax only, unknown `—`, known-zero `$0.00`. Builder → Translation → final checks/browser → fresh independent Review completed; exact final verdict **Approved**, no blocking findings. Offline `make assets check build` passed (52 Node tests, formatting,vet,all Go packages,both binaries); actual synthetic app browser320/390 showed aligned prices/no horizontal overflow, Enter/click expansion, preserved details/Buy again and accessible unknown text. Runtime-verified gpt-6.1-sol stages: Builder max, Translation xhigh, Review max. Evidence and agent/session identities: [History validation](docs/validation/HISTORY-TOTALS-2026-10-21.md).
+
+Uncommitted/undeployed on basecee0d4f. Temporary browser/fixture closed and viewport reset; no live data/infrastructure changes. Next commit/integrate/release when requested. Aisles and agent reordering remain preview-only; separate shared-product-details worktree and CP03/06/10 beta gaps preserved. This entry supersedes earlier in-progress History handoffs below.
+
+## October 21 — History price UI Translation handoff
+
+Translation finished on root `main` at base `cee0d4f`. The helper, template/styles and focused regressions are clear; no source/test/asset edit or unresolved readability blocker was found. Independently inspected normal trace: authenticated confirmed purchase read → recorded net merchandise plus separate tax → `$11.33` heading/date; missing merchandise/tax → accessible `—` while expanded snapshots remain. Rendering writes no domain state. Only these handoffs and [History validation](docs/validation/HISTORY-TOTALS-2026-10-21.md) changed during Translation.
+
+Diff checks passed. No Translation test/build/browser run; default `go version` auto-download hit a sandbox module-cache-lock restriction, so coordinator final checks retain the established cached runtime. Coordinator verified host `turn_context` for `/root/history_translation`, session01a15f10-5d31-76c2-957a-f34787ffb5eb, effective gpt-6.1-sol/xhigh. Next: final required checks and actual mobile fixture, then fresh independent Review. Slice remains in progress; no commit,push,deployment,live data/infrastructure action,listener or dependency link. Separate approved sharing worktree and CP03/06/10 gaps are preserved.
+
+## October 21 — Approved History price UI Builder handoff
+
+The owner approved implementation of the History preview only. Root `main` at base `cee0d4f` now shows a right-aligned amount beside each collapsed retailer heading, date beneath, price only with no visible Total label, and `—` when unavailable. Native expansion, status, receipt/source details and Buy again remain. The display-only total sums recorded after-discount merchandise plus separately recorded tax only when every amount is known on a confirmed purchase. It does not infer prices or subtract discounts twice; zero is `$0.00`, USD uses `$`, other currencies retain existing formatting, and invalid/overflowing totals stay unavailable.
+
+Builder focused21 arithmetic +5 handler scenarios passed. Cached Go1.26.9/Node24.19.0 offline `make assets check build` passed (generated CSS,52 existing Node regressions,formatting,vet,all ordinary Go tests,both binaries); web7.782s. Initial fixture loopback restriction was resolved by scoped local-test escalation. No browser/race/process/container/live acceptance was executed by Builder. Runtime was coordinator-verified from host `turn_context`: Builder `/root/history_builder`, session `01a15f07-aa25-7a00-9d8e-f2a03af257ff`, effective gpt-6.1-sol/max. Detail: [History validation](docs/validation/HISTORY-TOTALS-2026-10-21.md).
+
+This local slice remains in progress for Translation, coordinator final/browser validation and fresh independent Review. No commit,push,deployment,live data/infrastructure/schema/API/MCP changes; no aisles/reordering implementation. Preexisting preview notes, separate locally approved shared-product-details worktree and CP03/06/10 gaps are preserved. Next: Translation on this frozen source, then required final validation and Review. Earlier preview-only status below is historical for History; aisles and shopping order remain preview-only.
+
+## October 21 — Aisles, shopping order and History price UI preview
+
+Requested interactive UI preview delivered at `/Users/oudavid/.codex/visualizations/2026/10/21/01a15ee1-698e-7ce1-ace4-3a35c9fa7fd8/shopping-aisles-history.html`. Sample-only My list and Products show compact aisle information, including an unknown aisle; list order groups adjacent sample aisles and leaves refrigerated/frozen items last. Collapsed History rows show right-aligned amount only, or `—` when unavailable; sample receipts expand and their line amounts plus tax match their displayed totals. Four-tab navigation, check/uncheck, product modal/Close/Escape and checkbox retention through navigation were actually exercised in the in-app browser. Renderer, fragment readback and Node syntax passed. Actual 320px and390px document widths had matching scrollWidth; History amount right edges aligned. Initial Playwright connector navigation was blocked and its setContent attempt crashed; the in-app browser completed the checks. Temporary loopback server and preview browser tab were closed.
+
+This is a conversation-only design, not application implementation or independent code review. Base `cee0d4f`; existing uncommitted handoff notes preserved. No backend/MCP/schema, live data, infrastructure, deployment or original application source changes. Next: obtain UI feedback before implementing store-specific aisles, agent `reorder_list_items`, and confirmed History totals. Agent supplies location data; automatic Walmart lookup excluded. Existing shared-product-details worktree and CP03/06/10 gaps remain unchanged.
+
 Updated October 19, 2026, America/New_York.
+
+## Latest feature: shared product details locally Approved
+
+The user requested product details from the public shared checklist. Implemented in `/Users/oudavid/.codex/worktrees/temporary-item-sharing/AgentShoppingList`, branch `codex/shared-product-details`, base `cee0d4f`. Final independent Review Approved with no blocking findings. Full checks/build and64 script regressions passed; actual390px synthetic browser checked product details/photo, Close/Escape focus, unchanged pickup and open-modal expiry clearing. Exact evidence and stage runtime metadata: `/Users/oudavid/.codex/worktrees/temporary-item-sharing/AgentShoppingList/docs/validation/SHARED-PRODUCT-DETAILS-2026-10-19.md`.
+
+New links include immutable selected product information; legacy links retain basic snapshots. This extension remains uncommitted/unmerged/undeployed; live beta.3/application b739622 is unchanged. No production data/infrastructure changes, test listeners or dependency links. Next: integrate/release when requested; preserve this worktree and root coordination notes. Existing CP03/06/10 acceptance gaps remain open. See worktree RESUME.md for full handoff.
 
 ## Current deployment: temporary item sharing released
 
