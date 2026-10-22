@@ -9,34 +9,42 @@
     {{if ne .Purchase.Status "confirmed"}}<small>{{.Purchase.Status}}</small>{{end}}
   </summary>
   {{if .Purchase.StoreLocation}}<p class="detail-note">{{.Purchase.StoreLocation}}</p>{{end}}
-  <ul class="purchase-lines" aria-label="Purchased items">
-    {{range .Purchase.Lines}}
-    <li class="purchase-line">
-      {{template "category-icon" .}}
-      <div class="purchase-line-label">
-        <strong>{{.Name}}</strong>
-        <small>{{snapshotPack .}} · {{.Quantity}} {{.QuantityUnit}} bought</small>
-        <span>{{money .LineTotalMinor (code $.Purchase.Currency)}} merchandise</span>
-        {{if .DiscountMinor}}<small>Allocated discount: {{money .DiscountMinor (code $.Purchase.Currency)}}</small>{{end}}
-        {{if .TaxMinor}}
-          <small>Tax: {{money .TaxMinor (code $.Purchase.Currency)}}</small>
-        {{else}}
-          <small>Tax unknown</small>
-        {{end}}
-        {{if and (index $.Reorderable .ID) (canBuyAgain . $.List $.Purchase.Retailer)}}
-          <button class="buy-again" type="button" data-add-product="{{.ProductID}}" data-add-product-revision="{{index $.Reorderable .ID}}" data-add-quantity="{{.Quantity}}" data-add-retailer="{{buyAgainRetailer . $.List $.Purchase.Retailer}}" aria-label="Buy {{.Name}} again">Buy again</button>
-        {{end}}
-      </div>
-    </li>
+  <ul class="receipt" aria-label="Purchased items">
+    {{range .ReceiptLines}}
+    <li><span>{{.Label}}</span><span class="receipt-amount"{{if eq .AmountText "—"}} aria-label="Amount unavailable"{{end}}>{{.AmountText}}</span></li>
     {{end}}
+    <li class="receipt-tax"><span>Tax</span><span class="receipt-amount"{{if eq .TaxText "—"}} aria-label="Tax unavailable"{{end}}>{{.TaxText}}</span></li>
   </ul>
-  <div class="purchase-source">
-    <p>{{sourceKind .Purchase.SourceKind}} · {{.Purchase.SourceReference}}</p>
-    <p>{{.Purchase.SourceEvidence}}</p>
-    {{if .Purchase.SourceURL}}<a href="{{.Purchase.SourceURL}}" target="_blank" rel="noopener noreferrer">Purchase source</a>{{end}}
-    {{if .Purchase.ReplacesID}}<p>Corrected purchase. Previous list reconciliation is retained; list changes are separate.</p>{{end}}
-    {{if .Purchase.VoidReason}}<p>Void reason: {{.Purchase.VoidReason}}</p>{{end}}
-  </div>
+  <details class="receipt-details">
+    <summary>Receipt details</summary>
+    <ul class="purchase-lines" aria-label="Purchased item details">
+      {{range .Purchase.Lines}}
+      <li class="purchase-line">
+        <div class="purchase-line-label">
+          <strong>{{.Name}}</strong>
+          <small>{{snapshotPack .}} · {{.Quantity}} {{.QuantityUnit}} bought</small>
+          <span>{{money .LineTotalMinor (code $.Purchase.Currency)}} merchandise</span>
+          {{if .DiscountMinor}}<small>Allocated discount: {{money .DiscountMinor (code $.Purchase.Currency)}}</small>{{end}}
+          {{if .TaxMinor}}
+            <small>Tax: {{money .TaxMinor (code $.Purchase.Currency)}}</small>
+          {{else}}
+            <small>Tax unknown</small>
+          {{end}}
+          {{if and (index $.Reorderable .ID) (canBuyAgain . $.List $.Purchase.Retailer)}}
+            <button class="buy-again" type="button" data-add-product="{{.ProductID}}" data-add-product-revision="{{index $.Reorderable .ID}}" data-add-quantity="{{.Quantity}}" data-add-retailer="{{buyAgainRetailer . $.List $.Purchase.Retailer}}" aria-label="Buy {{.Name}} again">Buy again</button>
+          {{end}}
+        </div>
+      </li>
+      {{end}}
+    </ul>
+    <div class="purchase-source">
+      <p>{{sourceKind .Purchase.SourceKind}} · {{.Purchase.SourceReference}}</p>
+      <p>{{.Purchase.SourceEvidence}}</p>
+      {{if .Purchase.SourceURL}}<a href="{{.Purchase.SourceURL}}" target="_blank" rel="noopener noreferrer">Purchase source</a>{{end}}
+      {{if .Purchase.ReplacesID}}<p>Corrected purchase. Previous list reconciliation is retained; list changes are separate.</p>{{end}}
+      {{if .Purchase.VoidReason}}<p>Void reason: {{.Purchase.VoidReason}}</p>{{end}}
+    </div>
+  </details>
 </details>
 {{end}}
 

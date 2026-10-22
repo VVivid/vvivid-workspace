@@ -12,21 +12,78 @@ import (
 )
 
 type purchaseView struct {
-	Purchase    *sqlite.Purchase
-	List        sqlite.ListView
-	Timezone    string
-	Reorderable map[string]int64
-	TotalText   string
+	Purchase     *sqlite.Purchase
+	List         sqlite.ListView
+	Timezone     string
+	Reorderable  map[string]int64
+	TotalText    string
+	ReceiptLines []receiptLineView
+	TaxText      string
+}
+
+type receiptLineView struct {
+	Label      string
+	AmountText string
 }
 
 func dictPurchase(purchase sqlite.Purchase, list sqlite.ListView, timezone string, reorderable map[string]int64) purchaseView {
-	return purchaseView{
-		Purchase:    new(purchase),
-		List:        list,
-		Timezone:    timezone,
-		Reorderable: reorderable,
-		TotalText:   purchaseTotalText(purchase),
+	lines := make([]receiptLineView, 0, len(purchase.Lines))
+	for _, line := range purchase.Lines {
+		lines = append(lines, receiptLineView{
+			Label:      receiptLineLabel(line),
+			AmountText: receiptMoneyText(line.LineTotalMinor, purchase.Currency),
+		})
 	}
+	return purchaseView{
+		Purchase:     new(purchase),
+		List:         list,
+		Timezone:     timezone,
+		Reorderable:  reorderable,
+		TotalText:    purchaseTotalText(purchase),
+		ReceiptLines: lines,
+		TaxText:      purchaseTaxText(purchase),
+	}
+}
+
+func receiptLineLabel(line sqlite.PurchaseLine) string {
+	if line.QuantityUnit == "pack" && line.Quantity == "1" {
+		return line.Name
+	}
+	// Preserve the stored decimal exactly; the Insights quantity formatter rounds.
+	label := line.Name + " × " + line.Quantity
+	if line.QuantityUnit != "pack" {
+		unit := line.QuantityUnit
+		if unit == "us_fl_oz" {
+			unit = "US fl oz"
+		}
+		label += " " + unit
+	}
+	return label
+}
+
+func receiptMoneyText(amount *int64, currency *string) string {
+	if amount == nil || *amount < 0 || currency == nil || !sqlite.ValidCurrency(*currency) {
+		return "—"
+	}
+	text := moneyText(amount, *currency)
+	if *currency == "USD" {
+		return "$" + strings.TrimPrefix(text, "USD ")
+	}
+	return text
+}
+
+func purchaseTaxText(purchase sqlite.Purchase) string {
+	if len(purchase.Lines) == 0 {
+		return "—"
+	}
+	var tax int64
+	for _, line := range purchase.Lines {
+		if line.TaxTreatment != "excluded" || line.TaxMinor == nil || *line.TaxMinor < 0 || *line.TaxMinor > math.MaxInt64-tax {
+			return "—"
+		}
+		tax += *line.TaxMinor
+	}
+	return receiptMoneyText(new(tax), purchase.Currency)
 }
 
 func purchaseTotalText(purchase sqlite.Purchase) string {
@@ -47,11 +104,7 @@ func purchaseTotalText(purchase sqlite.Purchase) string {
 			total += *amount
 		}
 	}
-	text := moneyText(new(total), *purchase.Currency)
-	if *purchase.Currency == "USD" {
-		return "$" + strings.TrimPrefix(text, "USD ")
-	}
-	return text
+	return receiptMoneyText(new(total), purchase.Currency)
 }
 
 func canBuyAgain(line sqlite.PurchaseLine, list sqlite.ListView, retailer string) bool {
