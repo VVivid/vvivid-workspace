@@ -1,5 +1,11 @@
 # Development checkpoints
 
+### October21 — Selected compact History layout deployed beta.5
+
+- Reviewed releasefaafb3d/version0.1.0-beta.5 is live. Exact committed amd64 image container/process/restart checks passed; dated offline scan zero known vulnerabilities. Shopping-only replacement verified healthy exact image/version and unchanged table rows/secrets/volume/environment/routing/data filenames; schema7/no migration/backup/data copy.
+- Actual owner's signed-in History passed compact rows/one Tax/no product icons, secondary details/Buy again availability, aligned prices/no overlap/no overflow at320/390. No real list/purchase mutations. [Deployment evidence](docs/validation/COMPACT-HISTORY-DEPLOYMENT-2026-10-21.md). SSHMCP closed and viewport reset; owner tab retained.
+- Local implementation slice is complete and deployed; earlier local-only entries are historical. Next owner use. Prior GitHub main publication approval gap, aisles/reordering preview, other worktree and CP03/06/10 follow-ups remain unchanged.
+
 ### October21 — Selected compact History layout locally Approved
 
 Implemented the owner's exact original preview selection: compact saved name/quantity inline left, line amount right, no product icons/pack sublines, one Tax row. Existing header/date/total retained; closed Receipt details keeps evidence, pack/discount/tax and Buy again. Unknown amounts remain `—`; exact measured units and saved names preserved. Builder → Translation → final offline assets/check/build → actual320/390 synthetic browser → independent Review finished; exact final verdict **Approved**, no blocking findings. Evidence/runtime metadata: [compact History validation](docs/validation/COMPACT-HISTORY-2026-10-21.md). Screenshot `.cache/previews/compact-history-implemented.jpg` uses synthetic app data.

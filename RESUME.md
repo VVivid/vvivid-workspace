@@ -1,5 +1,11 @@
 # Resume AgentShoppingList
 
+## October21 — Compact History layout live beta.5
+
+Owner's selected screenshot layout is implemented and live at https://shopping.vvivid.dev/history. Reviewed release `faafb3d`, version `0.1.0-beta.5`; exact committed amd64 image passed container/process/restart tests and dated offline scan (zero known findings). Shopping-only rollout preserved all table rows, secrets, data volume/environment/routing and data filenames; schema7/no migration or backups. Actual owner's signed-in History verified compact rows, one Tax row, no product icons, aligned prices/no overlap/no horizontal overflow at320/390 and retained secondary Receipt details/Buy again availability. No real shopping/purchase writes during validation. [Release and live evidence](docs/validation/COMPACT-HISTORY-DEPLOYMENT-2026-10-21.md).
+
+Next: owner uses this live layout. Earlier local-only compact History entries below are historical. GitHub main publication remains pending explicit authorization; no rejected push retry. Aisles/reordering remain preview-only, separate sharing worktree and CP03/06/10 beta acceptance gaps preserved. Later handoff-only commits do not change running applicationfaafb3d.
+
 ## October21 — Selected compact History layout locally Approved
 
 Implemented the owner's exact original preview selection: compact saved name/quantity inline left, line amount right, no product icons/pack sublines, one Tax row. Existing header/date/total retained; closed Receipt details keeps evidence, pack/discount/tax and Buy again. Unknown amounts remain `—`; exact measured units and saved names preserved. Builder → Translation → final offline assets/check/build → actual320/390 synthetic browser → independent Review finished; exact final verdict **Approved**, no blocking findings. Evidence/runtime metadata: [compact History validation](docs/validation/COMPACT-HISTORY-2026-10-21.md). Screenshot `.cache/previews/compact-history-implemented.jpg` uses synthetic app data.
