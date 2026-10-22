@@ -1,5 +1,33 @@
 # Development checkpoints
 
+### October21 — Selected compact History layout locally Approved
+
+Implemented the owner's exact original preview selection: compact saved name/quantity inline left, line amount right, no product icons/pack sublines, one Tax row. Existing header/date/total retained; closed Receipt details keeps evidence, pack/discount/tax and Buy again. Unknown amounts remain `—`; exact measured units and saved names preserved. Builder → Translation → final offline assets/check/build → actual320/390 synthetic browser → independent Review finished; exact final verdict **Approved**, no blocking findings. Evidence/runtime metadata: [compact History validation](docs/validation/COMPACT-HISTORY-2026-10-21.md). Screenshot `.cache/previews/compact-history-implemented.jpg` uses synthetic app data.
+
+Final52Node/format/vet/allGo/binaries passed. Browser verified nooverflow/alignedprices/noicons, nesteddisclosures, accessibleunknown/knownzero and actual synthetic Buy again Saved. Temporary fixture/tab closed, viewport reset. Uncommitted/undeployed on base5025980; no production/data/schema/API/MCP/Insights change. Next commit/release/deploy when requested. Existing beta.4/51ed114, prior GitHub push authorization gap, separate shared-product-details worktree and CP03/06/10 gaps preserved. Earlier in-progress compact-layout handoffs below are historical.
+
+### October21 — Compact expanded History Translation handoff
+
+- Status: In progress. Translation independently inspected handler/service/store callers, display helpers, template/styles and focused regressions; no correctness issue or unresolved readability blocker found. Source/tests/assets passed unchanged; only validation/checkpoint/resume handoffs changed.
+- Inspected traces: authorized saved receipt → exact quantity/net line rows → separate complete Tax → retained closed evidence/Buy again disclosure. Missing line amount makes that row/header unavailable while known tax remains; foreign direct purchase reads take the existing page-error branch. These are reading traces, not newly executed tests; rendering introduces no domain write.
+- Executed: `git diff --check` passed. No Translation test/build/browser/race/process/container pass or listener/dependency link. Runtime: coordinator-verified host `turn_context`, `/root/compact_history_translation`, session01a16109-617a-74b0-86b9-a6ff300c1eb8, effective gpt-6.1-sol/xhigh; exact source in [validation](docs/validation/COMPACT-HISTORY-2026-10-21.md).
+- Root main/base5025980, uncommitted/undeployed; beta.4 rollout, CP03/06/10 follow-ups and separate sharing worktree preserved. Next: coordinator final checks/actual synthetic320/390px browser, then fresh independent Review.
+
+### October21 — Compact expanded History Builder handoff
+
+- Status: In progress. Owner selected the original simple receipt and authorized implementation; Builder is complete locally, with Translation, coordinator final/browser checks and independent Review pending. Root `main`/base5025980; uncommitted/undeployed. Earlier preview notes preserved.
+- Changed: saved name/exact quantity left and recorded net amount right, no icons/pack sublines/merchandise labels in primary rows, one checked complete-tax row. Existing header/store/date/status and native expansion remain. Closed Receipt details retains pack/discount/per-line tax/source/correction/void and original Buy again rules/actions. Unknown `—`, zero `$0.00`, USD `$`, other currency formats preserved; no inferred price or repeated discount.
+- Executed: 51 helper cases,10 rendering scenarios/19 authenticated route responses plus saved-name/ownership/4 route responses passed. First fixture bind was sandbox-blocked; same focused suite passed with scoped local-test escalation. Cached Go1.26.9/Node24.19.0 offline `make assets check build` passed once after final edits: CSS,52 Node tests,formatting,vet,all Go packages (web6.634s),both binaries. Diff checks passed. No Builder browser/race/process/container/live test claim.
+- Runtime: coordinator verified host `turn_context` session01a16103-4618-73f1-9c53-47208618b949, `/root/compact_history_builder`, effective gpt-6.1-sol/max before edits. [Validation](docs/validation/COMPACT-HISTORY-2026-10-21.md) records source and reading order.
+- Side effects: local display helper/template/styles/generated CSS/tests/handoff and ignored binaries only. No commit,push,deployment,live data/infrastructure/schema/API/MCP/Insights,aisles/reordering or separate sharing worktree action. Existing beta.4 rollout and CP03/06/10 follow-ups preserved. Next: fresh Translation, final checks/actual synthetic320/390 browser, fresh independent Review.
+
+### October21 — Expanded History product-row screenshot revision
+
+- Latest correction: owner wants no product icons and a slight refinement of the first layout. Current preview `.cache/previews/history-no-icons.jpg` (source `.cache/previews/history-no-icons.html`); screenshot inspected, temporary server/tab closed and viewport reset. No application/deployment changes; earlier icon variant superseded.
+
+- Preview only: sample category icons, name/price row and pack/quantity underneath, screenshot `.cache/previews/history-product-rows.jpg`; source `.cache/previews/history-product-rows.html`. Actual browser screenshot inspected and320px clientWidth/scrollWidth320/320 verified. Renderer passed; temporary browser/server closed and viewport reset.
+- Await design feedback; no application code, live data or deployment change. Existing beta.4/51ed114 and other checkpoint states preserved; GitHub publication approval remains unanswered.
+
 ### October21 — History price UI deployed beta.4
 
 - Reviewed application51ed114 deployed following owner authorization; beta0.1.0-beta.4 exact amd64 image healthy. Container/process/restart tests and offline dated scan passed (zero known vulnerabilities).

@@ -1,5 +1,33 @@
 # Resume AgentShoppingList
 
+## October21 — Selected compact History layout locally Approved
+
+Implemented the owner's exact original preview selection: compact saved name/quantity inline left, line amount right, no product icons/pack sublines, one Tax row. Existing header/date/total retained; closed Receipt details keeps evidence, pack/discount/tax and Buy again. Unknown amounts remain `—`; exact measured units and saved names preserved. Builder → Translation → final offline assets/check/build → actual320/390 synthetic browser → independent Review finished; exact final verdict **Approved**, no blocking findings. Evidence/runtime metadata: [compact History validation](docs/validation/COMPACT-HISTORY-2026-10-21.md). Screenshot `.cache/previews/compact-history-implemented.jpg` uses synthetic app data.
+
+Final52Node/format/vet/allGo/binaries passed. Browser verified nooverflow/alignedprices/noicons, nesteddisclosures, accessibleunknown/knownzero and actual synthetic Buy again Saved. Temporary fixture/tab closed, viewport reset. Uncommitted/undeployed on base5025980; no production/data/schema/API/MCP/Insights change. Next commit/release/deploy when requested. Existing beta.4/51ed114, prior GitHub push authorization gap, separate shared-product-details worktree and CP03/06/10 gaps preserved. Earlier in-progress compact-layout handoffs below are historical.
+
+## October21 — Compact expanded History Translation handoff
+
+Translation independently traced the authenticated handler, owner-scoped reads, display helpers, both template disclosure layers, CSS and focused regressions. No correctness issue or unresolved readability blocker was found; source/tests/assets remain unchanged. Exact stored quantities and net line amounts reach the compact rows, complete separate tax reaches one Tax row, and the closed Receipt details retains the existing evidence and Buy again behavior. Missing amounts remain accessible `—`; rendering adds no domain writes.
+
+`git diff --check` passed. No Translation test/build/browser run; coordinator final checks and synthetic320/390px browser validation precede fresh independent Review. Runtime: coordinator-verified host `turn_context`, `/root/compact_history_translation`, session01a16109-617a-74b0-86b9-a6ff300c1eb8, effective gpt-6.1-sol/xhigh; exact source and inspected normal/failure traces are in [validation](docs/validation/COMPACT-HISTORY-2026-10-21.md).
+
+Root main/base5025980; in progress, uncommitted/undeployed. Only validation/checkpoint/resume records changed during Translation. No listener, dependency link, live data/infrastructure action or separate shared-product-details worktree change. Existing beta.4 and CP03/06/10 follow-ups preserved. Next: coordinator final validation, then fresh independent Review.
+
+## October21 — Compact expanded History Builder handoff
+
+Owner selected the original receipt layout and authorized implementation. Local root `main`/base `5025980` now shows saved product name and exact quantity inline left, recorded net amount right, and one Tax row. No History product icons, primary pack sublines or merchandise labels. Header/store/date/status and native expansion remain; a closed **Receipt details** disclosure retains pack/discount/per-line tax/source/correction information and the existing Buy again rules/actions. USD `$`, unknown `—`, known-zero `$0.00`; complete tax is checked independently and never double-counts discounts. Earlier screenshot feedback is resolved by this selection; preexisting notes below are preserved.
+
+Builder focused 51 helper cases, 10 rendering scenarios/19 route responses and saved-name/ownership checks/4 responses passed. Initial sandbox OIDC loopback bind failure resolved through scoped local-test escalation. Offline cached Go1.26.9/Node24.19.0 `make assets check build` passed (52 Node tests, formatting, vet, all ordinary Go packages, both binaries; web6.634s); diff check passed. No Builder browser/race/process/container/live test claimed. Coordinator verified Builder `/root/compact_history_builder`, session01a16103-4618-73f1-9c53-47208618b949, effective gpt-6.1-sol/max from host `turn_context`. [Evidence and reading order](docs/validation/COMPACT-HISTORY-2026-10-21.md).
+
+Slice remains in progress for fresh Translation, coordinator final checks/synthetic320/390px browser validation and fresh independent Review. No commit,push,deployment,live data/infrastructure/schema/API/MCP/Insights change, no aisles/reordering or separate shared-product-details worktree action. Existing beta.4 rollout and CP03/06/10 follow-ups preserved. Next: Translation on this frozen source.
+
+## October21 — Expanded History product-row preview refinement
+
+Latest owner correction: no product icons, close to the first simple layout with modest spacing/alignment improvements. Current sample screenshot `.cache/previews/history-no-icons.jpg`, source `.cache/previews/history-no-icons.html`. Screenshot inspected in the in-app browser; temporary server/tab closed and viewport reset. Still preview-only; production unchanged. This supersedes the icon-based screenshot described below.
+
+Owner asked to retry the sample expanded-History screenshot. Revised screenshot `.cache/previews/history-product-rows.jpg` uses category icons, product name and aligned price, with pack/quantity underneath; source `.cache/previews/history-product-rows.html`. Renderer and actual in-app browser inspected;320px clientWidth/scrollWidth both320. Sample data only, no application implementation, production data or deployment change; beta.4/51ed114 remains live. Temporary browser/server closed and viewport reset. Next: owner feedback on this screenshot. GitHub main push still requires the previously requested explicit authorization.
+
 ## October21 — History price UI deployed
 
 Owner authorized deployment. Reviewed History commit `51ed114` is live as `0.1.0-beta.4` at https://shopping.vvivid.dev/history. Exact committed amd64 image passed container/process/restart acceptance and offline dated vulnerability scan (zero known findings). Final rollout verified all table rows, secrets, data filenames, existing volume/environment values and routing unchanged; schema7, healthy exact version/image. No production backup or data copy. Live owner's signed-in browser confirmed aligned prices and receipt expansion/collapse. [Deployment evidence](docs/validation/HISTORY-DEPLOYMENT-2026-10-21.md) includes artifact identities and the first auto-restored attempt caused by environment list-order comparison; the corrected map comparison passed with identical values.
