@@ -1,0 +1,193 @@
+--- a/internal/gateway/authproxy.go
++++ b/internal/gateway/authproxy.go
+@@ -16,18 +16,19 @@
+ 
+ // NewAuthorizationProxy fronts only the owned Keycloak loopback listener. Its
+ // resource-indicators implementation ignores resource on refresh grants, so the
+-// guard enforces the configured resource before token exchange. Keycloak owns
+-// login, client authentication, PKCE, grants and signing. Upstream is fixed.
++// guard enforces the fixed client-to-resource bindings before token exchange.
++// Keycloak owns login, client authentication, PKCE, grants and signing.
++// Upstream is fixed.
+ func NewAuthorizationProxy(config Config) (http.Handler, error) {
+ 	config = config.WithDefaults()
+ 	if err := config.Validate(); err != nil {
+ 		return nil, err
+ 	}
+ 	issuer, _ := url.Parse(config.Issuer)
+-	return authorizationProxy(config.Resource, issuer, &url.URL{Scheme: "http", Host: "127.0.0.1:18082"}), nil
+-}
+-
+-func authorizationProxy(resource string, issuer, upstream *url.URL) http.Handler {
++	return authorizationProxy(config, issuer, &url.URL{Scheme: "http", Host: "127.0.0.1:18082"}), nil
++}
++
++func authorizationProxy(config Config, issuer, upstream *url.URL) http.Handler {
+ 	proxy := &httputil.ReverseProxy{Rewrite: func(r *httputil.ProxyRequest) {
+ 		r.SetURL(upstream)
+ 		r.Out.Host = issuer.Host
+@@ -56,7 +57,7 @@
+ 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
+ 		authorizationError(w, "temporarily_unavailable", "Authorization service is unavailable", http.StatusBadGateway)
+ 	}
+-	guard := guardResource(proxy, resource)
++	guard := guardResource(proxy, config)
+ 	slots := make(chan struct{}, 32)
+ 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		if r.Host != issuer.Host {
+@@ -80,10 +81,6 @@
+ 	w.Header().Set("Cache-Control", "no-store")
+ 	w.WriteHeader(status)
+ 	json.NewEncoder(w).Encode(map[string]string{"error": code, "error_description": description})
+-}
+-
+-func isMCPClient(clientID string) bool {
+-	return clientID == "sshmcp-codex" || clientID == "sshmcp-chatgpt"
+ }
+ 
+ // Keycloak normalizes alternate route spellings. Reject them before endpoint
+@@ -100,7 +97,21 @@
+ 	return u.Path != oidcEndpointPrefix+"auth/" && u.Path != oidcEndpointPrefix+"token/"
+ }
+ 
+-func guardResource(next http.Handler, resource string) http.Handler {
++func guardResource(next http.Handler, config Config) http.Handler {
++	// Empty shopping bindings reserve those client IDs but disable them until
++	// their canonical origin is configured. Keycloak still owns registration.
++	resourcesByClient := map[string]string{
++		"sshmcp-codex":     config.Resource,
++		"sshmcp-chatgpt":   config.Resource,
++		"shopping-web":     "",
++		"shopping-codex":   "",
++		"shopping-chatgpt": "",
++	}
++	if config.ShoppingOrigin != "" {
++		resourcesByClient["shopping-web"] = config.ShoppingOrigin + "/api/v1"
++		resourcesByClient["shopping-codex"] = config.ShoppingOrigin + "/mcp"
++		resourcesByClient["shopping-chatgpt"] = config.ShoppingOrigin + "/mcp"
++	}
+ 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		if !isCanonicalAuthorizationPath(r.URL) {
+ 			authorizationError(w, "invalid_request", "Authorization paths must use their canonical spelling", http.StatusBadRequest)
+@@ -156,7 +167,20 @@
+ 		}
+ 		clientID := values.Get("client_id")
+ 		if tokenRequest {
+-			if basicClient, _, ok := r.BasicAuth(); ok {
++			if len(r.Header.Values("Authorization")) > 1 {
++				authorizationError(w, "invalid_request", "Authorization credentials must be supplied at most once", http.StatusBadRequest)
++				return
++			}
++			authorization := r.Header.Get("Authorization")
++			if len(authorization) >= 5 && strings.EqualFold(authorization[:5], "Basic") {
++				basicClient, _, ok := r.BasicAuth()
++				// Keycloak applies RFC6749 form decoding to the Basic client name.
++				// Compare that identity without rewriting the forwarded credentials.
++				basicClient, decodeErr := url.QueryUnescape(basicClient)
++				if !ok || decodeErr != nil {
++					authorizationError(w, "invalid_request", "Malformed Basic client identity", http.StatusBadRequest)
++					return
++				}
+ 				if clientID != "" && clientID != basicClient {
+ 					authorizationError(w, "invalid_request", "Conflicting client identities", http.StatusBadRequest)
+ 					return
+@@ -164,10 +188,22 @@
+ 				clientID = basicClient
+ 			}
+ 		}
+-		resources := values["resource"]
+-		requireResource := isMCPClient(clientID) && (authorizationRequest || values.Get("grant_type") == "authorization_code")
+-		if len(resources) == 1 && resources[0] != resource || requireResource && len(resources) != 1 {
+-			authorizationError(w, "invalid_target", "The requested resource is not the configured MCP endpoint", http.StatusBadRequest)
++		permittedResource, hasClientBinding := resourcesByClient[clientID]
++		if hasClientBinding && permittedResource == "" {
++			authorizationError(w, "invalid_client", "Shopping authorization is not configured", http.StatusBadRequest)
++			return
++		}
++		if !hasClientBinding {
++			// Preserve existing realm clients (for example account-console). They
++			// may omit resource or request the legacy SSH target, never shopping.
++			permittedResource = config.Resource
++		}
++		requestedResources := values["resource"]
++		resourceRequired := hasClientBinding && (authorizationRequest || values.Get("grant_type") == "authorization_code")
++		wrongResource := len(requestedResources) == 1 && requestedResources[0] != permittedResource
++		missingResource := resourceRequired && len(requestedResources) != 1
++		if wrongResource || missingResource {
++			authorizationError(w, "invalid_target", "The requested resource is not permitted for this client", http.StatusBadRequest)
+ 			return
+ 		}
+ 		// An omitted refresh resource keeps the grant's original audience. Using
+--- a/internal/gateway/config.go
++++ b/internal/gateway/config.go
+@@ -15,6 +15,7 @@
+ 	AuthorizationListen string    `json:"authorization_listen,omitempty"`
+ 	Issuer              string    `json:"issuer"`
+ 	Resource            string    `json:"resource"`
++	ShoppingOrigin      string    `json:"shopping_origin,omitempty"`
+ 	HostAlias           string    `json:"host_alias,omitempty"`
+ 	SSH                 SSHConfig `json:"ssh"`
+ }
+@@ -53,6 +54,15 @@
+ 	} else if resource.Scheme != "https" || issuer.Scheme != "https" {
+ 		return errors.New("public OAuth resource and issuer must both use HTTPS")
+ 	}
++	if c.ShoppingOrigin != "" {
++		shopping, err := canonicalURL(c.ShoppingOrigin, "")
++		if err != nil || shopping.Scheme != "https" || issuer.Scheme != "https" {
++			return errors.New("shopping_origin requires a canonical HTTPS origin without a trailing slash and an HTTPS issuer")
++		}
++		if strings.EqualFold(shopping.Hostname(), resource.Hostname()) || strings.EqualFold(shopping.Hostname(), issuer.Hostname()) {
++			return errors.New("shopping_origin must use a separate hostname from the SSH resource and issuer")
++		}
++	}
+ 	if len(c.HostAlias) > 64 {
+ 		return errors.New("host_alias must be 1..64 ASCII letters, digits, hyphens or underscores")
+ 	}
+--- a/internal/gateway/authproxy_test.go
++++ b/internal/gateway/authproxy_test.go
+@@ -33,7 +33,7 @@
+ 					t.Error("form was not preserved")
+ 				}
+ 				w.WriteHeader(204)
+-			}), resource)
++			}), Config{Resource: resource})
+ 			body := "client_id=sshmcp-codex&grant_type=" + tc.grant + "&" + tc.values
+ 			request := httptest.NewRequest("POST", "http://127.0.0.1:18081/realms/sshmcp/protocol/openid-connect/token", strings.NewReader(body))
+ 			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+@@ -72,7 +72,7 @@
+ 	}))
+ 	defer upstream.Close()
+ 	target, _ := url.Parse(upstream.URL)
+-	handler := authorizationProxy(resource, issuer, target)
++	handler := authorizationProxy(Config{Resource: resource}, issuer, target)
+ 	for _, host := range []string{issuer.Host, "attacker.invalid", "127.0.0.1:18081"} {
+ 		body := url.Values{"grant_type": {"authorization_code"}, "resource": {resource}}
+ 		request := httptest.NewRequest("POST", issuer.String()+"/protocol/openid-connect/token", strings.NewReader(body.Encode()))
+@@ -132,7 +132,7 @@
+ 				handler := guardResource(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+ 					called = true
+ 					w.WriteHeader(204)
+-				}), resource)
++				}), Config{Resource: resource})
+ 				request := httptest.NewRequest(tc.method, "https://ssh-mcp.vvivid.dev/realms/sshmcp/protocol/openid-connect/"+tc.suffix, strings.NewReader(tc.body))
+ 				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+ 				if tc.basic {
+@@ -160,7 +160,7 @@
+ 	}))
+ 	defer upstream.Close()
+ 	target, _ := url.Parse(upstream.URL)
+-	handler := authorizationProxy(resource, issuer, target)
++	handler := authorizationProxy(Config{Resource: resource}, issuer, target)
+ 
+ 	for _, endpoint := range []string{"auth", "token"} {
+ 		method := http.MethodPost
+@@ -251,7 +251,7 @@
+ 				handler := guardResource(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+ 					called = true
+ 					w.WriteHeader(http.StatusNoContent)
+-				}), resource)
++				}), Config{Resource: resource})
+ 				request := httptest.NewRequest(method, "https://ssh-mcp.vvivid.dev/realms/sshmcp/protocol/openid-connect/"+endpoint+"?client_id=sshmcp-codex&resource=https://invalid.example/mcp", nil)
+ 				response := httptest.NewRecorder()
+ 				handler.ServeHTTP(response, request)

@@ -1,0 +1,77 @@
+[
+  {
+    "clientId": "shopping-web",
+    "protocol": "openid-connect",
+    "publicClient": false,
+    "standardFlowEnabled": true,
+    "implicitFlowEnabled": false,
+    "directAccessGrantsEnabled": false,
+    "serviceAccountsEnabled": false,
+    "fullScopeAllowed": false,
+    "redirectUris": ["https://shopping.vvivid.dev/auth/callback"],
+    "webOrigins": ["https://shopping.vvivid.dev"],
+    "attributes": {
+      "pkce.code.challenge.method": "S256",
+      "post.logout.redirect.uris": "https://shopping.vvivid.dev/",
+      "access.token.lifespan": "300"
+    },
+    "protocolMappers": [
+      {
+        "name": "shopping-subject",
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-sub-mapper",
+        "config": {"access.token.claim": "true", "introspection.token.claim": "true"}
+      }
+    ],
+    "defaultClientScopes": ["shopping-api-audience", "shopping:read", "shopping:lists:write"],
+    "optionalClientScopes": []
+  },
+  {
+    "clientId": "shopping-codex",
+    "protocol": "openid-connect",
+    "publicClient": true,
+    "standardFlowEnabled": true,
+    "implicitFlowEnabled": false,
+    "directAccessGrantsEnabled": false,
+    "serviceAccountsEnabled": false,
+    "fullScopeAllowed": false,
+    "consentRequired": true,
+    "redirectUris": ["REPLACE_WITH_VERIFIED_CODEX_CALLBACK"],
+    "webOrigins": [],
+    "attributes": {"pkce.code.challenge.method": "S256", "access.token.lifespan": "300"},
+    "protocolMappers": [
+      {
+        "name": "shopping-subject",
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-sub-mapper",
+        "config": {"access.token.claim": "true", "introspection.token.claim": "true"}
+      }
+    ],
+    "defaultClientScopes": ["shopping-mcp-audience"],
+    "optionalClientScopes": ["shopping:read", "shopping:products:write", "shopping:lists:write", "shopping:purchases:write", "shopping:preferences:write"]
+  },
+  {
+    "clientId": "shopping-chatgpt",
+    "protocol": "openid-connect",
+    "publicClient": false,
+    "standardFlowEnabled": true,
+    "implicitFlowEnabled": false,
+    "directAccessGrantsEnabled": false,
+    "serviceAccountsEnabled": false,
+    "fullScopeAllowed": false,
+    "consentRequired": true,
+    "redirectUris": ["REPLACE_WITH_VERIFIED_CHATGPT_CALLBACK"],
+    "webOrigins": [],
+    "attributes": {"pkce.code.challenge.method": "S256", "access.token.lifespan": "300"},
+    "protocolMappers": [
+      {
+        "name": "shopping-subject",
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-sub-mapper",
+        "config": {"access.token.claim": "true", "introspection.token.claim": "true"}
+      }
+    ],
+    "defaultClientScopes": ["shopping-mcp-audience"],
+    "optionalClientScopes": ["shopping:read", "shopping:products:write", "shopping:lists:write", "shopping:purchases:write", "shopping:preferences:write"]
+  }
+]

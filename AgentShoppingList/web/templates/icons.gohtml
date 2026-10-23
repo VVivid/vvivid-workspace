@@ -1,0 +1,8 @@
+{{define "category-icon"}}<span class="category-icon category-{{.Category}}" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+{{if eq .Category "produce"}}<path d="M12 8c-5-4-10 0-9 5 1 5 4 8 7 7l2-1 2 1c3 1 6-2 7-7 1-5-4-9-9-5Z"/><path d="M12 8c-1-4 1-6 4-6 0 3-1 5-4 6Z"/>
+{{else if eq .Category "drinks"}}<path d="M7 5h10l-1 16H8L7 5Z"/><path d="M6 5h12M13 5l2-4h3M8 10h8"/>
+{{else if eq .Category "meat"}}<path d="M13 4c6-3 10 3 7 7-3 4-5 7-9 5l-5 5-3-3 5-5c-2-4 1-7 5-9Z"/><path d="m4 16 4 4M15 6c3-1 4 1 2 3"/>
+{{else if eq .Category "pantry"}}<path d="M4 10c-4-3 1-9 5-6 2-2 4-2 6 0 4-3 9 3 5 6v10H4V10Z"/><path d="M8 10v5M12 9v6M16 10v5"/>
+{{else if eq .Category "dairy"}}<path d="M8 2h8l3 6v13H5V8l3-6Z"/><path d="m8 2 3 6-6 0M11 8h8M11 8v13"/>
+{{else}}<path d="m3 7 9-4 9 4-9 4-9-4ZM3 7v10l9 4 9-4V7M12 11v10"/>
+{{end}}</svg></span>{{end}}
