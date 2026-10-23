@@ -1,0 +1,9 @@
+.PHONY: build test check
+build:
+	mkdir -p bin
+	go build -trimpath -o bin/google-health ./cmd/google-health
+test:
+	go test ./...
+check:
+	go vet ./...
+	go test -race ./...

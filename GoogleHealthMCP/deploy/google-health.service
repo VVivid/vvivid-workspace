@@ -1,0 +1,15 @@
+[Unit]
+Description=Import Google Health into persistent SQLite
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=admin
+Group=admin
+WorkingDirectory=/home/admin/infrastructure/google-health
+UMask=0077
+ExecStart=/usr/bin/bash /home/admin/infrastructure/google-health/deploy/run-daily.sh
+TimeoutStartSec=11h
+Nice=10

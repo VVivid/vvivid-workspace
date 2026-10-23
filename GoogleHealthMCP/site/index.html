@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Personal Health Collector is a private, read-only archive of Google Health and Fitbit activity, sleep, and health measurements.">
+  <title>Personal Health Collector</title>
+  <link rel="canonical" href="https://health.vvivid.dev/">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <a class="site-name" href="/">Personal Health Collector</a>
+    <nav aria-label="Main navigation">
+      <a href="/" aria-current="page">Overview</a>
+      <a href="/privacy/">Privacy</a>
+      <a href="/terms/">Use &amp; contact</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="intro" aria-labelledby="page-title">
+      <p class="eyebrow">A personal archive by Ou David</p>
+      <h1 id="page-title">Your health history,<br>kept for you.</h1>
+      <p class="lead">Personal Health Collector copies the owner's Google Health and Fitbit history into a private archive for personal reference and analysis.</p>
+      <p>It uses read-only Google permissions for activity and fitness, sleep, and health metrics and measurements. The collector cannot change the owner's Google Health records.</p>
+      <a class="button" href="/privacy/">Read the privacy policy <span aria-hidden="true">&rarr;</span></a>
+    </section>
+
+    <section class="details" aria-labelledby="collected-data">
+      <h2 id="collected-data">What goes into the archive</h2>
+      <dl class="data-types">
+        <div>
+          <dt>Activity &amp; fitness</dt>
+          <dd>Available steps, distance, exercise sessions, energy use, and related fitness records.</dd>
+        </div>
+        <div>
+          <dt>Sleep</dt>
+          <dd>Available sleep sessions, stages, summaries, and their metadata.</dd>
+        </div>
+        <div>
+          <dt>Health measurements</dt>
+          <dd>Available heart rate, oxygen, respiration, temperature, body measurements, and related metrics.</dd>
+        </div>
+      </dl>
+      <p class="muted">Availability depends on the connected account, device, and Google API. The collector does not request GPS, nutrition, profile, ECG, or write permissions.</p>
+    </section>
+
+    <section class="archive-note" aria-labelledby="private-archive">
+      <p class="eyebrow">How it is used</p>
+      <h2 id="private-archive">A private archive. A public explanation.</h2>
+      <p>The collector runs on the owner's server and stores records in a private SQLite database. This website only explains the project; it provides no health-data endpoint or public access to the archive.</p>
+      <p>A planned private query interface will let the owner explicitly authorize an agent to read and analyze archived data. That interface is not part of this website. An authorized agent or its provider may receive query results when the owner directs it.</p>
+      <p>Health data is used for the owner's archive and explicitly authorized analysis. It is not sold, used for advertising, or used to train general AI models.</p>
+      <p>Personal Health Collector follows the Limited Use requirements of the <a href="https://developers.google.com/health/policies/health-api-developer-user-data-policy">Google Health API Developer and User Data Policy</a>.</p>
+    </section>
+
+    <section class="details" aria-labelledby="owner-control">
+      <h2 id="owner-control">The owner stays in control</h2>
+      <p>The owner chooses whether to connect Google and can revoke access in their Google Account. Revocation stops future API access; it does not erase previously collected records. The archive is retained until the owner deletes it.</p>
+      <p>See the <a href="/privacy/">privacy policy</a> for storage, sharing, retention, and deletion details, or <a href="/terms/">use &amp; contact</a> for project support.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Personal Health Collector &middot; Operated by Ou David</p>
+    <p><a href="/privacy/">Privacy</a> <a href="/terms/">Use &amp; contact</a> <a href="https://vvivid.dev/">vvivid.dev</a></p>
+  </footer>
+</body>
+</html>

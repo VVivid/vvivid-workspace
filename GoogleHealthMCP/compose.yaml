@@ -1,0 +1,41 @@
+name: google-health
+services:
+  importer:
+    build: .
+    image: google-health:local
+    entrypoint: [/usr/local/bin/google-health-container]
+    command: [sync]
+    user: "${GOOGLE_HEALTH_UID:-1000}:${GOOGLE_HEALTH_GID:-1000}"
+    # Linux host networking permits the short-lived OAuth callback to bind
+    # 127.0.0.1 for SSH forwarding. No listener exists during normal syncs.
+    network_mode: host
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 768m
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=16m
+    environment:
+      GOOGLE_HEALTH_DB: /data/health.sqlite3
+      GOOGLE_HEALTH_CLIENT_FILE: /run/secrets/client.json
+      GOOGLE_HEALTH_TOKEN_DIR: /tokens
+      SQLITE_TMPDIR: /data/scratch
+      GOOGLE_HEALTH_OAUTH_PUBLISHING_STATUS: "${GOOGLE_HEALTH_OAUTH_PUBLISHING_STATUS:-testing}"
+    volumes:
+      - type: bind
+        source: /home/admin/data/google-health
+        target: /data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /home/admin/infrastructure/google-health/secrets/client.json
+        target: /run/secrets/client.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /home/admin/infrastructure/google-health/secrets/tokens
+        target: /tokens
+        bind:
+          create_host_path: false

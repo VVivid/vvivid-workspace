@@ -1,0 +1,35 @@
+name: SSHMCP
+
+on:
+  pull_request:
+    paths:
+      - 'SSHMCP/**'
+  push:
+    branches: [main]
+    paths:
+      - 'SSHMCP/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sshmcp-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: SSHMCP/go.mod
+          cache-dependency-path: SSHMCP/go.sum
+      - name: Check and build
+        working-directory: SSHMCP
+        run: |
+          make runner-check
+          python3 -m unittest discover -s tests
+          go build ./...

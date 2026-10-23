@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="How Personal Health Collector accesses, uses, stores, shares, and deletes Google Health data.">
+  <title>Privacy | Personal Health Collector</title>
+  <link rel="canonical" href="https://health.vvivid.dev/privacy/">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <a class="site-name" href="/">Personal Health Collector</a>
+    <nav aria-label="Main navigation">
+      <a href="/">Overview</a>
+      <a href="/privacy/" aria-current="page">Privacy</a>
+      <a href="/terms/">Use &amp; contact</a>
+    </nav>
+  </header>
+
+  <main id="main" class="document">
+    <header class="document-intro">
+      <p class="eyebrow">Personal Health Collector</p>
+      <h1>Privacy policy</h1>
+      <p class="lead">This project is operated by Ou David for the owner's personal health archive.</p>
+      <p class="muted">Last updated: October 19, 2026</p>
+    </header>
+
+    <section aria-labelledby="access">
+      <h2 id="access">Data access and collection</h2>
+      <p>After the owner grants Google OAuth consent, the collector reads available Google Health and Fitbit records in three categories: activity and fitness, sleep, and health metrics and measurements.</p>
+      <p>These can include steps, distance, exercise, energy use, sleep sessions and stages, heart rate and variability, oxygen, respiration, temperature, weight, body fat, height, and blood glucose. Available records depend on the account, device, and API permissions.</p>
+      <p>The collector stores original returned records with their dates, source information when available, and import coverage metadata. It also stores the Google Health account identifier to keep the archive tied to the authorized owner, and OAuth credentials needed for ongoing access.</p>
+      <p>All requested health permissions are read-only. GPS, nutrition, profile, ECG, and write permissions are not requested.</p>
+    </section>
+
+    <section aria-labelledby="use">
+      <h2 id="use">Purpose and Limited Use</h2>
+      <p>Data is used to maintain the owner's personal archive and support analysis that the owner explicitly authorizes. It is not sold, used for advertising, or used to train general AI models.</p>
+      <p>Personal Health Collector follows the Limited Use requirements of the <a href="https://developers.google.com/health/policies/health-api-developer-user-data-policy">Google Health API Developer and User Data Policy</a>. Use and sharing are limited to the disclosed archive and owner-authorized analysis features.</p>
+    </section>
+
+    <section aria-labelledby="storage">
+      <h2 id="storage">Storage and access</h2>
+      <p>Records are stored in a private SQLite database on the owner's self-hosted server. OAuth credentials are stored separately in restricted files. The collector's database and credential files are not mounted into this website's server.</p>
+      <p>This public website serves information pages only. It has no health-data endpoint, account sign-in, or way for visitors to view the archive.</p>
+    </section>
+
+    <section aria-labelledby="sharing">
+      <h2 id="sharing">Sharing and authorized agents</h2>
+      <p>Google provides the health data through its API. The collector retains that data on the owner's server.</p>
+      <p>A private agent query interface is planned separately from this website. When the owner explicitly directs a connected agent to query the archive, the agent and its service provider may receive the selected query results to perform that requested analysis. The owner chooses that agent or provider at the time of use; this website does not send health data to an agent.</p>
+      <p>Access by another person requires the owner's explicit authorization for the specific data, except where access is necessary for security or required by law. No health data is shared for advertising, sale, or general AI model training.</p>
+    </section>
+
+    <section aria-labelledby="retention">
+      <h2 id="retention">Retention, revocation, and deletion</h2>
+      <p>Archived health data is kept indefinitely until the owner deletes it. There is no automatic retention deadline.</p>
+      <p>The owner can stop future access by removing the app's authorization in <a href="https://myaccount.google.com/connections">Google Account connections</a>. Revocation does not delete records already archived on the owner's server.</p>
+      <p>To delete collected data, the owner must stop collection and remove the local archive and any retained backups. To remove connection credentials, the owner must also delete the collector's stored OAuth tokens. Deleting this local archive does not delete the original records held by Google or Fitbit.</p>
+      <p>For help with access or deletion, contact Ou David through the developer support email shown on the Google consent screen, or visit <a href="https://vvivid.dev/">vvivid.dev</a>.</p>
+    </section>
+
+    <section aria-labelledby="website">
+      <h2 id="website">Website requests</h2>
+      <p>These pages do not set application cookies, use analytics, load third-party fonts or scripts, or collect information through forms.</p>
+      <p>Cloudflare and the hosting infrastructure process ordinary request metadata, such as an IP address, requested URL, browser information, and request time, to deliver and protect the website. That metadata may be recorded in service or access logs. Do not include health information or credentials in a website URL.</p>
+    </section>
+
+    <section aria-labelledby="changes">
+      <h2 id="changes">Changes and contact</h2>
+      <p>This page will be updated when the project's data practices change. The date above identifies this version.</p>
+      <p>Operator: Ou David. Use the developer support email on the Google consent screen for privacy questions, or visit <a href="https://vvivid.dev/">vvivid.dev</a>.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Personal Health Collector &middot; Operated by Ou David</p>
+    <p><a href="/">Overview</a> <a href="/terms/">Use &amp; contact</a> <a href="https://vvivid.dev/">vvivid.dev</a></p>
+  </footer>
+</body>
+</html>

@@ -1,10 +1,10 @@
 .PHONY: check test build xtrace-check xtrace-test xtrace-build
 
-check: xtrace-check
+check: xtrace-check sshmcp-check google-health-check shopping-check
 
-test: xtrace-test
+test: xtrace-test sshmcp-test google-health-test shopping-test
 
-build: xtrace-build
+build: xtrace-build sshmcp-build google-health-build shopping-build
 
 xtrace-check:
 	$(MAKE) -C examples/xtrace-example check
@@ -14,3 +14,35 @@ xtrace-test:
 
 xtrace-build:
 	$(MAKE) -C examples/xtrace-example build
+
+.PHONY: sshmcp-check sshmcp-test sshmcp-build google-health-check google-health-test google-health-build shopping-check shopping-test shopping-build
+
+sshmcp-check:
+	$(MAKE) -C SSHMCP runner-check
+	cd SSHMCP && python3 -m unittest discover -s tests
+
+sshmcp-test:
+	cd SSHMCP && go test -race ./...
+	cd SSHMCP && python3 -m unittest discover -s tests
+
+sshmcp-build:
+	cd SSHMCP && go build ./...
+
+google-health-check:
+	$(MAKE) -C GoogleHealthMCP check
+
+google-health-test:
+	$(MAKE) -C GoogleHealthMCP test
+
+google-health-build:
+	$(MAKE) -C GoogleHealthMCP build
+
+shopping-check:
+	$(MAKE) -C AgentShoppingList check
+
+shopping-test:
+	cd AgentShoppingList && node --test web/tests/*.test.mjs
+	cd AgentShoppingList && go test ./...
+
+shopping-build:
+	$(MAKE) -C AgentShoppingList build

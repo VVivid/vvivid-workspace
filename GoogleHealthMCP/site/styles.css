@@ -1,0 +1,242 @@
+:root {
+  color-scheme: light;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+  color: #20332c;
+  background: #fafbf7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: #225c46;
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  color: #113725;
+}
+
+a:focus-visible {
+  outline: 3px solid #a55f0a;
+  outline-offset: 5px;
+  border-radius: 2px;
+}
+
+.site-header,
+main,
+.site-footer {
+  width: min(100% - 3rem, 64rem);
+  margin-inline: auto;
+}
+
+.site-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem 2rem;
+  padding-block: 1.75rem;
+  border-bottom: 1px solid #dce3da;
+}
+
+.site-name {
+  font-weight: 700;
+  text-decoration: none;
+  color: #20332c;
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.5rem;
+  font-size: 0.9rem;
+}
+
+nav a {
+  text-decoration: none;
+}
+
+nav a[aria-current="page"] {
+  text-decoration: underline;
+  font-weight: 650;
+}
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -5rem;
+  padding: 0.6rem 1rem;
+  color: #fff;
+  background: #20332c;
+  z-index: 1;
+}
+
+.skip-link:focus {
+  top: 0.75rem;
+}
+
+.intro {
+  max-width: 46rem;
+  padding-block: clamp(3rem, 8vw, 6rem) 3.5rem;
+}
+
+.eyebrow {
+  margin: 0 0 1rem;
+  color: #4b6557;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p,
+dl {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 1.6rem;
+  font-size: clamp(2.25rem, 6vw, 4.5rem);
+  line-height: 1.1;
+  font-weight: 650;
+  letter-spacing: -0.045em;
+}
+
+h2 {
+  margin-bottom: 1rem;
+  font-size: clamp(1.35rem, 3vw, 1.7rem);
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+p {
+  margin-bottom: 1.1rem;
+}
+
+.lead {
+  font-size: clamp(1.15rem, 2.5vw, 1.35rem);
+  line-height: 1.6;
+}
+
+.muted {
+  color: #526158;
+  font-size: 0.9rem;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-top: 1rem;
+  padding: 0.8rem 1.1rem;
+  border-radius: 0.35rem;
+  color: #fff;
+  background: #225c46;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.button:hover {
+  color: #fff;
+  background: #113725;
+}
+
+.details {
+  padding-block: 2.5rem;
+  border-top: 1px solid #dce3da;
+}
+
+.data-types {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2rem;
+  margin-block: 1.75rem;
+}
+
+dt {
+  margin-bottom: 0.5rem;
+  font-weight: 650;
+}
+
+dd {
+  margin: 0;
+  color: #526158;
+}
+
+.archive-note {
+  padding: clamp(1.5rem, 4vw, 3rem);
+  margin-block: 1rem 3rem;
+  border-left: 3px solid #58826b;
+  background: #edf2e9;
+}
+
+.archive-note > :last-child {
+  margin-bottom: 0;
+}
+
+.document {
+  max-width: 46rem;
+  padding-block: 3.5rem;
+}
+
+.document-intro {
+  padding-bottom: 1.5rem;
+  margin-bottom: 2.5rem;
+  border-bottom: 1px solid #dce3da;
+}
+
+.document h1 {
+  font-size: clamp(2.1rem, 6vw, 3.5rem);
+}
+
+.document section {
+  margin-bottom: 2.5rem;
+}
+
+.site-footer {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  padding-block: 2rem;
+  border-top: 1px solid #dce3da;
+  color: #526158;
+  font-size: 0.8rem;
+}
+
+.site-footer p {
+  margin-bottom: 0;
+}
+
+.site-footer a {
+  display: inline-block;
+  margin-right: 1rem;
+}
+
+@media (max-width: 42rem) {
+  .site-header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding-block: 1.25rem;
+  }
+
+  .data-types {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .site-header,
+  main,
+  .site-footer {
+    width: calc(100% - 2rem);
+  }
+}
