@@ -1,0 +1,6 @@
+interface:
+  display_name: "Modern Go Guidelines"
+  short_description: "Apply version-aware Go guidance before Go edits"
+  default_prompt: "Use $use-modern-go to inspect version-specific guidelines before changing Go code."
+policy:
+  allow_implicit_invocation: true
