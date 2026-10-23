@@ -1,0 +1,343 @@
+package gateway
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"reflect"
+	"strings"
+	"sync/atomic"
+	"testing"
+)
+
+const (
+	compatSSHResource    = "https://ssh-mcp.vvivid.dev/mcp"
+	compatShoppingOrigin = "https://shopping.vvivid.dev"
+)
+
+func compatibilityConfig() Config {
+	return Config{
+		Listen:         "127.0.0.1:18080",
+		Issuer:         "https://ssh-mcp.vvivid.dev/realms/sshmcp",
+		Resource:       compatSSHResource,
+		ShoppingOrigin: compatShoppingOrigin,
+	}
+}
+
+func TestClientResourceBindings(t *testing.T) {
+	for client, target := range map[string]string{
+		"sshmcp-codex":     compatSSHResource,
+		"sshmcp-chatgpt":   compatSSHResource,
+		"shopping-web":     compatShoppingOrigin + "/api/v1",
+		"shopping-codex":   compatShoppingOrigin + "/mcp",
+		"shopping-chatgpt": compatShoppingOrigin + "/mcp",
+	} {
+		for _, flow := range []struct {
+			name, method, endpoint, grant string
+			basic, bodyClient             bool
+		}{
+			{"auth-get", "GET", "auth", "", false, true},
+			{"auth-post", "POST", "auth", "", false, true},
+			{"code", "POST", "token", "authorization_code", false, true},
+			{"code-basic", "POST", "token", "authorization_code", true, false},
+			{"code-basic-and-body", "POST", "token", "authorization_code", true, true},
+			{"refresh", "POST", "token", "refresh_token", false, true},
+			{"refresh-basic", "POST", "token", "refresh_token", true, false},
+		} {
+			for _, resource := range []struct {
+				name   string
+				values []string
+			}{
+				{"intended", []string{target}},
+				{"omitted", nil},
+				{"ssh", []string{compatSSHResource}},
+				{"api", []string{compatShoppingOrigin + "/api/v1"}},
+				{"mcp", []string{compatShoppingOrigin + "/mcp"}},
+				{"empty", []string{""}},
+				{"unknown", []string{"https://unknown.invalid/mcp"}},
+				{"duplicate", []string{target, target}},
+				{"multiple", []string{target, compatSSHResource}},
+				{"encoded-path", []string{strings.ReplaceAll(strings.ReplaceAll(target, "/mcp", "/%6dcp"), "/api/v1", "/%61pi/v1")}},
+				{"trailing-slash", []string{target + "/"}},
+				{"query", []string{target + "?audience=other"}},
+			} {
+				t.Run(client+"/"+flow.name+"/"+resource.name, func(t *testing.T) {
+					values := url.Values{"resource": resource.values}
+					if flow.bodyClient {
+						values.Set("client_id", client)
+					}
+					if flow.grant != "" {
+						values.Set("grant_type", flow.grant)
+					}
+					endpoint := compatibilityConfig().Issuer + "/protocol/openid-connect/" + flow.endpoint
+					body := values.Encode()
+					if flow.method == "GET" {
+						endpoint += "?" + body
+						body = ""
+					}
+					request := httptest.NewRequest(flow.method, endpoint, strings.NewReader(body))
+					request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+					if flow.basic {
+						request.SetBasicAuth(client, "fixture-secret")
+					}
+					calls := 0
+					handler := guardResource(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+						calls++
+						w.WriteHeader(http.StatusNoContent)
+					}), compatibilityConfig())
+					response := httptest.NewRecorder()
+					handler.ServeHTTP(response, request)
+					allowed := len(resource.values) == 1 && resource.values[0] == target || len(resource.values) == 0 && flow.grant == "refresh_token"
+					want, wantCalls := http.StatusBadRequest, 0
+					if allowed {
+						want, wantCalls = http.StatusNoContent, 1
+					}
+					if response.Code != want || calls != wantCalls {
+						t.Fatalf("status=%d calls=%d want=%d/%d: %s", response.Code, calls, want, wantCalls, response.Body.String())
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestResourceClientCompatibilityBoundary(t *testing.T) {
+	// Unknown realm clients keep the pre-patch behavior. Keycloak still checks
+	// registration, credentials and grant ownership; none can select shopping.
+	for _, client := range []string{"account-console", "unknown-client", "", "shopping%2Dcodex"} {
+		for _, endpoint := range []string{"auth", "token"} {
+			for _, resource := range []string{"", compatSSHResource, compatShoppingOrigin + "/api/v1", compatShoppingOrigin + "/mcp"} {
+				t.Run(client+"/"+endpoint+"/"+resource, func(t *testing.T) {
+					values := url.Values{"client_id": {client}, "grant_type": {"refresh_token"}}
+					if resource != "" {
+						values.Set("resource", resource)
+					}
+					request := httptest.NewRequest("POST", compatibilityConfig().Issuer+"/protocol/openid-connect/"+endpoint, strings.NewReader(values.Encode()))
+					request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+					calls := 0
+					handler := guardResource(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+						calls++
+						w.WriteHeader(http.StatusNoContent)
+					}), compatibilityConfig())
+					response := httptest.NewRecorder()
+					handler.ServeHTTP(response, request)
+					allowed := resource == "" || resource == compatSSHResource
+					if (response.Code == 204) != allowed || (calls == 1) != allowed {
+						t.Fatalf("status=%d calls=%d allowed=%v", response.Code, calls, allowed)
+					}
+				})
+			}
+		}
+	}
+	config := compatibilityConfig()
+	config.ShoppingOrigin = ""
+	for _, client := range []string{"shopping-web", "shopping-codex", "shopping-chatgpt"} {
+		for _, grant := range []string{"authorization_code", "refresh_token"} {
+			for _, resource := range []string{"", compatSSHResource, compatShoppingOrigin + "/mcp"} {
+				request := httptest.NewRequest("POST", config.Issuer+"/protocol/openid-connect/token", strings.NewReader(url.Values{"client_id": {client}, "grant_type": {grant}, "resource": {resource}}.Encode()))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				handler := guardResource(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+					t.Fatal("disabled shopping reached upstream")
+				}), config)
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, request)
+				if response.Code != 400 {
+					t.Fatalf("disabled shopping status=%d", response.Code)
+				}
+			}
+		}
+	}
+}
+
+func TestShoppingRejectsAmbiguousParameters(t *testing.T) {
+	resource := url.QueryEscape(compatShoppingOrigin + "/mcp")
+	for _, tc := range []struct {
+		name, suffix, body, basic string
+	}{
+		{"client-conflict", "token", "client_id=sshmcp-chatgpt&grant_type=authorization_code&resource=" + resource, "shopping-chatgpt"},
+		{"shopping-client-conflict", "token", "client_id=shopping-web&grant_type=refresh_token&resource=" + resource, "shopping-chatgpt"},
+		{"duplicate-client", "token", "client_id=shopping-codex&client_id=shopping-codex&grant_type=authorization_code&resource=" + resource, ""},
+		{"duplicate-grant", "token", "client_id=shopping-codex&grant_type=refresh_token&grant_type=authorization_code&resource=" + resource, ""},
+		{"encoded-duplicate-resource", "token", "client_id=shopping-codex&grant_type=refresh_token&resource=" + resource + "&res%6furce=" + resource, ""},
+		{"query-resource", "token?resource=" + resource, "client_id=shopping-codex&grant_type=refresh_token&resource=" + resource, ""},
+		{"query-client", "token?client_id=shopping-codex", "client_id=shopping-codex&grant_type=refresh_token&resource=" + resource, ""},
+		{"query-grant", "token?grant_type=refresh_token", "client_id=shopping-codex&grant_type=refresh_token&resource=" + resource, ""},
+		{"auth-query-body", "auth?client_id=shopping-codex&resource=" + resource, "client_id=shopping-codex&resource=" + resource, ""},
+		{"malformed", "token", "client_id=shopping-codex&resource=%xx", ""},
+		{"oversized", "token", "client_id=shopping-codex&grant_type=refresh_token&resource=" + resource + "&padding=" + strings.Repeat("a", 64<<10), ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := httptest.NewRequest("POST", compatibilityConfig().Issuer+"/protocol/openid-connect/"+tc.suffix, strings.NewReader(tc.body))
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			if tc.basic != "" {
+				request.SetBasicAuth(tc.basic, "fixture-secret")
+			}
+			response := httptest.NewRecorder()
+			guardResource(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				t.Fatal("ambiguous request reached upstream")
+			}), compatibilityConfig()).ServeHTTP(response, request)
+			var failure struct{ Error string }
+			if response.Code != 400 || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error != "invalid_request" {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestBasicClientIdentityMatchesKeycloakDecoding(t *testing.T) {
+	for _, tc := range []struct {
+		name, basic, bodyClient, resource string
+		want                              int
+	}{
+		{"shopping-encoded", "shopping%2Dcodex", "", compatShoppingOrigin + "/mcp", 204},
+		{"shopping-encoded-body-match", "shopping%2Dchatgpt", "shopping-chatgpt", compatShoppingOrigin + "/mcp", 204},
+		{"shopping-encoded-ssh-denied", "shopping%2Dcodex", "", compatSSHResource, 400},
+		{"shopping-web-encoded-mcp-denied", "shopping%2Dweb", "", compatShoppingOrigin + "/mcp", 400},
+		{"encoded-client-conflict", "shopping%2Dchatgpt", "sshmcp-chatgpt", compatSSHResource, 400},
+		{"body-not-decoded-twice", "shopping%2Dchatgpt", "shopping%2Dchatgpt", compatShoppingOrigin + "/mcp", 400},
+		{"double-encoded-shopping-denied", "shopping%252Dcodex", "", compatShoppingOrigin + "/mcp", 400},
+		{"double-encoded-remains-unknown", "shopping%252Dcodex", "", compatSSHResource, 204},
+		{"ssh-encoded", "sshmcp%2Dchatgpt", "sshmcp-chatgpt", compatSSHResource, 204},
+		{"ssh-encoded-shopping-denied", "sshmcp%2Dchatgpt", "", compatShoppingOrigin + "/mcp", 400},
+		{"malformed-escape", "shopping%xxcodex", "", compatSSHResource, 400},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			values := url.Values{"grant_type": {"refresh_token"}, "resource": {tc.resource}}
+			if tc.bodyClient != "" {
+				values.Set("client_id", tc.bodyClient)
+			}
+			request := httptest.NewRequest("POST", compatibilityConfig().Issuer+"/protocol/openid-connect/token", strings.NewReader(values.Encode()))
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			request.SetBasicAuth(tc.basic, "fixture%2Bsecret")
+			originalHeader := request.Header.Get("Authorization")
+			calls := 0
+			handler := guardResource(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if r.Header.Get("Authorization") != originalHeader {
+					t.Error("Basic header was rewritten")
+				}
+				w.WriteHeader(204)
+			}), compatibilityConfig())
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != tc.want || (calls == 1) != (tc.want == 204) {
+				t.Fatalf("status=%d calls=%d want=%d: %s", response.Code, calls, tc.want, response.Body.String())
+			}
+		})
+	}
+	for _, headers := range [][]string{{"Basic invalid!"}, {"BasicXc2hvcHBpbmctY29kZXg6Zml4dHVyZQ=="}, {"Basic c2hvcHBpbmctY29kZXg6Zml4dHVyZQ==", "Basic c3NobWNwLWNvZGV4OmZpeHR1cmU="}} {
+		request := httptest.NewRequest("POST", compatibilityConfig().Issuer+"/protocol/openid-connect/token", strings.NewReader("grant_type=refresh_token&resource="+url.QueryEscape(compatSSHResource)))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		request.Header["Authorization"] = headers
+		response := httptest.NewRecorder()
+		guardResource(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			t.Fatal("ambiguous Basic reached upstream")
+		}), compatibilityConfig()).ServeHTTP(response, request)
+		if response.Code != 400 {
+			t.Fatalf("malformed Basic status=%d", response.Code)
+		}
+	}
+}
+
+func TestShoppingProxyPreservesKeycloakDecisionsAndGrant(t *testing.T) {
+	config := compatibilityConfig()
+	issuer, _ := url.Parse(config.Issuer)
+	for _, tc := range []struct {
+		name, endpoint, client, resource, grant string
+		status                                  int
+	}{
+		{"auth", "auth", "shopping-codex", compatShoppingOrigin + "/mcp", "", 302},
+		{"web-code", "token", "shopping-web", compatShoppingOrigin + "/api/v1", "authorization_code", 400},
+		{"mcp-code", "token", "shopping-chatgpt", compatShoppingOrigin + "/mcp", "authorization_code", 400},
+		{"refresh", "token", "shopping-chatgpt", compatShoppingOrigin + "/mcp", "refresh_token", 401},
+		{"refresh-omitted", "token", "shopping-chatgpt", "", "refresh_token", 401},
+		{"ssh-refresh", "token", "sshmcp-chatgpt", compatSSHResource, "refresh_token", 401},
+		{"unsupported-grant", "token", "shopping-codex", compatShoppingOrigin + "/mcp", "client_credentials", 400},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			values := url.Values{
+				"scope":                 {"openid shopping:read"},
+				"code":                  {"fixture-code"},
+				"code_verifier":         {"fixture-verifier"},
+				"code_challenge":        {"fixture-challenge"},
+				"code_challenge_method": {"S256"},
+				"redirect_uri":          {compatShoppingOrigin + "/auth/callback"},
+				"state":                 {"fixture-state"},
+				"nonce":                 {"fixture-nonce"},
+				"refresh_token":         {"fixture-refresh"},
+			}
+			if strings.HasPrefix(tc.client, "sshmcp-") {
+				values.Set("scope", "sshmcp:admin")
+			}
+			if tc.resource != "" {
+				values.Set("resource", tc.resource)
+			}
+			if tc.grant != "" {
+				values.Set("grant_type", tc.grant)
+			} else {
+				values.Set("client_id", tc.client)
+			}
+			var calls atomic.Int64
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				if err := r.ParseForm(); err != nil {
+					t.Error(err)
+				}
+				if !reflect.DeepEqual(r.PostForm, values) {
+					t.Errorf("grant changed: got=%v want=%v", r.PostForm, values)
+				}
+				if tc.grant != "" {
+					client, secret, ok := r.BasicAuth()
+					if !ok || client != tc.client || secret != "fixture-secret" {
+						t.Error("client authentication changed")
+					}
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Location", config.Issuer+"/login-actions/authenticate")
+				w.WriteHeader(tc.status)
+				io.WriteString(w, `{"error":"fixture_keycloak_decision"}`)
+			}))
+			defer upstream.Close()
+			target, _ := url.Parse(upstream.URL)
+			handler := authorizationProxy(config, issuer, target)
+			request := httptest.NewRequest("POST", config.Issuer+"/protocol/openid-connect/"+tc.endpoint, strings.NewReader(values.Encode()))
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			if tc.grant != "" {
+				request.SetBasicAuth(tc.client, "fixture-secret")
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != tc.status || calls.Load() != 1 || response.Body.String() != `{"error":"fixture_keycloak_decision"}` || response.Header().Get("Location") != config.Issuer+"/login-actions/authenticate" {
+				t.Fatalf("upstream decision changed: status=%d calls=%d body=%s", response.Code, calls.Load(), response.Body.String())
+			}
+		})
+	}
+}
+
+func TestShoppingOriginConfiguration(t *testing.T) {
+	config := compatibilityConfig()
+	if err := config.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, origin := range []string{
+		"http://shopping.vvivid.dev", "https://shopping.vvivid.dev/", "https://shopping.vvivid.dev/mcp", "https://shopping.vvivid.dev?", "https://shopping.vvivid.dev#", "https://shopping.vvivid.dev?x=y", "https://user@shopping.vvivid.dev", "https://shopping.vvivid.dev/%2f", "https://shopping.vvivid.dev:", "https://ssh-mcp.vvivid.dev", "https://SSH-MCP.vvivid.dev:443",
+	} {
+		t.Run(origin, func(t *testing.T) {
+			invalid := config
+			invalid.ShoppingOrigin = origin
+			if err := invalid.Validate(); err == nil {
+				t.Fatalf("ambiguous or overlapping origin accepted: %s", origin)
+			}
+		})
+	}
+	config.ShoppingOrigin = ""
+	if err := config.Validate(); err != nil {
+		t.Fatalf("legacy config rejected: %v", err)
+	}
+	lab := Config{Listen: "127.0.0.1:18080", Resource: "http://127.0.0.1:18080/mcp", Issuer: "http://127.0.0.1:18081/realms/sshmcp", ShoppingOrigin: compatShoppingOrigin}
+	if err := lab.Validate(); err == nil {
+		t.Fatal("shopping accepted an HTTP issuer")
+	}
+}

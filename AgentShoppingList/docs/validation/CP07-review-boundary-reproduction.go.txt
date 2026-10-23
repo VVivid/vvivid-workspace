@@ -1,0 +1,48 @@
+package web_test
+
+import (
+    "encoding/json"
+    "fmt"
+    "testing"
+    "strings"
+
+    "agentshoppinglist/internal/shopping"
+    "agentshoppinglist/internal/store/sqlite"
+    "agentshoppinglist/internal/testfixture"
+)
+
+func TestReviewFiftyLinkedLineReplacement(t *testing.T) {
+    _, service, principal, product, list := setup(t)
+    operations := make([]sqlite.ItemOperation, 0, 49)
+    for i := range 49 {
+        variant := testfixture.Polar()
+        variant.Name = fmt.Sprintf("%03d ", i) + strings.Repeat("n", 296)
+        variant.Brand = strings.Repeat("b", 150)
+        variant.Flavor = strings.Repeat("f", 150)
+        saved, err := service.SaveProduct(t.Context(), principal, shopping.SaveProductInput{WriteMeta: meta(fmt.Sprintf("review-product-%d", i)), Product: variant})
+        if err != nil { t.Fatal(err) }
+        operations = append(operations, sqlite.ItemOperation{Kind: "add", ProductID: saved.Record.ID, Quantity: new("1"), Merge: "increment"})
+    }
+    added, err := service.UpdateItems(t.Context(), principal, shopping.UpdateItemsInput{WriteMeta: meta("review-items"), ListID: list.List.ID, ExpectedRevision: list.List.Revision, Operations: operations})
+    if err != nil { t.Fatal(err) }
+    list = added.Record
+    originalDraft := purchaseDraft(product.ID, "review-50-lines")
+    line := originalDraft.Lines[0]
+    originalDraft.Lines = make([]sqlite.PurchaseLineDraft, len(list.Items))
+    for i, item := range list.Items {
+        originalDraft.Lines[i] = line
+        originalDraft.Lines[i].ProductID = item.ProductID
+        originalDraft.Lines[i].ListLink = &sqlite.PurchaseListLink{ListID: list.List.ID, ItemID: item.ID, ExpectedListRevision: list.List.Revision, ExpectedItemRevision: item.Revision}
+    }
+    original := saveAndConfirm(t, service, principal, "review-original", originalDraft)
+    b, _ := json.Marshal(original)
+    t.Logf("original confirmed: %d lines, %d reconciliations, %d JSON bytes", len(original.Lines), len(original.Reconciliations), len(b))
+    replacement := originalDraft
+    replacement.ReplacesID = new(original.ID)
+    for i := range replacement.Lines { replacement.Lines[i].ListLink = nil }
+    saved, err := service.SavePurchase(t.Context(), principal, shopping.SavePurchaseInput{WriteMeta: meta("review-replacement-save"), Purchase: replacement})
+    if err != nil { t.Fatal(err) }
+    input := shopping.ConfirmPurchaseInput{WriteMeta: meta("review-replacement-confirm"), PurchaseID: saved.Record.ID, ExpectedRevision: saved.Record.Revision, ExpectedReplacedRevision: original.Revision}
+    _, err = service.ConfirmPurchase(t.Context(), principal, input)
+    if err != nil { t.Fatalf("supported replacement confirmation failed: %v", err) }
+}
