@@ -1,0 +1,19 @@
+http:
+  routers:
+    cat:
+      entryPoints: [web]
+      rule: Path(`/cat.svg`)
+      middlewares: [xtrace]
+      service: replicas
+  middlewares:
+    xtrace:
+      plugin:
+        xtrace:
+          collectorURL: http://collector:8080/reports
+  services:
+    replicas:
+      loadBalancer:
+        # Equal servers use Traefik's default weighted round-robin strategy.
+        servers:
+          - url: http://replica-a:8080
+          - url: http://replica-b:8080

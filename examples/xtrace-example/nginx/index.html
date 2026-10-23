@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>X-Trace stale cat demo</title>
+<style>body{font:18px system-ui;max-width:760px;margin:40px auto;padding:0 20px;color:#263238}img{width:100%;margin-top:20px}button{font:inherit;padding:10px 18px}code{font-size:14px;overflow-wrap:anywhere}</style>
+<h1>The same cat, two cached versions</h1>
+<p>Nginx → Traefik round robin → replica A (fresh) or B (stale).</p>
+<button id="load">Request a cat</button>
+<p id="status">Each click creates a new TaskID. Compare the timestamp printed in the image.</p>
+<p id="trace"></p>
+<img id="cat" alt="Cat with its image timestamp" hidden>
+<script>
+const button = document.querySelector('#load');
+const status = document.querySelector('#status');
+const trace = document.querySelector('#trace');
+const cat = document.querySelector('#cat');
+let imageURL;
+button.onclick = async () => {
+  button.disabled = true;
+  trace.replaceChildren();
+  try {
+    const response = await fetch('/cat.svg', {cache: 'no-store'});
+    const taskID = response.headers.get('X-XTrace-TaskID');
+    const worktreeURL = response.headers.get('X-Worktree-URL');
+    if (taskID) {
+      const code = document.createElement('code');
+      code.textContent = taskID;
+      const link = document.createElement('a');
+      link.href = worktreeURL;
+      link.textContent = 'Open worktree';
+      link.target = '_blank';
+      link.rel = 'noopener';
+      trace.append('TaskID ', code, ' · ', link);
+    }
+    if (!response.ok) throw new Error(`Image request returned HTTP ${response.status}`);
+    const nextURL = URL.createObjectURL(await response.blob());
+    if (imageURL) URL.revokeObjectURL(imageURL);
+    imageURL = nextURL;
+    cat.src = imageURL;
+    cat.hidden = false;
+    status.textContent = `Replica ${response.headers.get('X-Replica')} · cache hit ${response.headers.get('X-Cache-Hit')} · image timestamp ${response.headers.get('X-Image-Timestamp')}`;
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+};
+</script>
+</html>

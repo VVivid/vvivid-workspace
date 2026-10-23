@@ -1,0 +1,6 @@
+displayName: X-Trace demo
+type: middleware
+import: github.com/xtrace-example/traceplugin
+summary: Emit a causal report and advance operation metadata before load balancing.
+testData:
+  collectorURL: http://collector:8080/reports

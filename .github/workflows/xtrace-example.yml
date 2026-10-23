@@ -1,0 +1,32 @@
+name: XTrace example
+
+on:
+  pull_request:
+    paths:
+      - 'examples/xtrace-example/**'
+  push:
+    branches: [main]
+    paths:
+      - 'examples/xtrace-example/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: xtrace-example-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    name: XTrace tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: examples/xtrace-example/go.mod
+          cache-dependency-path: examples/xtrace-example/go.sum
+      - name: Check XTrace example
+        run: make -C examples/xtrace-example check

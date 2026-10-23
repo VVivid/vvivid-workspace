@@ -1,0 +1,56 @@
+services:
+  nginx:
+    image: openresty/openresty:1.27.1.2-0-alpine
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+      - ./nginx/trace.lua:/etc/nginx/trace.lua:ro
+      - ./nginx/index.html:/usr/local/openresty/nginx/html/index.html:ro
+    depends_on:
+      - traefik
+      - collector
+
+  traefik:
+    image: traefik:v3.6.2
+    command:
+      - --entrypoints.web.address=:80
+      - --providers.file.filename=/etc/traefik/dynamic.yaml
+      - --experimental.localplugins.xtrace.modulename=github.com/xtrace-example/traceplugin
+    volumes:
+      - ./traefik/dynamic.yaml:/etc/traefik/dynamic.yaml:ro
+      - ./traefik-plugin:/plugins-local/src/github.com/xtrace-example/traceplugin:ro
+    depends_on:
+      - replica-a
+      - replica-b
+
+  replica-a:
+    build: .
+    command: [replica]
+    environment:
+      REPLICA: A
+      IMAGE_AGE: 0s
+    depends_on:
+      - collector
+
+  replica-b:
+    build: .
+    command: [replica]
+    environment:
+      REPLICA: B
+      IMAGE_AGE: 24h
+    depends_on:
+      - collector
+
+  collector:
+    build: .
+    command: [collector]
+    ports:
+      - "127.0.0.1:8081:8080"
+    environment:
+      DB_PATH: /data/reports.db
+    volumes:
+      - reports:/data
+
+volumes:
+  reports:

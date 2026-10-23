@@ -1,0 +1,16 @@
+.DS_Store
+
+# Local secrets; commit example configuration explicitly.
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Python and JavaScript local dependencies.
+.venv/
+__pycache__/
+node_modules/
+
+# Default Go build output for the XTrace demo.
+/examples/xtrace-example/xtrace-example
+/examples/xtrace-example/bin/
