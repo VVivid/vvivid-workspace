@@ -1,0 +1,6 @@
+interface:
+  display_name: "Build -> Translate -> Review"
+  short_description: "Build readable code with three independent agent stages"
+  default_prompt: "Use $build-translate-review to implement my coding goal with independent readability and correctness reviews."
+policy:
+  allow_implicit_invocation: true
