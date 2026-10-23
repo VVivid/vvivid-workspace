@@ -1,5 +1,9 @@
 # Development checkpoints
 
+## October 23 — Monorepo migration
+
+Development moved to `vvivid-workspace/AgentShoppingList`. Original history through `ff47c9b` is preserved, including the four local commits after the last standalone publication. The separate shared-product-details worktree is retained. This source migration does not deploy an application, change data, or complete outstanding beta acceptance. Migration validation is recorded in the workspace migration report.
+
 ### October21 — Selected compact History layout deployed beta.5
 
 - Reviewed releasefaafb3d/version0.1.0-beta.5 is live. Exact committed amd64 image container/process/restart checks passed; dated offline scan zero known vulnerabilities. Shopping-only replacement verified healthy exact image/version and unchanged table rows/secrets/volume/environment/routing/data filenames; schema7/no migration/backup/data copy.

@@ -6,18 +6,23 @@ My personal workspace for open-source projects, examples, experiments, and my we
 
 | Project | Purpose | Run instructions |
 | --- | --- | --- |
+| `SSHMCP` | Authenticated MCP gateway and persistent SSH execution runner | [SSHMCP README](SSHMCP/README.md) |
+| `GoogleHealthMCP` | Google Health / Fitbit importer backed by SQLite | [Google Health README](GoogleHealthMCP/README.md) |
+| `AgentShoppingList` | Agent-managed mobile shopping app with built-in MCP | [Shopping README](AgentShoppingList/README.md) |
 | `examples/xtrace-example` | A runnable distributed tracing demonstration | [XTrace README](examples/xtrace-example/README.md#run) |
 
 Each project owns its dependencies, build configuration, and tests. The root Makefile delegates to project Makefiles, so projects can use different languages and tools without sharing a dependency manager. Git is managed at this repository's root.
 
 ## Build and check
 
+Run `make sshmcp-check`, `make google-health-check`, or `make shopping-check` for an application. `make check` and `make build` cover all projects. Each project remains independently runnable; Docker builds use its directory as the build context.
+
 For XTrace, install Make, Go 1.26 or newer, a C compiler for SQLite and the race detector, and Docker with the Compose plugin. Run from the repository root:
 
 ```sh
-make check        # Vet, race tests, builds, and Compose configuration validation
-make test         # Race tests for both Go modules
-make build        # Build the application and Traefik plugin
+make check        # Project checks, including XTrace Compose validation
+make test         # Tests for all projects
+make build        # Build all applications and the XTrace demo
 ```
 
 The application binary is written to `examples/xtrace-example/bin/xtrace-demo`, which Git ignores. Checks stop on the first failure and do not start the Compose stack.
@@ -28,7 +33,7 @@ Use `make xtrace-check`, `make xtrace-test`, or `make xtrace-build` to select XT
 
 The [XTrace workflow](.github/workflows/xtrace-example.yml) runs automatically only for pull requests that change `examples/xtrace-example/**` and for matching pushes to `main`. It runs `make -C examples/xtrace-example check` directly, independently of the root Makefile. Changes confined to root files or workflow configuration do not trigger it; it can still be started manually.
 
-Future projects can have their own workflows with their own path filters. A change confined to another project does not trigger the XTrace workflow.
+SSHMCP, GoogleHealthMCP, and AgentShoppingList each have a workflow filtered to their own directory. A change confined to another project does not trigger the XTrace workflow.
 
 If merge rules are added later, account for path-filtered workflows being skipped on unrelated pull requests before making their checks required globally.
 
@@ -74,3 +79,9 @@ For versions starting at `1.0.0`, increment the major version for breaking chang
 Use a new version for subsequent releases; keep published tags unchanged. GitHub Releases can use these same tags with project-specific release notes.
 
 Publishable libraries may need additional language-specific version metadata. The XTrace demo currently runs locally and does not need a published Go module path.
+
+## Repository migration
+
+SSHMCP and AgentShoppingList were imported with their original commit histories. GoogleHealthMCP was imported from its local source directory, which had no Git history. Existing standalone releases remain in their archived repositories. New releases use directory-prefixed tags such as `SSHMCP/v1.0.1` and `AgentShoppingList/v0.1.0-beta.6`.
+
+Development continues here. Use this repository for new issues and pull requests. Runtime credentials, databases, generated binaries, and local lab state are excluded. Moving source does not deploy or restart any service.

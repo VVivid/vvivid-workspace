@@ -1,0 +1,44 @@
+name: google-health-info
+services:
+  site:
+    image: nginxinc/nginx-unprivileged:stable-alpine@sha256:e2a8fca8aa356d66159aaf8a877a9c126773635adf210503eefaaeaffeed6ad7
+    platform: linux/amd64
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 64m
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=16m,mode=1777
+    volumes:
+      # Compose resolves this relative to this file's deploy/ directory.
+      - type: bind
+        source: ../site
+        target: /usr/share/nginx/html
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./site.conf
+        target: /etc/nginx/conf.d/default.conf
+        read_only: true
+        bind:
+          create_host_path: false
+    expose:
+      - "8080"
+    networks:
+      - proxy
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: proxy
+      traefik.http.routers.google-health-info.rule: Host(`health.vvivid.dev`)
+      traefik.http.routers.google-health-info.entrypoints: immich-public-websecure
+      traefik.http.routers.google-health-info.tls: "true"
+      traefik.http.routers.google-health-info.tls.certresolver: letsencrypt
+      traefik.http.routers.google-health-info.service: google-health-info
+      traefik.http.services.google-health-info.loadbalancer.server.port: "8080"
+networks:
+  proxy:
+    external: true
+    name: proxy

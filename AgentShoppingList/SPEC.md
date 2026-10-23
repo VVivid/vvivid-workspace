@@ -292,7 +292,7 @@ Connection loss must never display an unsaved checkbox as synced. V1 may require
 
 # Development checkpoints and resume
 
-The canonical project is /Users/oudavid/works/opensource/AgentShoppingList. Local SPEC.md, REQUIREMENTS.md, ARCHITECTURE.md, CHECKPOINTS.md, and RESUME.md are the development handoff. The Page is a reference mirror; update it deliberately when project requirements change.
+The canonical project is /Users/oudavid/works/opensource/vvivid-workspace/AgentShoppingList. Local SPEC.md, REQUIREMENTS.md, ARCHITECTURE.md, CHECKPOINTS.md, and RESUME.md are the development handoff. The Page is a reference mirror; update it deliberately when project requirements change.
 
 CP00–CP02, CP04/CP05, CP07/CP08 and CP09 are locally complete. Local identity, all 16 MCP tools and the prior release slice completed independent Review. Actual Keycloak/phone/client acceptance and CP10 deployment remain incomplete. The no-backup correction is a new local slice; its Translation, final validation and fresh Review must complete before replacement images are built. CHECKPOINTS.md records authoritative evidence; docs/DOMAIN.md describes current contracts.
 

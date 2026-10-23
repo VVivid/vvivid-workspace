@@ -39,11 +39,11 @@ The local project documents are canonical for development. Reference Page: https
 
 ## Local development
 
-Use Go **1.26.9** and Node.js **24** with npm. The repository is [VVivid/AgentShoppingList](https://github.com/VVivid/AgentShoppingList). The Go module retains the local name `agentshoppinglist`; no module-path migration is required to build it. Exact dependency selections and the migration plan are in [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
+Use Go **1.26.9** and Node.js **24** with npm. The repository is [vvivid-workspace/AgentShoppingList](https://github.com/VVivid/vvivid-workspace/tree/main/AgentShoppingList). The Go module retains the local name `agentshoppinglist`; no module-path migration is required to build it. Exact dependency selections and the migration plan are in [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
 ```sh
-git clone git@github.com:VVivid/AgentShoppingList.git
-cd AgentShoppingList
+git clone git@github.com:VVivid/vvivid-workspace.git
+cd vvivid-workspace/AgentShoppingList
 npm ci --ignore-scripts
 make assets
 make check

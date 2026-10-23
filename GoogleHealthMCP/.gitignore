@@ -1,0 +1,9 @@
+/bin/
+/data/
+/secrets/
+*.sqlite3*
+*.db*
+*.lock
+client*.json
+token*.json
+.env

@@ -1,0 +1,11 @@
+[Unit]
+Description=Collect Google Health daily at noon New York time
+
+[Timer]
+OnCalendar=*-*-* 12:00:00 America/New_York
+Persistent=true
+AccuracySec=1min
+Unit=google-health.service
+
+[Install]
+WantedBy=timers.target
