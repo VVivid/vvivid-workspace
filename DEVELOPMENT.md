@@ -2,6 +2,12 @@
 
 My personal workspace for open-source projects, examples, experiments, and my website.
 
+## Agent development method
+
+Start with [AGENTS.md](AGENTS.md), the [project map](docs/PROJECT-MAP.md), and the [shared workflow](docs/DEVELOPMENT-WORKFLOW.md). Coding uses the [repository-local skill](.agents/skills/build-translate-review/SKILL.md). Agree checkpoints first; keep task records in ignored project-local `.development/<task>/` directories and delete them after completion and final handoff. Project instructions may add local rules.
+
+Before Go edits, use [Modern Go Guidelines](.agents/skills/use-modern-go/SKILL.md) from the repository. Both development skills are stored under root `.agents/skills/` and do not depend on a personal plugin installation. See [Codex Cloud prerequisites](docs/CLOUD-DEVELOPMENT.md) for toolchains, first-use downloads, and capability verification.
+
 ## Projects
 
 | Project | Purpose | Run instructions |
@@ -53,28 +59,28 @@ For versions starting at `1.0.0`, increment the major version for breaking chang
 
 ## Releasing a project
 
-1. Run the project's documented checks and review the changes.
-2. Commit the files for that project from the repository root. For XTrace:
+1. Follow the [branch and worktree procedure](docs/DEVELOPMENT-WORKFLOW.md#branches-and-worktrees). New editing tasks use one dedicated branch/worktree based on verified current `origin/main`. Branch names use `<type>/<area>/<task>`, for example `feature/xtrace/stale-replica-demo`. Read-only investigation may use the current checkout.
+2. Complete agreed checkpoints and the project's validation. When instructed to create a PR, commit only intended task files. **Never push anything to a remote without the user's explicit permission for that push.** A PR creation request does not imply push permission. Prepare locally, obtain authorization covering the remote and branch, then push normally and open the PR against `main`. For example, from the repository root within the task worktree:
 
    ```sh
-   git add examples/xtrace-example
-   git commit -m "feat(xtrace-example): add distributed tracing demo"
+   git add -- examples/xtrace-example
+   git diff --cached
+   git commit -m "feat(xtrace): add distributed tracing demo"
+   # Run only with explicit permission to push this branch to origin:
+   git push -u origin feature/xtrace/stale-replica-demo
    ```
 
-   On the initial repository commit, also stage this root README, Makefile, `.gitignore`, and `.github` workflow configuration.
-
-3. Confirm `git status` is clean and the commit contains everything intended for the release. Create the annotated tag:
-
-   ```sh
-   git tag -a examples/xtrace-example/v0.1.0 -m "XTrace example v0.1.0"
-   ```
-
-4. Fetch and reconcile any existing GitHub history before pushing. Then publish the branch and the specific tag:
+   Inspect the staged diff before committing; temporary `.development/` records and unrelated changes must be excluded. The example assumes this is the verified task branch. Include any required shared-file changes explicitly.
+3. The user controls merging. After the PR is merged, identify the exact merged commit and verify it contains the intended project changes. Release publication and deployment remain separate actions requiring their corresponding instruction.
+4. For an explicitly requested release, create the project-prefixed annotated tag at that verified merged commit. Obtain explicit permission covering the tag push before publishing it; release preparation alone does not authorize pushing. Substitute the actual verified commit for `MERGED_SHA`:
 
    ```sh
-   git push -u origin main
+   git tag -a examples/xtrace-example/v0.1.0 MERGED_SHA -m "XTrace example v0.1.0"
+   # Run only with explicit permission to push this tag to origin:
    git push origin examples/xtrace-example/v0.1.0
    ```
+
+Never publish task changes by pushing directly to `main`. Branch naming and review rules are documented policy; they do not establish that server-side branch protection is configured.
 
 Use a new version for subsequent releases; keep published tags unchanged. GitHub Releases can use these same tags with project-specific release notes.
 

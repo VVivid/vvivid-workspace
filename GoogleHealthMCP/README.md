@@ -2,7 +2,9 @@
 
 A personal Go importer for detailed Google Health / Fitbit history. V1 provides four commands: `authorize`, `backfill`, `sync`, and `status`. It writes a persistent SQLite database and emits newline-delimited operational JSON. The future SQL interface through the existing SSHMCP is described in [ARCHITECTURE.md](ARCHITECTURE.md); it is not implemented here.
 
-Read [CHECKPOINTS.md](CHECKPOINTS.md) for delivery evidence and [RESUME.md](RESUME.md) before continuing work in a fresh chat.
+Read [root instructions](../AGENTS.md), the [shared workflow](../docs/DEVELOPMENT-WORKFLOW.md), and [architecture](ARCHITECTURE.md) before development. Resume matching ignored `.development/<task>/` records when present; fresh clones do not contain temporary handoffs.
+
+The source implements authorization, bounded historical import, daily synchronization, read-only status, schema migrations, and atomic publication with resumable pagination. Private operational handoffs remain outside public source. The [migration report](../MIGRATION.md) records historical checks; it does not establish current OAuth, scheduled collection, history completion, or deployed-image status. Inspect runtime state before operational changes; never replay an uncertain writer dispatch.
 
 ## What is collected
 
