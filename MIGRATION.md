@@ -19,3 +19,19 @@ The canonical development directories are now `SSHMCP/`, `GoogleHealthMCP/`, and
 - Both original source commits are ancestors of the workspace history. Project source trees match the originals except for documented migration links and handoffs. Each application's CI uses its own directory filter and working directory.
 
 These checks used local synthetic fixtures. No VM lifecycle, production deployment, personal database, OAuth grant, scheduled collector, or live application state was changed. Hosted CI results are separate from these local results.
+
+## Publication and archived repositories
+
+Workspace source was published at `11a20f92ae30d2cd11791ec51b99ac18a484f938`.
+
+- [SSHMCP](https://github.com/VVivid/sshmcp): migration notice committed as `308e437`; archive confirmed through GitHub settings and repository metadata.
+- [AgentShoppingList](https://github.com/VVivid/AgentShoppingList): migration notice committed as `e7892a7`; archive confirmed through GitHub settings. Its existing private visibility was retained.
+- Both notices link directly to their new project directories and direct new issues and pull requests to the workspace.
+- GoogleHealthMCP has no confirmed accessible standalone GitHub repository to update or archive.
+
+Hosted GitHub Actions validation for the imported source:
+
+- [SSHMCP](https://github.com/VVivid/vvivid-workspace/actions/runs/39992255425): passed.
+- [GoogleHealthMCP](https://github.com/VVivid/vvivid-workspace/actions/runs/39992046489): passed.
+- [AgentShoppingList](https://github.com/VVivid/vvivid-workspace/actions/runs/39992046448): passed.
+- [XTrace example](https://github.com/VVivid/vvivid-workspace/actions/runs/39992435297): passed.
