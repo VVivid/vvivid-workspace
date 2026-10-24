@@ -1,0 +1,27 @@
+{
+  "listen": "127.0.0.1:8088",
+  "origin": "https://mcp.example.com",
+  "issuer": "https://identity.example.com/realms/example",
+  "signing_key_file": "/run/secrets/gateway.private.json",
+  "routes": [
+    {
+      "name": "shopping",
+      "path": "/shopping/mcp",
+      "upstream": "http://127.0.0.1:8090/mcp",
+      "upstream_host": "shopping.example.com",
+      "audience": "shopping-mcp",
+      "required_scopes": ["shopping:read"],
+      "forward_scopes": ["shopping:read", "shopping:products:write", "shopping:lists:write", "shopping:purchases:write", "shopping:preferences:write"],
+      "client_ids": ["shopping-codex", "shopping-chatgpt"]
+    },
+    {
+      "name": "ssh",
+      "path": "/ssh/mcp",
+      "upstream": "http://127.0.0.1:18080/mcp",
+      "audience": "ssh-mcp",
+      "required_scopes": ["sshmcp:admin"],
+      "forward_scopes": ["sshmcp:admin"],
+      "client_ids": ["sshmcp-codex", "sshmcp-chatgpt"]
+    }
+  ]
+}

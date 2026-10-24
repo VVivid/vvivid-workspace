@@ -1,10 +1,10 @@
 .PHONY: check test build xtrace-check xtrace-test xtrace-build
 
-check: xtrace-check sshmcp-check google-health-check shopping-check
+check: mcp-gateway-check xtrace-check sshmcp-check google-health-check shopping-check
 
-test: xtrace-test sshmcp-test google-health-test shopping-test
+test: mcp-gateway-test xtrace-test sshmcp-test google-health-test shopping-test
 
-build: xtrace-build sshmcp-build google-health-build shopping-build
+build: mcp-gateway-build xtrace-build sshmcp-build google-health-build shopping-build
 
 xtrace-check:
 	$(MAKE) -C examples/xtrace-example check
@@ -46,3 +46,14 @@ shopping-test:
 
 shopping-build:
 	$(MAKE) -C AgentShoppingList build
+
+.PHONY: mcp-gateway-check mcp-gateway-test mcp-gateway-build mcp-gateway-integration
+mcp-gateway-check:
+	$(MAKE) -C MCPGateway check
+	python3 MCPGateway/scripts/check-contract.py
+mcp-gateway-test:
+	$(MAKE) -C MCPGateway test
+mcp-gateway-build:
+	$(MAKE) -C MCPGateway build
+mcp-gateway-integration:
+	$(MAKE) -C MCPGateway integration

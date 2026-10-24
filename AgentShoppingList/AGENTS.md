@@ -4,7 +4,7 @@
 
 Build the agent-managed mobile shopping app described in REQUIREMENTS.md and SPEC.md. Keep the human interface compact: My list, Products, History, Insights. The user primarily views and checks a ready list at Walmart; agents do management.
 
-Use Go, html/template, Tailwind CSS, minimal JavaScript, and SQLite. Serve website, API, and MCP in one application. Reuse existing Keycloak and Traefik; do not introduce a separate MCP gateway or route shopping tools through SSHMCP.
+Use Go, html/template, Tailwind CSS, minimal JavaScript, and SQLite. Serve website, API, and MCP in one application. Reuse existing browser identity and Traefik. The user-approved shared MCPGateway project may front the shopping MCP endpoint using the documented signed identity contract. Keep shopping tools and domain authorization inside this application; never route them through SSHMCP execution.
 
 ## Resume protocol
 

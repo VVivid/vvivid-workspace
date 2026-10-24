@@ -1,0 +1,26 @@
+# Container deployment behind an existing HTTPS proxy on a private network.
+# Adapt gateway.json listen to :8088 and upstreams to private service addresses.
+# SSH backend is loopback-only: run it and the gateway on the same host/network
+# namespace, or use an explicit private tunnel. Do not publish backend ports.
+services:
+  gateway:
+    build: ..
+    restart: unless-stopped
+    read_only: true
+    user: '65532:65532'
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    stop_grace_period: 10s
+    volumes:
+      - ./gateway.json:/config/gateway.json:ro
+    secrets:
+      - source: signing-key
+        target: gateway.private.json
+    networks: [mcp-private]
+secrets:
+  signing-key:
+    file: ${GATEWAY_SIGNING_KEY_FILE:?Set private signing JWK path readable by uid 65532}
+networks:
+  mcp-private:
+    external: true

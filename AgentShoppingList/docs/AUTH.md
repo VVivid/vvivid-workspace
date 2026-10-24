@@ -1,3 +1,8 @@
+> Shared-gateway mode is now available as an optional MCP-only integration.
+> See [MCPGateway](../../MCPGateway/README.md#backend-identity-and-integration).
+> Earlier no-gateway statements below describe direct-access mode. Browser OAuth
+> and shopping authorization remain unchanged in both modes.
+
 # Identity preparation and operator runbook
 
 CP03 local implementation, October 19, 2026. The user selected `https://shopping.vvivid.dev`, initial enrollment of only their own account, and Codex plus ChatGPT as the first MCP clients. No shopping client, DNS, proxy, secret, live enrollment or deployment has been applied. Own-account preferences are explicitly America/New_York, USD, Walmart, Monday week start; these are not global defaults. Exact Keycloak subjects, registered callback URLs and generated client credentials remain operator inputs.

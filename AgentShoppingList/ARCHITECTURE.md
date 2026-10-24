@@ -1,3 +1,9 @@
+> Shared-gateway update: optional MCP ingress through `MCPGateway/` is now approved.
+> Shopping remains its own MCP tool host. Gateway mode replaces only MCP bearer
+> verification; browser identity, enrollment and domain authorization stay here.
+> See [gateway architecture and rollout](../MCPGateway/README.md). The original
+> design below describes the direct-access deployment.
+
 # Architecture and infrastructure
 
 Selected October 19, 2026. This is a design, not a deployed shopping service.

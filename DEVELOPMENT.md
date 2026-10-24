@@ -6,6 +6,7 @@ My personal workspace for open-source projects, examples, experiments, and my we
 
 | Project | Purpose | Run instructions |
 | --- | --- | --- |
+| `MCPGateway` | Provider-independent authenticated MCP routing | [Gateway README](MCPGateway/README.md) |
 | `SSHMCP` | Authenticated MCP gateway and persistent SSH execution runner | [SSHMCP README](SSHMCP/README.md) |
 | `GoogleHealthMCP` | Google Health / Fitbit importer backed by SQLite | [Google Health README](GoogleHealthMCP/README.md) |
 | `AgentShoppingList` | Agent-managed mobile shopping app with built-in MCP | [Shopping README](AgentShoppingList/README.md) |
@@ -85,3 +86,5 @@ Publishable libraries may need additional language-specific version metadata. Th
 SSHMCP and AgentShoppingList were imported with their original commit histories. GoogleHealthMCP was imported from its local source directory, which had no Git history. Existing standalone releases remain in their archived repositories. New releases use directory-prefixed tags such as `SSHMCP/v1.0.1` and `AgentShoppingList/v0.1.0-beta.6`.
 
 Development continues here. Use this repository for new issues and pull requests. Runtime credentials, databases, generated binaries, and local lab state are excluded. Moving source does not deploy or restart any service.
+
+Shared gateway checks: `make mcp-gateway-check mcp-gateway-build mcp-gateway-integration`. The gateway and both backends remain independent Go modules. Its workflow runs cross-project MCP acceptance for changes in any of the three projects.
