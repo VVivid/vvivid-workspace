@@ -1,0 +1,28 @@
+{
+  "listen": "127.0.0.1:8088",
+  "origin": "https://mcp.example.com",
+  "issuer": "https://identity.example.com",
+  "signing_key_file": "/run/secrets/gateway.private.json",
+  "routes": [
+    {
+      "name": "service-a",
+      "path": "/service-a/mcp",
+      "upstream": "http://127.0.0.1:8090/mcp",
+      "audience": "service-a-mcp",
+      "max_token_lifetime_seconds": 300,
+      "required_scopes": ["service-a:use"],
+      "forward_scopes": ["service-a:use"],
+      "client_ids": ["example-agent"]
+    },
+    {
+      "name": "service-b",
+      "path": "/service-b/mcp",
+      "upstream": "http://127.0.0.1:8091/mcp",
+      "audience": "service-b-mcp",
+      "max_token_lifetime_seconds": 300,
+      "required_scopes": ["service-b:use"],
+      "forward_scopes": ["service-b:use"],
+      "client_ids": ["example-agent"]
+    }
+  ]
+}

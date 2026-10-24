@@ -1,0 +1,79 @@
+{{ $main := slice (resources.Get "js/main.js") }}
+
+{{ if .Site.Params.goToTop }}
+{{ $main = $main | append (resources.Get "js/goToTop.js") }}
+{{ end }}
+
+{{ $custom := slice }}
+{{ range $script := .Site.Params.additionalScripts }}
+{{ $script_res := resources.Get $script }}
+{{ if not $script_res}}
+{{ erroridf "additional-script-loading-error" "Failed to load script \"%s\"" $script }}
+{{ else }}
+{{ $custom = $custom | append (resources.Get .) }}
+{{ end }}
+{{ end }}
+
+{{ if hugo.IsProduction }}
+{{ $main = $main | resources.Concat "js/main.js" | resources.Minify | resources.Fingerprint }}
+<script src="{{  $main.Permalink }}" integrity="{{ $main.Data.Integrity }}"></script>
+
+{{ if gt (len $custom) 0 }}
+{{ $custom = $custom | resources.Concat "js/custom.js" | resources.Minify | resources.Fingerprint }}
+<script src="{{  $custom.Permalink }}" integrity="{{ $custom.Data.Integrity }}"></script>
+{{ end }}
+{{ else }}
+{{ $main = $main | resources.Concat "js/main.js" }}
+<script async src="{{  $main.Permalink }}"></script>
+
+{{ if gt (len $custom) 0 }}
+{{ $custom = $custom | resources.Concat "js/custom.js" }}
+<script async src="{{  $custom.Permalink }}"></script>
+{{ end }}
+{{ end }}
+
+{{ if .Params.mermaid }}
+<script type="module">
+    let mermaidLoaded = false;
+    const initMermaid = async () => {
+        if (mermaidLoaded) return;
+        mermaidLoaded = true;
+        try {
+            const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.esm.min.mjs');
+            const isDark = document.documentElement.classList.contains('dark');
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: isDark ? 'dark' : 'default',
+                securityLevel: 'loose',
+            });
+            await mermaid.run();
+        } catch (e) {
+            console.error('Mermaid failed to load:', e);
+        }
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                initMermaid();
+                observer.disconnect();
+            }
+        });
+    }, { rootMargin: '200px' });
+
+    document.querySelectorAll('.mermaid').forEach(el => observer.observe(el));
+</script>
+{{ end }}
+
+<script>
+    (function () {
+        const sublines = [
+            "\"Even a brick wants to be something\" — Louis Kahn"
+        ];
+        const bio = document.getElementById('author-bio');
+        if (bio) {
+            const randomSubline = sublines[Math.floor(Math.random() * sublines.length)];
+            bio.innerText = randomSubline;
+        }
+    })();
+</script>
