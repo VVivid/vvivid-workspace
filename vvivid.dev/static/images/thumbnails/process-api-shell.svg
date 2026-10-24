@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">The Process API Behind Every Shell Command</title>
+  <desc id="desc">A cozy minimal thumbnail with a terminal panel and a fork exec wait process flow diagram.</desc>
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#181713"/>
+      <stop offset="0.58" stop-color="#111619"/>
+      <stop offset="1" stop-color="#1d1914"/>
+    </linearGradient>
+
+    <pattern id="grain" width="80" height="80" patternUnits="userSpaceOnUse">
+      <rect width="80" height="80" fill="transparent"/>
+      <circle cx="12" cy="18" r="1.1" fill="#f3dfbd" opacity="0.07"/>
+      <circle cx="43" cy="9" r="0.8" fill="#f3dfbd" opacity="0.05"/>
+      <circle cx="67" cy="34" r="1" fill="#f3dfbd" opacity="0.06"/>
+      <circle cx="25" cy="57" r="0.9" fill="#f3dfbd" opacity="0.05"/>
+      <circle cx="54" cy="72" r="1.1" fill="#f3dfbd" opacity="0.045"/>
+    </pattern>
+
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M 48 0 L 0 0 0 48" fill="none" stroke="#ead7b8" stroke-width="1" opacity="0.055"/>
+    </pattern>
+
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+
+    <marker id="arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c88f53"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#paper)"/>
+  <rect width="1200" height="630" fill="url(#grain)"/>
+  <rect x="52" y="44" width="1096" height="542" rx="30" fill="url(#grid)" opacity="0.7"/>
+
+  <path d="M102 524 C260 468 355 533 518 492 C682 450 717 372 865 405 C986 432 1049 360 1111 315" fill="none" stroke="#c88f53" stroke-width="2" opacity="0.2"/>
+  <circle cx="1033" cy="105" r="72" fill="#c88f53" opacity="0.08"/>
+  <circle cx="1072" cy="464" r="104" fill="#7ea295" opacity="0.07"/>
+
+  <g transform="translate(82 76)">
+    <text x="0" y="0" fill="#c88f53" font-family="Avenir Next, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" font-weight="700" letter-spacing="3">OU DAVID · SYSTEMS NOTES</text>
+  </g>
+
+  <g transform="translate(82 138)">
+    <text x="0" y="0" fill="#f1e6d2" font-family="Avenir Next, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="68" font-weight="800">The Process API</text>
+    <text x="0" y="78" fill="#f1e6d2" font-family="Avenir Next, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="68" font-weight="800">Behind Every</text>
+    <text x="0" y="156" fill="#f1e6d2" font-family="Avenir Next, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="68" font-weight="800">Shell Command</text>
+  </g>
+
+  <g transform="translate(86 414)">
+    <rect x="0" y="0" width="492" height="128" rx="18" fill="#0d1113" stroke="#3a3328" stroke-width="2" filter="url(#softShadow)"/>
+    <circle cx="32" cy="28" r="7" fill="#bd7050"/>
+    <circle cx="56" cy="28" r="7" fill="#c88f53"/>
+    <circle cx="80" cy="28" r="7" fill="#7ea295"/>
+    <text x="30" y="78" fill="#8fb4a6" font-family="SFMono-Regular, ui-monospace, Menlo, Consolas, monospace" font-size="25" font-weight="600">$ grep error app.log</text>
+    <text x="370" y="78" fill="#c88f53" font-family="SFMono-Regular, ui-monospace, Menlo, Consolas, monospace" font-size="25" font-weight="600">| wc -l</text>
+  </g>
+
+  <g transform="translate(690 190)" filter="url(#softShadow)">
+    <rect x="0" y="0" width="412" height="300" rx="24" fill="#111617" stroke="#3c352b" stroke-width="2"/>
+    <text x="36" y="55" fill="#f1e6d2" font-family="SFMono-Regular, ui-monospace, Menlo, Consolas, monospace" font-size="25" font-weight="700">shell</text>
+
+    <line x1="102" y1="98" x2="102" y2="144" stroke="#c88f53" stroke-width="3" marker-end="url(#arrow)"/>
+    <line x1="102" y1="170" x2="102" y2="214" stroke="#c88f53" stroke-width="3" marker-end="url(#arrow)"/>
+    <line x1="179" y1="152" x2="265" y2="112" stroke="#c88f53" stroke-width="3" marker-end="url(#arrow)"/>
+    <line x1="179" y1="152" x2="266" y2="210" stroke="#c88f53" stroke-width="3" marker-end="url(#arrow)"/>
+
+    <rect x="36" y="82" width="132" height="54" rx="13" fill="#1b2221" stroke="#7ea295" stroke-width="2"/>
+    <text x="66" y="117" fill="#dfe9dc" font-family="SFMono-Regular, ui-monospace, Menlo, Consolas, monospace" font-size="22" font-weight="700">fork()</text>
+
+    <rect x="36" y="168" width="132" height="54" rx="13" fill="#211d19" stroke="#c88f53" stroke-width="2"/>
+    <text x="68" y="203" fill="#f1e6d2" font-family="SFMono-Regular, ui-monospace, Menlo, Consolas, monospace" font-size="22" font-weight="700">wait()</text>
+
+    <rect x="264" y="76" width="116" height="54" rx="13" fill="#211d19" stroke="#c88f53" stroke-width="2"/>
+    <text x="293" y="111" fill="#f1e6d2" font-family="SFMono-Regular, ui-monospace, Menlo, Consolas, monospace" font-size="22" font-weight="700">exec()</text>
+
+    <rect x="264" y="188" width="116" height="54" rx="13" fill="#1b2221" stroke="#7ea295" stroke-width="2"/>
+    <text x="294" y="223" fill="#dfe9dc" font-family="SFMono-Regular, ui-monospace, Menlo, Consolas, monospace" font-size="22" font-weight="700">pipe</text>
+
+    <text x="36" y="274" fill="#9b907f" font-family="Avenir Next, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="20" font-weight="600">fork · exec · wait</text>
+  </g>
+
+  <text x="82" y="578" fill="#8e8374" font-family="Avenir Next, Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="23" font-weight="600">vvivid.dev</text>
+</svg>

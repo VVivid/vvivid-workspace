@@ -1,0 +1,29 @@
+name: MCPGateway
+on:
+  pull_request:
+    paths: ['MCPGateway/**', '.github/workflows/mcp-gateway.yml']
+  push:
+    branches: [main]
+    paths: ['MCPGateway/**', '.github/workflows/mcp-gateway.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mcp-gateway-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: MCPGateway/go.mod
+          cache-dependency-path: MCPGateway/go.sum
+      - name: Verify the module without sibling projects
+        run: |
+          standalone_dir="$(mktemp -d "${RUNNER_TEMP}/mcp-gateway.XXXXXX")"
+          trap 'rm -rf "$standalone_dir"' EXIT
+          cp -a MCPGateway/. "$standalone_dir/"
+          make -C "$standalone_dir" check build integration demo

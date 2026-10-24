@@ -17,19 +17,20 @@ Before Go edits, use [Modern Go Guidelines](.agents/skills/use-modern-go/SKILL.m
 | `AgentShoppingList` | Agent-managed mobile shopping app with built-in MCP | [Shopping README](AgentShoppingList/README.md) |
 | `WebhookControl` | Standalone JSON webhook router with durable delivery | [Webhook Control README](WebhookControl/README.md) |
 | `examples/xtrace-example` | A runnable distributed tracing demonstration | [XTrace README](examples/xtrace-example/README.md#run) |
+| `vvivid.dev` | Personal website built with Hugo Extended | [Website README](vvivid.dev/README.md) |
 
 Each project owns its dependencies, build configuration, and tests. The root Makefile delegates to project Makefiles, so projects can use different languages and tools without sharing a dependency manager. Git is managed at this repository's root.
 
 ## Build and check
 
-Run `make sshmcp-check`, `make google-health-check`, `make shopping-check`, or `make webhook-control-check` for an application. Each also has matching `-test` and `-build` targets. `make check` and `make build` cover all projects. Each project remains independently runnable; Docker builds use its directory as the build context.
+Run `make sshmcp-check`, `make google-health-check`, `make shopping-check`, or `make webhook-control-check` for an application. Each also has matching `-test` and `-build` targets. Use `make website-check`, `make website-test`, or `make website-build` for the personal website; each renders and validates the production Hugo output. Install the pinned Hugo Extended version from `vvivid.dev/.hugo-version` or set `HUGO=/absolute/path/to/hugo`; the [website README](vvivid.dev/README.md) covers installation and Docker alternatives. `make check`, `make test`, and `make build` cover all projects. Each project remains independently runnable; Docker builds use its directory as the build context.
 
 For XTrace, install Make, Go 1.26 or newer, a C compiler for SQLite and the race detector, and Docker with the Compose plugin. Run from the repository root:
 
 ```sh
 make check        # Project checks, including XTrace Compose validation
-make test         # Tests for all projects
-make build        # Build all applications and the XTrace demo
+make test         # Tests for applications; production render/check for the website
+make build        # Build all applications, the XTrace demo, and the website
 ```
 
 The application binary is written to `examples/xtrace-example/bin/xtrace-demo`, which Git ignores. Checks stop on the first failure and do not start the Compose stack.
@@ -41,6 +42,8 @@ Use `make xtrace-check`, `make xtrace-test`, or `make xtrace-build` to select XT
 The [XTrace workflow](.github/workflows/xtrace-example.yml) runs automatically only for pull requests that change `examples/xtrace-example/**` and for matching pushes to `main`. It runs `make -C examples/xtrace-example check` directly, independently of the root Makefile. Changes confined to root files or workflow configuration do not trigger it; it can still be started manually.
 
 SSHMCP, GoogleHealthMCP, AgentShoppingList, and WebhookControl each have a workflow filtered to their own directory. WebhookControl also watches its own workflow file. A change confined to another project does not trigger the XTrace workflow.
+
+The [website workflow](.github/workflows/website.yml) watches `vvivid.dev/**`, its own workflow file, and the root `Makefile`, including root-only Make changes. It builds the pinned Hugo stage from the site's standalone Docker context, including the version and agent-guide exclusion checks. Its only repository permission is `contents: read`, and it does not publish or deploy. Run website Make targets locally when changing root delegation; the workflow invokes the Docker builder directly.
 
 If merge rules are added later, account for path-filtered workflows being skipped on unrelated pull requests before making their checks required globally.
 
@@ -54,7 +57,7 @@ Projects are released independently using annotated Git tags:
 <project-directory>/v<major>.<minor>.<patch>
 ```
 
-For example, the first XTrace release can be `examples/xtrace-example/v0.1.0`. Future projects use their own directory prefix and version sequence. A tag records the whole repository snapshot; its prefix identifies the released project.
+For example, the first XTrace release can be `examples/xtrace-example/v0.1.0`, and website releases use `vvivid.dev/vX.Y.Z`. Future projects use their own directory prefix and version sequence. A tag records the whole repository snapshot; its prefix identifies the released project.
 
 For versions starting at `1.0.0`, increment the major version for breaking changes, minor for backward-compatible features, and patch for fixes. Use `0.x` while a project's interface is still evolving, and describe breaking changes in its release notes.
 
@@ -90,5 +93,7 @@ Publishable libraries may need additional language-specific version metadata. Th
 ## Repository migration
 
 SSHMCP and AgentShoppingList were imported with their original commit histories. GoogleHealthMCP was imported from its local source directory, which had no Git history. Existing standalone releases remain in their archived repositories. New releases use directory-prefixed tags such as `SSHMCP/v1.0.1` and `AgentShoppingList/v0.1.0-beta.6`.
+
+`vvivid.dev/` was imported from an attached source snapshot without original Git history. It has its own pinned Hugo build and vendored theme; the archived GitLab deployment and operational scripts are retained as [legacy references](vvivid.dev/deploy/legacy/README.md). Their external infrastructure has not been migrated. See the [migration report](MIGRATION.md#website-snapshot-import--october-24-2026) for source and validation limits.
 
 Development continues here. Use this repository for new issues and pull requests. Runtime credentials, databases, generated binaries, and local lab state are excluded. Moving source does not deploy or restart any service.

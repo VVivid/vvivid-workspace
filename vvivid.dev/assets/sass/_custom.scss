@@ -1,0 +1,222 @@
+// Custom Styles
+
+.mermaid {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin: 2rem 0;
+
+    svg {
+        max-width: 100%;
+        height: auto;
+    }
+}
+
+.projects-empty-state {
+    margin: 2rem auto;
+    max-width: 640px;
+    padding: 1.5rem;
+    text-align: center;
+    border: 1px solid rgba(128, 128, 128, 0.2);
+    border-radius: 8px;
+    background-color: rgba(128, 128, 128, 0.03);
+
+    h2 {
+        margin-top: 0;
+        margin-bottom: 0.75rem;
+        font-size: 1.25rem;
+        color: var(--text-base-color);
+    }
+
+    p {
+        margin: 0;
+        line-height: 1.7;
+        color: var(--text-base-color);
+        opacity: 0.85;
+    }
+}
+
+// Keep inline code readable on the forced dark theme. The theme default uses
+// muted gray on a gray chip, which becomes hard to read in article text.
+.page-content h1 > code,
+.page-content h2 > code,
+.page-content h3 > code,
+.page-content h4 > code,
+.page-content h5 > code,
+.page-content h6 > code,
+.page-content p > code,
+.page-content li > code,
+.page-content td > code,
+.page-content th > code {
+    color: #ffd166 !important;
+    background-color: rgba(251, 146, 60, 0.16) !important;
+    border: 1px solid rgba(251, 146, 60, 0.36) !important;
+    border-radius: 4px !important;
+    padding: 0.08em 0.32em !important;
+    font-weight: 600 !important;
+}
+
+.page-content pre code,
+.page-content .highlight code {
+    color: inherit !important;
+    background: transparent !important;
+    border: 0 !important;
+    padding: 0 !important;
+    font-weight: inherit !important;
+}
+
+.post-export-actions {
+    display: flex;
+    align-items: center;
+    margin-top: 1rem;
+}
+
+.post-export-pdf {
+    max-width: 100%;
+    appearance: none;
+    border: 1px solid rgba(119, 168, 253, 0.48);
+    border-radius: 6px;
+    background-color: rgba(119, 168, 253, 0.12);
+    color: $dark-white;
+    cursor: pointer;
+    font: inherit;
+    font-size: $small-font-size;
+    line-height: 1.2;
+    padding: 0.55rem 0.8rem;
+    text-align: center;
+}
+
+.post-export-pdf:hover {
+    background-color: rgba(119, 168, 253, 0.2);
+    border-color: rgba(119, 168, 253, 0.72);
+}
+
+.post-export-pdf:focus-visible {
+    outline: 2px solid rgba(119, 168, 253, 0.75);
+    outline-offset: 3px;
+}
+
+@media print {
+    @page {
+        margin: 0.7in;
+    }
+
+    html,
+    body {
+        background: #fff !important;
+        color: #111 !important;
+    }
+
+    body {
+        font-size: 11pt;
+        line-height: 1.55;
+    }
+
+    .navbar,
+    .footer,
+    #totop,
+    .post-export-actions {
+        display: none !important;
+    }
+
+    .wrapper.post {
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .wrapper.post main.page-content,
+    .wrapper.post .page-content {
+        color: #111 !important;
+        padding-top: 0;
+    }
+
+    .wrapper.post .header {
+        margin-top: 0;
+    }
+
+    .wrapper.post .header-title {
+        color: #111 !important;
+        font-size: 22pt;
+        line-height: 1.2;
+        margin-bottom: 0.35rem;
+    }
+
+    .wrapper.post .post-meta {
+        color: #555 !important;
+        margin-bottom: 1rem;
+    }
+
+    .wrapper.post .toc {
+        background: transparent !important;
+        border: 1px solid #ddd;
+        color: #111 !important;
+        break-inside: avoid;
+    }
+
+    .wrapper.post .toc a {
+        color: #111 !important;
+    }
+
+    .wrapper.post a {
+        color: #111 !important;
+        text-decoration: underline;
+    }
+
+    .wrapper.post a[target="_blank"]::after {
+        content: "";
+    }
+
+    .wrapper.post h1,
+    .wrapper.post h2,
+    .wrapper.post h3,
+    .wrapper.post h4,
+    .wrapper.post h5,
+    .wrapper.post h6,
+    .wrapper.post strong,
+    .wrapper.post b {
+        color: #111 !important;
+    }
+
+    .wrapper.post h1,
+    .wrapper.post h2,
+    .wrapper.post h3,
+    .wrapper.post h4,
+    .wrapper.post h5,
+    .wrapper.post h6 {
+        break-after: avoid;
+        page-break-after: avoid;
+    }
+
+    .wrapper.post blockquote {
+        color: #333 !important;
+        border-color: #bbb !important;
+    }
+
+    .wrapper.post pre,
+    .wrapper.post code,
+    .wrapper.post .highlight {
+        color: #111 !important;
+        background: #f6f6f6 !important;
+        border-color: #ddd !important;
+    }
+
+    .wrapper.post pre,
+    .wrapper.post pre code,
+    .wrapper.post .highlight pre,
+    .wrapper.post .highlight code {
+        white-space: pre-wrap !important;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+
+    .wrapper.post table {
+        break-inside: avoid;
+    }
+
+    .wrapper.post img,
+    .wrapper.post svg {
+        max-width: 100% !important;
+        height: auto !important;
+    }
+}
