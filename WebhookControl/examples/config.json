@@ -1,0 +1,24 @@
+{
+  "database_path": "/data/state.db",
+  "key_file": "/run/secrets/database-key",
+  "digest_key_file": "/run/secrets/digest-key",
+  "listen": "0.0.0.0:8080",
+  "allow_non_loopback": true,
+  "oauth": {
+    "issuer": "https://issuer.example",
+    "resource": "https://webhooks.example/mcp",
+    "allow_insecure_loopback": false
+  },
+  "allowed_management_origins": [],
+  "destination_origins": [
+    {"origin": "https://receiver.example", "allow_private": false}
+  ],
+  "metadata_retention_seconds": 604800,
+  "deduplication_retention_seconds": 604800,
+  "cleanup_interval_seconds": 60,
+  "worker_concurrency": 4,
+  "worker_poll_milliseconds": 250,
+  "max_connections": 128,
+  "max_in_flight_requests": 64,
+  "max_header_bytes": 16384
+}

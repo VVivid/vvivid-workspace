@@ -1,0 +1,13 @@
+.git
+.development
+bin
+data
+secrets
+config.json
+*.key
+*.secret
+*.db
+*.db-*
+*.backup
+.env
+.env.*

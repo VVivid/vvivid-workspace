@@ -1,10 +1,10 @@
 .PHONY: check test build xtrace-check xtrace-test xtrace-build
 
-check: xtrace-check sshmcp-check google-health-check shopping-check
+check: xtrace-check sshmcp-check google-health-check shopping-check webhook-control-check
 
-test: xtrace-test sshmcp-test google-health-test shopping-test
+test: xtrace-test sshmcp-test google-health-test shopping-test webhook-control-test
 
-build: xtrace-build sshmcp-build google-health-build shopping-build
+build: xtrace-build sshmcp-build google-health-build shopping-build webhook-control-build
 
 xtrace-check:
 	$(MAKE) -C examples/xtrace-example check
@@ -46,3 +46,14 @@ shopping-test:
 
 shopping-build:
 	$(MAKE) -C AgentShoppingList build
+
+.PHONY: webhook-control-check webhook-control-test webhook-control-build
+
+webhook-control-check:
+	$(MAKE) -C WebhookControl check
+
+webhook-control-test:
+	$(MAKE) -C WebhookControl test
+
+webhook-control-build:
+	$(MAKE) -C WebhookControl build

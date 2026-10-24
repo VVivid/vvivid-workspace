@@ -15,13 +15,14 @@ Before Go edits, use [Modern Go Guidelines](.agents/skills/use-modern-go/SKILL.m
 | `SSHMCP` | Authenticated MCP gateway and persistent SSH execution runner | [SSHMCP README](SSHMCP/README.md) |
 | `GoogleHealthMCP` | Google Health / Fitbit importer backed by SQLite | [Google Health README](GoogleHealthMCP/README.md) |
 | `AgentShoppingList` | Agent-managed mobile shopping app with built-in MCP | [Shopping README](AgentShoppingList/README.md) |
+| `WebhookControl` | Standalone JSON webhook router with durable delivery | [Webhook Control README](WebhookControl/README.md) |
 | `examples/xtrace-example` | A runnable distributed tracing demonstration | [XTrace README](examples/xtrace-example/README.md#run) |
 
 Each project owns its dependencies, build configuration, and tests. The root Makefile delegates to project Makefiles, so projects can use different languages and tools without sharing a dependency manager. Git is managed at this repository's root.
 
 ## Build and check
 
-Run `make sshmcp-check`, `make google-health-check`, or `make shopping-check` for an application. `make check` and `make build` cover all projects. Each project remains independently runnable; Docker builds use its directory as the build context.
+Run `make sshmcp-check`, `make google-health-check`, `make shopping-check`, or `make webhook-control-check` for an application. Each also has matching `-test` and `-build` targets. `make check` and `make build` cover all projects. Each project remains independently runnable; Docker builds use its directory as the build context.
 
 For XTrace, install Make, Go 1.26 or newer, a C compiler for SQLite and the race detector, and Docker with the Compose plugin. Run from the repository root:
 
@@ -39,7 +40,7 @@ Use `make xtrace-check`, `make xtrace-test`, or `make xtrace-build` to select XT
 
 The [XTrace workflow](.github/workflows/xtrace-example.yml) runs automatically only for pull requests that change `examples/xtrace-example/**` and for matching pushes to `main`. It runs `make -C examples/xtrace-example check` directly, independently of the root Makefile. Changes confined to root files or workflow configuration do not trigger it; it can still be started manually.
 
-SSHMCP, GoogleHealthMCP, and AgentShoppingList each have a workflow filtered to their own directory. A change confined to another project does not trigger the XTrace workflow.
+SSHMCP, GoogleHealthMCP, AgentShoppingList, and WebhookControl each have a workflow filtered to their own directory. WebhookControl also watches its own workflow file. A change confined to another project does not trigger the XTrace workflow.
 
 If merge rules are added later, account for path-filtered workflows being skipped on unrelated pull requests before making their checks required globally.
 

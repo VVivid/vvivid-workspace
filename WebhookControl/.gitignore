@@ -1,0 +1,8 @@
+/bin/
+/data/
+/secrets/
+/config.json
+*.db
+*.db-shm
+*.db-wal
+*.backup
