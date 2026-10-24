@@ -1,0 +1,62 @@
+{{ define "title"}}
+404 | NOT FOUND
+{{ end }}
+
+{{ define "main"}}
+<style>
+    .custom-404-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 60vh;
+        text-align: center;
+        padding: 2rem;
+    }
+
+    .backend-guy-title {
+        font-size: 3rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        color: var(--color-contrast-high, #fff);
+        /* Fallback to white if var not defined */
+    }
+
+    .custom-quote {
+        font-size: 1.25rem;
+        color: var(--color-contrast-medium, #888);
+        /* Muted text */
+        margin-top: 0;
+        margin-bottom: 2rem;
+        font-weight: 400;
+    }
+
+    .error-code {
+        font-size: 1rem;
+        color: var(--color-contrast-low, #555);
+        font-weight: 600;
+        letter-spacing: 2px;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 600px) {
+        .backend-guy-title {
+            font-size: 2rem;
+        }
+
+        .custom-quote {
+            font-size: 1rem;
+        }
+    }
+</style>
+
+<div class="wrapper">
+    <main class="main-404 custom-404-container" aria-label="Content">
+        <h1 class="backend-guy-title">Backend Guy</h1>
+        <div class="custom-quote">
+            "Even a brick wants to be something" — Louis Kahn
+        </div>
+        <div class="error-code">404</div>
+    </main>
+</div>
+{{ end }}

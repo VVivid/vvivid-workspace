@@ -1,0 +1,32 @@
+name: vvivid.dev
+
+on:
+  pull_request:
+    paths:
+      - 'vvivid.dev/**'
+      - '.github/workflows/website.yml'
+      - 'Makefile'
+  push:
+    branches: [main]
+    paths:
+      - 'vvivid.dev/**'
+      - '.github/workflows/website.yml'
+      - 'Makefile'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-and-build:
+    name: Website check and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and check Hugo output
+        run: docker build --target builder ./vvivid.dev

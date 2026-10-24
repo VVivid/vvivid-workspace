@@ -1,0 +1,59 @@
+<head>
+    {{- partial "meta/main.html" . }}
+    {{- hugo.Generator }}
+
+    {{/* Open Graph and Twitter Tags managed via partials/meta/main.html */}}
+
+    {{/* Canonical link, RSS */}}
+
+    <link rel="canonical" href="{{ .Permalink }}">
+    {{- with .OutputFormats.Get "RSS" }}
+    <link href="{{ .RelPermalink }}" rel="alternate" type="application/rss+xml" title="{{ $.Site.Title }}">
+    <link href="{{ .RelPermalink }}" rel="feed" type="application/rss+xml" title="{{ $.Site.Title }}">
+    {{- end }}
+
+    <script>
+        document.documentElement.classList.add('dark', 'darkmode');
+        document.documentElement.classList.remove('light');
+    </script>
+
+    {{- /* Styles */ -}}
+
+    {{- $style := resources.Get "sass/main.scss" | resources.ExecuteAsTemplate "style.scss" . | toCSS (dict "targetPath"
+    "style.css") | minify | fingerprint }}
+    <link href="{{ $style.RelPermalink }}" rel="stylesheet">
+    {{- $code_syntax_highlight_css := resources.Get "code-highlight.css" | minify | fingerprint }}
+    <link href="{{ $code_syntax_highlight_css.RelPermalink }}" rel="stylesheet">
+
+    {{/* Mobile Optimizations */}}
+    <link href="{{ "css/mobile-optimizations.css" | absURL }}" rel="stylesheet">
+
+    {{/* Favicons */}}
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ "icons/apple-touch-icon.png" | absURL }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ "icons/favicon-32x32.png" | absURL }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ "icons/favicon-16x16.png" | absURL }}">
+    <link rel="shortcut icon" href="{{ "icons/favicon.ico" | absURL }}">
+
+    {{- partial "webmanifest.html" . -}}
+    {{- partial "browserconfig.html" . -}}
+
+    <meta name="theme-color" content="{{ .Site.Params.webmanifest.theme_color | default "#131418" }}">
+    <meta name="color-scheme" content="dark">
+
+    {{/* Note: SVG icons removed as we are using PNGs generated from AI */}}
+
+    {{/* Katex support (enabled on specific pages). See 'helpers/katex.html' for more info. */}}
+
+    {{- if or .Params.math .Site.Params.math }}{{ partial "helpers/katex.html" . -}}{{- end -}}
+
+    {{/* Umami analytics script. See hugo.toml to configure this. */}}
+    {{- $umami := .Site.Params.umami -}}
+    {{- if and $umami.enabled $umami.host $umami.websiteId }}
+    <script defer src="{{ $umami.host }}/{{ $umami.script | default "script.js" }}" data-website-id="{{ $umami.websiteId }}" data-domains="{{ $umami.domains | default "vvivid.dev" }}"{{ if $umami.performance }} data-performance="true"{{ end }}></script>
+    {{- end -}}
+
+    {{/* Extend head with user supplied partial */}}
+    {{ if templates.Exists "partials/custom-head.html" }}
+    {{ partial "custom-head.html" . }}
+    {{ end }}
+</head>

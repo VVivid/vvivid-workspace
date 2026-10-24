@@ -1,10 +1,19 @@
-.PHONY: check test build xtrace-check xtrace-test xtrace-build
+.PHONY: check test build xtrace-check xtrace-test xtrace-build website-check website-test website-build
 
-check: xtrace-check sshmcp-check google-health-check shopping-check
+check: xtrace-check sshmcp-check google-health-check shopping-check website-check
 
-test: xtrace-test sshmcp-test google-health-test shopping-test
+test: xtrace-test sshmcp-test google-health-test shopping-test website-test
 
-build: xtrace-build sshmcp-build google-health-build shopping-build
+build: xtrace-build sshmcp-build google-health-build shopping-build website-build
+
+website-check:
+	$(MAKE) -C vvivid.dev check
+
+website-test:
+	$(MAKE) -C vvivid.dev test
+
+website-build:
+	$(MAKE) -C vvivid.dev build
 
 xtrace-check:
 	$(MAKE) -C examples/xtrace-example check

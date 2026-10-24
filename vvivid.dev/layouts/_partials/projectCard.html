@@ -1,0 +1,199 @@
+<article class="project-item">
+    <div class="project-content">
+        <div class="project-header">
+            {{ $u := urls.Parse .Params.link }}
+            <span class="project-domain">{{ $u.Host }}</span>
+        </div>
+        <h4 class="post-item-title">
+            <a href="{{ .Params.link | default .RelPermalink }}" target="_blank" rel="noopener">{{ .Title }}</a>
+        </h4>
+
+        <div class="project-meta">
+            <p class="project-description">{{ .Description }}</p>
+
+            {{ $thumbnailDisabled := eq (printf "%v" .Params.thumbnail) "false" }}
+            {{ $imgUrl := "" }}
+            {{ if not $thumbnailDisabled }}
+            {{ with .Params.thumbnail }}
+            {{ $imgUrl = . }}
+            {{ end }}
+            {{ if not $imgUrl }}
+            {{ with .Params.link }}
+            {{ $remote := try (resources.GetRemote .) }}
+            {{ with $remote.Value }}
+            {{ with .Content }}
+            {{/* Try to find og:image content */}}
+            {{ $candidates := findRE `property=["']og:image["'] content=["'](.*?)["']` . 1 }}
+            {{ range $candidates }}
+            {{ $url := . | replaceRE `.*content=["'](.*?)["'].*` "$1" }}
+            {{/* Handle relative URLs */}}
+            {{ if not (findRE `^https?://` $url) }}
+            {{ $baseUrl := $.Params.link }}
+            {{ if hasPrefix $url "/" }}
+            {{ $parsed := urls.Parse $baseUrl }}
+            {{ $url = printf "%s://%s%s" $parsed.Scheme $parsed.Host $url }}
+            {{ end }}
+            {{ end }}
+            {{ $imgUrl = $url }}
+            {{ end }}
+
+            {{/* Fallback: try different attribute order */}}
+            {{ if not $imgUrl }}
+            {{ $candidates := findRE `content=["'](.*?)["'] property=["']og:image["']` . 1 }}
+            {{ range $candidates }}
+            {{ $url := . | replaceRE `.*content=["'](.*?)["'].*` "$1" }}
+            {{/* Handle relative URLs */}}
+            {{ if not (findRE `^https?://` $url) }}
+            {{ $baseUrl := $.Params.link }}
+            {{ if hasPrefix $url "/" }}
+            {{ $parsed := urls.Parse $baseUrl }}
+            {{ $url = printf "%s://%s%s" $parsed.Scheme $parsed.Host $url }}
+            {{ end }}
+            {{ end }}
+            {{ $imgUrl = $url }}
+            {{ end }}
+            {{ end }}
+            {{ end }}
+            {{ end }}
+            {{ end }}
+            {{ end }}
+            {{ end }}
+
+            {{ if $imgUrl }}
+            <a href="{{ .Params.link | default .RelPermalink }}" class="project-thumbnail-link" target="_blank"
+                rel="noopener">
+                <img src="{{ $imgUrl }}" alt="{{ .Title }}" class="project-thumbnail" loading="lazy"
+                    onerror="this.parentElement.style.display='none'">
+            </a>
+            {{ end }}
+
+            <div class="project-footer">
+                {{ if .Params.tags }}
+                <div class="project-tags">
+                    {{ range .Params.tags }}
+                    <span class="tag-item">{{ . }}</span>
+                    {{ end }}
+                </div>
+                {{ end }}
+
+                {{ if .Params.repo }}
+                <a href="{{ .Params.repo }}" target="_blank" rel="noopener" class="project-repo-link"
+                    title="View Source">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        class="feather feather-github">
+                        <path
+                            d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22">
+                        </path>
+                    </svg>
+                </a>
+                {{ end }}
+            </div>
+        </div>
+    </div>
+</article>
+
+<style>
+    .project-item {
+        display: flex;
+        flex-direction: column;
+        padding: 1.2rem;
+        border: 1px solid rgba(128, 128, 128, 0.2);
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        background-color: rgba(128, 128, 128, 0.03);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .project-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        border-color: var(--text-link-blue);
+    }
+
+    .project-content {
+        width: 100%;
+    }
+
+    .project-header {
+        margin-bottom: 0.5rem;
+    }
+
+    .project-domain {
+        font-size: 0.8rem;
+        color: var(--text-base-color);
+        opacity: 0.7;
+    }
+
+    .post-item-title {
+        margin-bottom: 0.5rem;
+        font-size: 1.2rem;
+    }
+
+    .post-item-title a {
+        color: var(--text-link-blue);
+        text-decoration: none;
+    }
+
+    .post-item-title a:hover {
+        text-decoration: underline;
+    }
+
+    .project-repo-link {
+        color: inherit;
+        opacity: 0.6;
+        display: inline-flex;
+        align-items: center;
+        margin-left: auto;
+        /* Push to right */
+    }
+
+    .project-repo-link:hover {
+        opacity: 1;
+        color: var(--text-link-blue);
+    }
+
+    .project-meta {
+        margin-top: 0.5rem;
+    }
+
+    .project-thumbnail {
+        max-width: 100%;
+        height: auto;
+        border-radius: 6px;
+        margin-top: 0.8rem;
+        margin-bottom: 0.8rem;
+        border: 1px solid rgba(128, 128, 128, 0.1);
+        max-height: 400px;
+        object-fit: cover;
+    }
+
+    .project-description {
+        margin: 0.5rem 0;
+        line-height: 1.6;
+        color: var(--text-base-color);
+        font-size: 0.95rem;
+    }
+
+    .project-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 1rem;
+    }
+
+    .project-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .tag-item {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 12px;
+        background: rgba(128, 128, 128, 0.1);
+        color: var(--text-base-color);
+        border: 1px solid rgba(128, 128, 128, 0.1);
+    }
+</style>

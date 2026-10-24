@@ -1,0 +1,87 @@
+baseURL = "https://vvivid.dev/"
+title = "Ou David | Systems Engineer"
+locale = "en-us"
+theme = "hugo-blog-awesome"
+enableRobotsTXT = true
+[pagination]
+  pagerSize = 5
+enableEmoji = true
+[markup.highlight]
+  noClasses = false
+[markup.goldmark.renderer]
+  unsafe = true
+
+[menu]
+  [[menu.main]]
+    name = "Home"
+    url = "/"
+    weight = 1
+  [[menu.main]]
+    name = "Blog"
+    url = "/posts/"
+    weight = 2
+  [[menu.main]]
+    name = "About Me"
+    url = "/about/"
+    weight = 3
+  [[menu.main]]
+    name = "Projects"
+    url = "/projects/"
+    weight = 4
+
+[params]
+  sitename = "Ou David | Systems Engineer"
+  description = "Software Engineer focused on building reliable, high-availability distributed systems."
+  mainSections = ['posts']
+  defaultColor = "dark"
+  toc = true
+  tocOpen = false
+  goToTop = true
+  additionalScripts = ["js/post-pdf.js"]
+  rssFeedDescription = "summary"
+  ogimage = "images/site-cover.png"
+  math = true
+
+[params.umami]
+  enabled = true
+  host = "https://analytics.vvivid.dev"
+  script = "vvivid.js"
+  websiteId = "a2e11d82-d824-4f23-a7ce-aa35b4a02361"
+  domains = "vvivid.dev"
+  performance = true
+
+[sitemap]
+  changefreq = "weekly"
+  priority = 0.5
+  filename = "sitemap.xml"
+
+[params.author]
+  name = "Ou David"
+  intro = "Systems Engineer"
+  description = "Software Engineer focused on building reliable, high-availability distributed systems."
+  avatar = "images/site-cover.png"
+
+[[params.socialIcons]]
+  name = "github"
+  url = "https://github.com/VVivid"
+
+
+[[params.socialIcons]]
+  name = "linkedin"
+  url = "https://linkedin.com/in/oudavid-vvivid" 
+
+[[params.socialIcons]]
+  name = "email"
+  url = "mailto:oudavid@vvivid.dev"
+
+[[params.socialIcons]]
+  name = "Rss"
+  url = "/index.xml"
+
+[params.webmanifest]
+  name = "Backend Guy"
+  short_name = "Backend Guy"
+  start_url = "/"
+  theme_color = "#131418"
+  background_color = "#131418"
+  display = "standalone"

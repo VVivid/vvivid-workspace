@@ -35,3 +35,13 @@ Hosted GitHub Actions validation for the imported source:
 - [GoogleHealthMCP](https://github.com/VVivid/vvivid-workspace/actions/runs/39992046489): passed.
 - [AgentShoppingList](https://github.com/VVivid/vvivid-workspace/actions/runs/39992046448): passed.
 - [XTrace example](https://github.com/VVivid/vvivid-workspace/actions/runs/39992435297): passed.
+
+## Website snapshot import — October 24, 2026
+
+`vvivid.dev/` was imported from the attached personal website archive as a source snapshot, without original Git history. Content, static assets, and asset overrides were preserved. Hugo compatibility changes move legacy template locations and replace removed template accessors without changing content front matter or URLs.
+
+The archive contained an empty theme directory and no recoverable theme revision. Hugo Blog Awesome `v2.0.1` at commit `46d1ab1a9cc8ad24a3d482af618771d708d91c2f` is vendored with its MIT license and [provenance](vvivid.dev/themes/hugo-blog-awesome/UPSTREAM.md). This supports a reproducible build, but exact visual parity with the original site cannot be established. Hugo Extended `0.162.1` is pinned in the project version file and Docker builder image.
+
+Local validation of the imported source passed: production Hugo build (71 pages, 16 static files), original content/asset byte comparisons, required routes, internal generated references, sitemap targets, and case-insensitive agent-guide exclusion. A disposable leaked-guide fixture and wrong-version Hugo fixture were rejected. The standalone Docker image built successfully; an ephemeral nginx container passed configuration and local route checks and rejected a nested mixed-case guide URL. These checks did not verify browser rendering or external services.
+
+The former GitLab pipeline is retained under [deploy/legacy/](vvivid.dev/deploy/legacy/README.md). Its registry, external `/infra/compose.yml`, preview/live services, Traefik network, and credentials were not migrated. The new GitHub workflow builds and checks the site only. These website results describe a local source import and local validation; the workspace publication and hosted CI results above apply to the earlier project migration. No website publication or live deployment is established by this import.
