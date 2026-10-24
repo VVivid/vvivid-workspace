@@ -1,0 +1,7 @@
+{{- $description := dict "href" ("api/openapi.json" | absURL) "type" "application/json" -}}
+{{- $documentation := dict "href" ("api/" | absURL) "type" "text/html" -}}
+{{- dict "linkset" (slice (dict
+  "anchor" ("api/content.json" | absURL)
+  "service-desc" (slice $description)
+  "service-doc" (slice $documentation)
+)) | jsonify -}}

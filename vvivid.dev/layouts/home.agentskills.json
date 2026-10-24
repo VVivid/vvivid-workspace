@@ -1,0 +1,11 @@
+{{- $metadata := index hugo.Data "agent-skills" -}}
+{{- $path := printf ".well-known/agent-skills/%s/SKILL.md" $metadata.name -}}
+{{- $artifact := resources.Get "agent-skills/read-vvivid-articles.md" | resources.ExecuteAsTemplate $path (dict "skill" $metadata) -}}
+{{- /* Publish the artifact without emitting its return value into the JSON index. */ -}}
+{{- $publish := $artifact.Publish -}}
+{{- $skill := merge $metadata (dict
+  "type" "skill-md"
+  "url" $artifact.RelPermalink
+  "digest" (printf "sha256:%s" (crypto.SHA256 $artifact.Content))
+) -}}
+{{- dict "$schema" "https://schemas.agentskills.io/discovery/0.2.0/schema.json" "skills" (slice $skill) | jsonify -}}
