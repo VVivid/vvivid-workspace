@@ -1,0 +1,3431 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "WebhookControl",
+    "version": "0.1.0",
+    "description": "Authenticated generic JSON ingress and OAuth-protected management over REST and MCP with transactional SQLite history."
+  },
+  "paths": {
+    "/v1/hooks/{source_id}": {
+      "post": {
+        "operationId": "acceptEvent",
+        "security": [
+          {
+            "sourceBearer": []
+          },
+          {
+            "sourceHMAC": [],
+            "sourceTimestamp": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Exactly one header. Source-scoped visible ASCII key; changing raw body bytes with this key returns 409.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[!-~]{1,128}$"
+            }
+          },
+          {
+            "name": "X-Webhook-Timestamp",
+            "in": "header",
+            "required": false,
+            "description": "Required in HMAC mode. Exactly one canonical decimal Unix-second value, within five minutes of server time after the body is read.",
+            "schema": {
+              "type": "string",
+              "maxLength": 12,
+              "pattern": "^(0|[1-9][0-9]{0,11})$"
+            }
+          },
+          {
+            "name": "Content-Encoding",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "identity"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Exactly one JSON object. Only application/json with optional charset=utf-8 is accepted. No compression.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngressEvent"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Immediate mode: all observed attempts succeeded, or a duplicate receipt. Duplicate unknown outcomes never authorize resending.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImmediateAcceptance"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Durable event, deduplication and all initial sanitized jobs committed atomically, or matching durable duplicate. No matching route still commits with an empty delivery list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DurableAcceptance"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed, nonobject or trailing JSON; invalid source/key; unsupported content type or encoding.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Source authentication failed; source is unknown; HMAC timestamp is stale or signature invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated source is disabled or destination policy denied the configuration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Raw request body exceeds 1 MiB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Configuration/rule/template validation, bounded evaluation or JSON conversion failed before acceptance.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-source rate limit or bounded limiter capacity exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "const": 60
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Immediate mode: a recorded attempt failed or the first foreground fanout exhausted its time budget. No durable retry; same-key requests never send again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImmediateAcceptance"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Configuration, acceptance storage, immediate support or outcome metadata unavailable. A commit or send may already have occurred; retrying the same key resolves its receipt without resending immediate work.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "description": "The active source selects bearer or HMAC authentication. JSON is limited to one uncompressed object, 1 MiB, depth 64 and 65,536 values. A keyed receipt lookup precedes CEL so duplicates retain the original IDs and delivery mode after configuration changes. Source quota defaults to 60 requests per minute, including authentication failures."
+      }
+    },
+    "/v1/manage/{operation}": {
+      "post": {
+        "operationId": "manage",
+        "description": "Shared command route. Concrete operation paths below carry exact schemas. Expected revision compares latest_revision for config_put and active_revision for activate, rollback and replay.",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "operation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Operation"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManagementRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized operation result; secret values are never returned. Result shapes may be shared by multiple operations.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ConfigGetResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ConfigPutResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ConfigActivateResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ConfigRollbackResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PreviewResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/EventsListResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/EventsGetResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/EventsReplayResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeliveriesListResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeliveriesGetResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DeliveriesRetryResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SourcesListResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HealthResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MonitorResult"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Expected revision does not match current revision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Required original or delivery payload has expired or was never stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-operation-schemas": {
+          "config_get": {
+            "action": "config.read",
+            "request": {
+              "$ref": "#/components/schemas/ConfigGetRequest"
+            },
+            "result": {
+              "$ref": "#/components/schemas/ConfigGetResult"
+            }
+          },
+          "config_put": {
+            "action": "config.write",
+            "request": {
+              "$ref": "#/components/schemas/ConfigPutRequest"
+            },
+            "result": {
+              "$ref": "#/components/schemas/ConfigPutResult"
+            }
+          },
+          "config_activate": {
+            "action": "config.activate",
+            "request": {
+              "$ref": "#/components/schemas/ConfigActivateRequest"
+            },
+            "result": {
+              "$ref": "#/components/schemas/ConfigActivateResult"
+            }
+          },
+          "config_rollback": {
+            "action": "config.activate",
+            "request": {
+              "$ref": "#/components/schemas/ConfigRollbackRequest"
+            },
+            "result": {
+              "$ref": "#/components/schemas/ConfigRollbackResult"
+            }
+          },
+          "preview": {
+            "action": "preview",
+            "request": {
+              "$ref": "#/components/schemas/PreviewRequest"
+            },
+            "result": {
+              "$ref": "#/components/schemas/PreviewResult"
+            }
+          },
+          "events_list": {
+            "action": "events.read",
+            "request": {
+              "$ref": "#/components/schemas/EventsListRequest"
+            },
+            "result": {
+              "$ref": "#/components/schemas/EventsListResult"
+            }
+          },
+          "events_get": {
+            "action": "events.read",
+            "request": {
+              "$ref": "#/components/schemas/EventsGetRequest"
+            },
+            "result": {
+              "$ref": "#/components/schemas/EventsGetResult"
+            }
+          },
+          "events_replay": {
+            "action": "events.replay",
+            "request": {
+              "$ref": "#/components/schemas/EventsReplayRequest"
+            },
+            "result": {
+              "$ref": "#/components/schemas/EventsReplayResult"
+            }
+          },
+          "deliveries_list": {
+            "action": "deliveries.read",
+            "request": {
+              "$ref": "#/components/schemas/DeliveriesListRequest"
+            },
+            "result": {
+              "$ref": "#/components/schemas/DeliveriesListResult"
+            }
+          },
+          "deliveries_get": {
+            "action": "deliveries.read",
+            "request": {
+              "$ref": "#/components/schemas/DeliveriesGetRequest"
+            },
+            "result": {
+              "$ref": "#/components/schemas/DeliveriesGetResult"
+            }
+          },
+          "deliveries_retry": {
+            "action": "deliveries.retry",
+            "request": {
+              "$ref": "#/components/schemas/DeliveriesRetryRequest"
+            },
+            "result": {
+              "$ref": "#/components/schemas/DeliveriesRetryResult"
+            }
+          },
+          "sources_list": {
+            "action": "",
+            "request": {
+              "$ref": "#/components/schemas/SourcesListRequest"
+            },
+            "result": {
+              "$ref": "#/components/schemas/SourcesListResult"
+            }
+          },
+          "health": {
+            "action": "",
+            "request": {
+              "$ref": "#/components/schemas/HealthRequest"
+            },
+            "result": {
+              "$ref": "#/components/schemas/HealthResult"
+            }
+          },
+          "monitor": {
+            "action": "deliveries.read",
+            "request": {
+              "$ref": "#/components/schemas/MonitorRequest"
+            },
+            "result": {
+              "$ref": "#/components/schemas/MonitorResult"
+            }
+          }
+        }
+      }
+    },
+    "/mcp": {
+      "post": {
+        "operationId": "mcp",
+        "description": "Authenticated MCP transport. tools/list exposes permitted tools; tools/call uses Operation names and ManagementRequest arguments. Every invocation repeats source/action authorization. MCP protocol envelopes follow its negotiated version.",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "MCP protocol response; tool errors include stable error code and isError=true."
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/manage/config_get": {
+      "post": {
+        "operationId": "config_get",
+        "description": "Read active configuration and snapshot pointers",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigGetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized operation result; payloads appear only in explicitly synthetic preview output. Secret values are never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigGetResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Management400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Management401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Management403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Management404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Management409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Management410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Management413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Management422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Management503"
+          }
+        },
+        "x-required-action": "config.read"
+      }
+    },
+    "/v1/manage/config_put": {
+      "post": {
+        "operationId": "config_put",
+        "description": "Validate and save an immutable draft with CAS on latest_revision",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigPutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized operation result; payloads appear only in explicitly synthetic preview output. Secret values are never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigPutResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Management400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Management401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Management403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Management404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Management409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Management410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Management413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Management422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Management503"
+          }
+        },
+        "x-required-action": "config.write"
+      }
+    },
+    "/v1/manage/config_activate": {
+      "post": {
+        "operationId": "config_activate",
+        "description": "Validate and activate the current draft with CAS on active_revision",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigActivateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized operation result; payloads appear only in explicitly synthetic preview output. Secret values are never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigActivateResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Management400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Management401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Management403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Management404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Management409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Management410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Management413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Management422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Management503"
+          }
+        },
+        "x-required-action": "config.activate"
+      }
+    },
+    "/v1/manage/config_rollback": {
+      "post": {
+        "operationId": "config_rollback",
+        "description": "Create a new activation selecting retained configuration",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigRollbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized operation result; payloads appear only in explicitly synthetic preview output. Secret values are never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigRollbackResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Management400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Management401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Management403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Management404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Management409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Management410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Management413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Management422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Management503"
+          }
+        },
+        "x-required-action": "config.activate"
+      }
+    },
+    "/v1/manage/preview": {
+      "post": {
+        "operationId": "preview",
+        "description": "Evaluate explicitly synthetic input without storing, queuing or sending",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized operation result; payloads appear only in explicitly synthetic preview output. Secret values are never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Management400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Management401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Management403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Management404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Management409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Management410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Management413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Management422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Management503"
+          }
+        },
+        "x-required-action": "preview"
+      }
+    },
+    "/v1/manage/events_list": {
+      "post": {
+        "operationId": "events_list",
+        "description": "List bounded source-scoped event metadata",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventsListRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized operation result; payloads appear only in explicitly synthetic preview output. Secret values are never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventsListResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Management400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Management401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Management403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Management404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Management409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Management410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Management413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Management422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Management503"
+          }
+        },
+        "x-required-action": "events.read"
+      }
+    },
+    "/v1/manage/events_get": {
+      "post": {
+        "operationId": "events_get",
+        "description": "Read event metadata without original bytes",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventsGetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized operation result; payloads appear only in explicitly synthetic preview output. Secret values are never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventsGetResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Management400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Management401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Management403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Management404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Management409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Management410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Management413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Management422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Management503"
+          }
+        },
+        "x-required-action": "events.read"
+      }
+    },
+    "/v1/manage/events_replay": {
+      "post": {
+        "operationId": "events_replay",
+        "description": "Replay retained original into new lineage using an explicit configuration revision and request key",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventsReplayRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized operation result; payloads appear only in explicitly synthetic preview output. Secret values are never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventsReplayResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Management400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Management401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Management403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Management404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Management409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Management410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Management413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Management422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Management503"
+          }
+        },
+        "x-required-action": "events.replay"
+      }
+    },
+    "/v1/manage/deliveries_list": {
+      "post": {
+        "operationId": "deliveries_list",
+        "description": "List bounded source-scoped delivery status without bodies or credentials",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveriesListRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized operation result; payloads appear only in explicitly synthetic preview output. Secret values are never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveriesListResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Management400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Management401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Management403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Management404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Management409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Management410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Management413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Management422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Management503"
+          }
+        },
+        "x-required-action": "deliveries.read"
+      }
+    },
+    "/v1/manage/deliveries_get": {
+      "post": {
+        "operationId": "deliveries_get",
+        "description": "Read safe delivery status and frozen revision IDs",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveriesGetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized operation result; payloads appear only in explicitly synthetic preview output. Secret values are never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveriesGetResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Management400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Management401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Management403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Management404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Management409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Management410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Management413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Management422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Management503"
+          }
+        },
+        "x-required-action": "deliveries.read"
+      }
+    },
+    "/v1/manage/deliveries_retry": {
+      "post": {
+        "operationId": "deliveries_retry",
+        "description": "Create a new delivery from a failed frozen payload without extending its expiry",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveriesRetryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized operation result; payloads appear only in explicitly synthetic preview output. Secret values are never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveriesRetryResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Management400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Management401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Management403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Management404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Management409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Management410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Management413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Management422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Management503"
+          }
+        },
+        "x-required-action": "deliveries.retry"
+      }
+    },
+    "/v1/manage/sources_list": {
+      "post": {
+        "operationId": "sources_list",
+        "description": "Discover only source IDs in current unexpired grants",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourcesListRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized operation result; payloads appear only in explicitly synthetic preview output. Secret values are never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcesListResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Management400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Management401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Management403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Management404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Management409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Management410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Management413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Management422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Management503"
+          }
+        },
+        "x-required-action": ""
+      }
+    },
+    "/v1/manage/health": {
+      "post": {
+        "operationId": "health",
+        "description": "Read authenticated management readiness",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HealthRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized operation result; payloads appear only in explicitly synthetic preview output. Secret values are never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Management400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Management401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Management403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Management404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Management409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Management410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Management413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Management422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Management503"
+          }
+        },
+        "x-required-action": ""
+      }
+    },
+    "/.well-known/oauth-protected-resource": {
+      "get": {
+        "operationId": "protectedResourceMetadata",
+        "description": "Public OAuth discovery derived only from the configured resource and issuer URLs. Host cannot change the advertised resource.",
+        "responses": {
+          "200": {
+            "description": "RFC 9728 protected-resource metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "resource",
+                    "authorization_servers",
+                    "scopes_supported"
+                  ],
+                  "properties": {
+                    "resource": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "authorization_servers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "format": "uri"
+                      }
+                    },
+                    "scopes_supported": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "bearer_methods_supported": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/manage/monitor": {
+      "post": {
+        "operationId": "monitor",
+        "description": "Read source-scoped operational metrics; retained-record aggregates and optional process-local ingress counters. No global disk usage or other sources.",
+        "security": [
+          {
+            "managementOAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MonitorRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorized operation result; payloads appear only in explicitly synthetic preview output. Secret values are never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonitorResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Management400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Management401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Management403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Management404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Management409"
+          },
+          "410": {
+            "$ref": "#/components/responses/Management410"
+          },
+          "413": {
+            "$ref": "#/components/responses/Management413"
+          },
+          "422": {
+            "$ref": "#/components/responses/Management422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Management503"
+          }
+        },
+        "x-required-action": "deliveries.read"
+      }
+    },
+    "/livez": {
+      "get": {
+        "operationId": "livez",
+        "description": "Minimal public status only.",
+        "responses": {
+          "200": {
+            "description": "Available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResult"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable"
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "operationId": "readyz",
+        "description": "Minimal public status only.",
+        "responses": {
+          "200": {
+            "description": "Available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResult"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "sourceBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The active source must select bearer mode. Uses its immutable server-provisioned source secret, 16\u20134096 bytes; comparison is constant-time."
+      },
+      "sourceHMAC": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Webhook-Signature",
+        "description": "HMAC mode only. Exactly one sha256=<64 hex digits> header. HMAC-SHA256 with the source secret (32\u20134096 bytes) over UTF-8 bytes: WebhookControl/v1\\n{source_id}\\n{Idempotency-Key}\\n{X-Webhook-Timestamp}\\n{raw body}. Each \\n means one LF; braces are substitutions. Body whitespace is signed; no extra newline is appended. Source, key and canonical timestamp are signed. Comparisons are constant-time."
+      },
+      "managementOAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "OAuth access token",
+        "description": "RS256 JWT access token with protected header typ=at+jwt, pinned external iss, aud equal to the configured /mcp resource URL for both REST and MCP, nonempty sub, future exp, and scope webhook-control.manage. ID tokens are rejected. HTTP issuers require an explicit loopback-only test option."
+      },
+      "sourceTimestamp": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Webhook-Timestamp",
+        "description": "Required with sourceHMAC. Canonical decimal Unix seconds, within five minutes of the injected current clock after the body is read. No leading zeroes, plus sign or repeated header."
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Safe error; includes no secrets or payload bytes.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Management400": {
+        "description": "Malformed input, unknown fields, missing expected revision or invalid cursor.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Management401": {
+        "description": "Missing or invalid access token; WWW-Authenticate advertises pinned protected-resource metadata.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Management403": {
+        "description": "Scope, grant, origin, destination, secret-name or retention authority denied.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Management404": {
+        "description": "Resource does not exist in the requested source.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Management409": {
+        "description": "Stale revision, immutable resource conflict, invalid retry state or request-key conflict.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Management410": {
+        "description": "Required original or delivery payload was never stored or has expired.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Management413": {
+        "description": "Management request exceeds 2 MiB.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Management422": {
+        "description": "Invalid configuration, unavailable or wrong-purpose credential, evaluation failed, or selected zero-delivery-TTL replay requires immediate sends.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Management503": {
+        "description": "Storage or configuration unavailable; retry the same request key when acknowledgement is uncertain.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Retention": {
+        "type": "integer",
+        "format": "int64",
+        "minimum": -1,
+        "description": "Seconds from acceptance. -1 indefinite, 0 never persist payload, positive expires. Delivery 0 requires immediate mode without durable retries."
+      },
+      "RetentionLimit": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "max_seconds",
+          "allow_indefinite"
+        ],
+        "properties": {
+          "max_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "allow_indefinite": {
+            "type": "boolean"
+          }
+        },
+        "description": "Grant ceiling for original or delivery TTL: permit 0 through max_seconds; -1 requires allow_indefinite=true. Missing limits permit only 0."
+      },
+      "Acceptance": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/DurableAcceptance"
+          },
+          {
+            "$ref": "#/components/schemas/ImmediateAcceptance"
+          }
+        ]
+      },
+      "Operation": {
+        "type": "string",
+        "enum": [
+          "config_get",
+          "config_put",
+          "config_activate",
+          "config_rollback",
+          "preview",
+          "events_list",
+          "events_get",
+          "events_replay",
+          "deliveries_list",
+          "deliveries_get",
+          "deliveries_retry",
+          "monitor",
+          "sources_list",
+          "health"
+        ]
+      },
+      "ManagementRequest": {
+        "description": "Select the operation-specific envelope from its concrete route. Envelope shapes may be shared by multiple operations. Identity and administrator authority are never caller JSON fields.",
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ConfigGetRequest"
+          },
+          {
+            "$ref": "#/components/schemas/ConfigPutRequest"
+          },
+          {
+            "$ref": "#/components/schemas/ConfigActivateRequest"
+          },
+          {
+            "$ref": "#/components/schemas/ConfigRollbackRequest"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewRequest"
+          },
+          {
+            "$ref": "#/components/schemas/EventsListRequest"
+          },
+          {
+            "$ref": "#/components/schemas/EventsGetRequest"
+          },
+          {
+            "$ref": "#/components/schemas/EventsReplayRequest"
+          },
+          {
+            "$ref": "#/components/schemas/DeliveriesListRequest"
+          },
+          {
+            "$ref": "#/components/schemas/DeliveriesGetRequest"
+          },
+          {
+            "$ref": "#/components/schemas/DeliveriesRetryRequest"
+          },
+          {
+            "$ref": "#/components/schemas/SourcesListRequest"
+          },
+          {
+            "$ref": "#/components/schemas/HealthRequest"
+          },
+          {
+            "$ref": "#/components/schemas/MonitorRequest"
+          }
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ID": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9._-]{1,128}$"
+      },
+      "IngressEvent": {
+        "type": "object",
+        "additionalProperties": true,
+        "maxProperties": 65535,
+        "description": "One arbitrary incoming object. Maximum raw JSON body 1,048,576 bytes, nesting depth 64 and 65,536 total JSON values. Integers within int64 preserve precision; other finite numbers use double precision. CEL sees this as event.",
+        "examples": [
+          {
+            "sender": "synthetic-sender",
+            "message": "synthetic notice",
+            "contact": "synthetic private value"
+          }
+        ]
+      },
+      "DurableAcceptance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event_id",
+          "delivery_ids",
+          "duplicate",
+          "mode"
+        ],
+        "properties": {
+          "event_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "delivery_ids": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
+          "duplicate": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string",
+            "const": "durable"
+          }
+        }
+      },
+      "ImmediateAcceptance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "event_id",
+          "delivery_ids",
+          "duplicate",
+          "mode",
+          "immediate_results"
+        ],
+        "properties": {
+          "event_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "delivery_ids": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
+          "duplicate": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string",
+            "const": "immediate"
+          },
+          "immediate_results": {
+            "type": "array",
+            "maxItems": 128,
+            "items": {
+              "$ref": "#/components/schemas/ImmediateResult"
+            }
+          }
+        }
+      },
+      "ImmediateResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "delivery_id",
+          "state"
+        ],
+        "properties": {
+          "delivery_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "http_accepted",
+              "failed",
+              "unknown"
+            ]
+          },
+          "status_code": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          },
+          "error_code": {
+            "type": "string",
+            "enum": [
+              "network_error",
+              "timeout",
+              "http_retryable",
+              "http_permanent",
+              "policy_denied",
+              "invalid_payload",
+              "canceled"
+            ]
+          }
+        },
+        "description": "Metadata only. Unknown includes a crashed or ambiguous attempt, missing metadata, or an unattempted destination after the total budget elapsed. None is automatically resent."
+      },
+      "ConfigGetRequest": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source_id",
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "ConfigGetResult": {
+        "type": "object",
+        "properties": {
+          "head": {
+            "type": "object",
+            "properties": {
+              "latest_revision": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "draft_revision": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "active_revision": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "latest_revision",
+              "draft_revision",
+              "active_revision"
+            ],
+            "additionalProperties": false
+          },
+          "snapshot": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "properties": {
+              "revision": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "selected_from": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "configuration": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "revision": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "auth": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string"
+                          },
+                          "secret": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "version": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "version"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "secret"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "original_ttl": {
+                        "type": "integer"
+                      },
+                      "delivery_ttl": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "revision",
+                      "name",
+                      "enabled",
+                      "auth",
+                      "original_ttl",
+                      "delivery_ttl"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "rules": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "source_id": {
+                          "type": "string"
+                        },
+                        "expression": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "revision",
+                        "source_id",
+                        "expression"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "templates": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "source_id": {
+                          "type": "string"
+                        },
+                        "fields": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "revision",
+                        "source_id",
+                        "fields"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "routes": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "source_id": {
+                          "type": "string"
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "rules": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "revision"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "template": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "revision"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "transporters": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "revision"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "revision",
+                        "source_id",
+                        "enabled",
+                        "rules",
+                        "template",
+                        "transporters"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "transporters": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "source_id": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "type": "string"
+                        },
+                        "http": {
+                          "type": "object",
+                          "properties": {
+                            "url": {
+                              "type": "string"
+                            },
+                            "headers": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "secret_headers": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "version"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "timeout_seconds": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "url",
+                            "timeout_seconds"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "revision",
+                        "source_id",
+                        "kind",
+                        "http"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "source",
+                  "rules",
+                  "templates",
+                  "routes",
+                  "transporters"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "revision",
+              "configuration"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "head"
+        ],
+        "additionalProperties": false
+      },
+      "ConfigPutRequest": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "expected_revision": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "minimum": 0
+          },
+          "input": {
+            "type": "object",
+            "properties": {
+              "configuration": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "revision": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "auth": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string"
+                          },
+                          "secret": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "version": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "version"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "secret"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "original_ttl": {
+                        "type": "integer"
+                      },
+                      "delivery_ttl": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "revision",
+                      "name",
+                      "enabled",
+                      "auth",
+                      "original_ttl",
+                      "delivery_ttl"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "rules": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "source_id": {
+                          "type": "string"
+                        },
+                        "expression": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "revision",
+                        "source_id",
+                        "expression"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "templates": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "source_id": {
+                          "type": "string"
+                        },
+                        "fields": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "revision",
+                        "source_id",
+                        "fields"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "routes": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "source_id": {
+                          "type": "string"
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "rules": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "revision"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "template": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "revision"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "transporters": {
+                          "type": [
+                            "null",
+                            "array"
+                          ],
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "revision"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "revision",
+                        "source_id",
+                        "enabled",
+                        "rules",
+                        "template",
+                        "transporters"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "transporters": {
+                    "type": [
+                      "null",
+                      "array"
+                    ],
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "source_id": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "type": "string"
+                        },
+                        "http": {
+                          "type": "object",
+                          "properties": {
+                            "url": {
+                              "type": "string"
+                            },
+                            "headers": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "secret_headers": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "version": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "version"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "timeout_seconds": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "url",
+                            "timeout_seconds"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "revision",
+                        "source_id",
+                        "kind",
+                        "http"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "source",
+                  "rules",
+                  "templates",
+                  "routes",
+                  "transporters"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "configuration"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source_id",
+          "input",
+          "expected_revision"
+        ],
+        "additionalProperties": false
+      },
+      "ConfigPutResult": {
+        "$ref": "#/components/schemas/ConfigGetResult"
+      },
+      "ConfigActivateRequest": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "expected_revision": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "minimum": 0
+          },
+          "input": {
+            "type": "object",
+            "properties": {
+              "draft_revision": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "draft_revision"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source_id",
+          "input",
+          "expected_revision"
+        ],
+        "additionalProperties": false
+      },
+      "ConfigActivateResult": {
+        "$ref": "#/components/schemas/ConfigGetResult"
+      },
+      "ConfigRollbackRequest": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "expected_revision": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "minimum": 0
+          },
+          "input": {
+            "type": "object",
+            "properties": {
+              "target_revision": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "target_revision"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source_id",
+          "input",
+          "expected_revision"
+        ],
+        "additionalProperties": false
+      },
+      "ConfigRollbackResult": {
+        "$ref": "#/components/schemas/ConfigGetResult"
+      },
+      "PreviewRequest": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object",
+            "properties": {
+              "revision": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "synthetic": {
+                "type": "boolean"
+              },
+              "event": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "revision",
+              "synthetic",
+              "event"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source_id",
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "PreviewResult": {
+        "type": "object",
+        "properties": {
+          "renders": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "route": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "revision"
+                  ],
+                  "additionalProperties": false
+                },
+                "transporter": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "revision"
+                  ],
+                  "additionalProperties": false
+                },
+                "body": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "route",
+                "transporter",
+                "body"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "renders"
+        ],
+        "additionalProperties": false
+      },
+      "EventsListRequest": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object",
+            "properties": {
+              "limit": {
+                "type": "integer"
+              },
+              "cursor": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source_id",
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "EventsListResult": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                },
+                "source_revision": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "accepted_at": {
+                  "type": "string"
+                },
+                "original_ttl": {
+                  "type": "integer"
+                },
+                "original_expires_at": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "replay_of": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "source_id",
+                "source_revision",
+                "accepted_at",
+                "original_ttl"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "EventsGetRequest": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object",
+            "properties": {
+              "event_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "event_id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source_id",
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "EventsGetResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source_id": {
+            "type": "string"
+          },
+          "source_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "accepted_at": {
+            "type": "string"
+          },
+          "original_ttl": {
+            "type": "integer"
+          },
+          "original_expires_at": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "replay_of": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source_id",
+          "source_revision",
+          "accepted_at",
+          "original_ttl"
+        ],
+        "additionalProperties": false
+      },
+      "EventsReplayRequest": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "expected_revision": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "minimum": 0
+          },
+          "input": {
+            "type": "object",
+            "properties": {
+              "event_id": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "idempotency_key": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "event_id",
+              "revision",
+              "idempotency_key"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source_id",
+          "input",
+          "expected_revision"
+        ],
+        "additionalProperties": false
+      },
+      "EventsReplayResult": {
+        "type": "object",
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "delivery_ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "duplicate": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "delivery_ids",
+          "duplicate"
+        ],
+        "additionalProperties": false
+      },
+      "DeliveriesListRequest": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object",
+            "properties": {
+              "event_id": {
+                "type": "string"
+              },
+              "limit": {
+                "type": "integer"
+              },
+              "cursor": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source_id",
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "DeliveriesListResult": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "event_id": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                },
+                "created_at": {
+                  "type": "string"
+                },
+                "ttl": {
+                  "type": "integer"
+                },
+                "expires_at": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "state": {
+                  "type": "string"
+                },
+                "attempt": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "next_attempt_at": {
+                  "type": "string"
+                },
+                "last_error_code": {
+                  "type": "string"
+                },
+                "http_status_code": {
+                  "type": "integer"
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "revision"
+                  ],
+                  "additionalProperties": false
+                },
+                "route": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "revision"
+                  ],
+                  "additionalProperties": false
+                },
+                "rules": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "revision": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "revision"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "template": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "revision"
+                  ],
+                  "additionalProperties": false
+                },
+                "transporter": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "revision"
+                  ],
+                  "additionalProperties": false
+                },
+                "retry_of": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "event_id",
+                "source_id",
+                "created_at",
+                "ttl",
+                "state",
+                "attempt",
+                "next_attempt_at",
+                "source",
+                "route",
+                "rules",
+                "template",
+                "transporter"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "DeliveriesGetRequest": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object",
+            "properties": {
+              "delivery_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "delivery_id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source_id",
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "DeliveriesGetResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "source_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "ttl": {
+            "type": "integer"
+          },
+          "expires_at": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "state": {
+            "type": "string"
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "next_attempt_at": {
+            "type": "string"
+          },
+          "last_error_code": {
+            "type": "string"
+          },
+          "http_status_code": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "id",
+              "revision"
+            ],
+            "additionalProperties": false
+          },
+          "route": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "id",
+              "revision"
+            ],
+            "additionalProperties": false
+          },
+          "rules": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "id",
+                "revision"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "template": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "id",
+              "revision"
+            ],
+            "additionalProperties": false
+          },
+          "transporter": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "id",
+              "revision"
+            ],
+            "additionalProperties": false
+          },
+          "retry_of": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "event_id",
+          "source_id",
+          "created_at",
+          "ttl",
+          "state",
+          "attempt",
+          "next_attempt_at",
+          "source",
+          "route",
+          "rules",
+          "template",
+          "transporter"
+        ],
+        "additionalProperties": false
+      },
+      "DeliveriesRetryRequest": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object",
+            "properties": {
+              "delivery_id": {
+                "type": "string"
+              },
+              "idempotency_key": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "delivery_id",
+              "idempotency_key"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source_id",
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "DeliveriesRetryResult": {
+        "$ref": "#/components/schemas/EventsReplayResult"
+      },
+      "SourcesListRequest": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "SourcesListResult": {
+        "type": "object",
+        "properties": {
+          "sources": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "additionalProperties": false
+      },
+      "HealthRequest": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "HealthResult": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "MonitorRequest": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source_id",
+          "input"
+        ],
+        "additionalProperties": false
+      },
+      "MonitorResult": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "retained_events": {
+            "type": "integer"
+          },
+          "deliveries": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "oldest_queued_age_seconds": {
+            "type": "number"
+          },
+          "retry_attempts": {
+            "type": "integer"
+          },
+          "ciphertext_bytes": {
+            "type": "integer"
+          },
+          "first_dispatch_count": {
+            "type": "integer"
+          },
+          "first_dispatch_sum_seconds": {
+            "type": "number"
+          },
+          "first_dispatch_max_seconds": {
+            "type": "number"
+          },
+          "ingress": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "properties": {
+              "accepted_events": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "duplicate_requests": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "rejected_requests": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "accepted_events",
+              "duplicate_requests",
+              "rejected_requests"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source_id",
+          "retained_events",
+          "deliveries",
+          "oldest_queued_age_seconds",
+          "retry_attempts",
+          "ciphertext_bytes",
+          "first_dispatch_count",
+          "first_dispatch_sum_seconds",
+          "first_dispatch_max_seconds"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}
