@@ -1,0 +1,33 @@
+{{- $items := slice -}}
+{{- range .Site.RegularPages.ByDate.Reverse -}}
+  {{- $page := . -}}
+  {{- with .OutputFormats.Get "Markdown" -}}
+    {{- $item := dict
+      "title" $page.Title
+      "description" ($page.Description | default ($page.Summary | plainify | truncate 200))
+      "url" $page.Permalink
+      "markdown_url" .Permalink
+      "section" $page.Section
+      "author" ($page.Params.author | default $page.Site.Params.author.name)
+      "language" $page.Language.Lang
+      "tags" ($page.Params.tags | default slice)
+      "categories" ($page.Params.categories | default slice)
+      "word_count" $page.WordCount
+      "reading_time_minutes" $page.ReadingTime
+    -}}
+    {{- if not $page.PublishDate.IsZero -}}
+      {{- $item = merge $item (dict "published_at" ($page.PublishDate.Format "2006-01-02T15:04:05Z07:00")) -}}
+    {{- end -}}
+    {{- if not $page.Lastmod.IsZero -}}
+      {{- $item = merge $item (dict "modified_at" ($page.Lastmod.Format "2006-01-02T15:04:05Z07:00")) -}}
+    {{- end -}}
+    {{- with $page.Params.repo -}}
+      {{- $item = merge $item (dict "repository_url" .) -}}
+    {{- end -}}
+    {{- with $page.Params.link -}}
+      {{- $item = merge $item (dict "project_url" .) -}}
+    {{- end -}}
+    {{- $items = $items | append $item -}}
+  {{- end -}}
+{{- end -}}
+{{- dict "version" "1" "site" (dict "title" .Site.Title "url" .Site.BaseURL) "count" (len $items) "items" $items | jsonify -}}

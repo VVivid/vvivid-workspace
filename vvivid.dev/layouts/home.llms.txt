@@ -18,7 +18,10 @@ Ou David's public portfolio and technical writing. Pages are available as HTML a
 ## Access and discovery
 
 - [Access information]({{ "auth.md" | absURL }}): Anonymous public reading; no registration or API credentials.
+- [Content API]({{ "api/content.json" | absURL }}): Published page metadata as JSON, for local search and filtering.
+- [API documentation]({{ "api/" | absURL }}), [OpenAPI description]({{ "api/openapi.json" | absURL }}), and [API catalog]({{ ".well-known/api-catalog" | absURL }}).
+- [Public skills]({{ ".well-known/agent-skills/index.json" | absURL }}): Instructions for finding, reading, and citing articles, with artifact digests.
 - [RSS feed]({{ "index.xml" | absURL }}): Published posts.
 - [Sitemap]({{ "sitemap.xml" | absURL }}): Published page URLs.
 
-Request `Accept: text/markdown` on a page URL, or use its linked `index.md` resource. Ordinary browser requests receive HTML. API catalog and OAuth/OIDC discovery are not applicable: this static portfolio does not expose an application API or authorization server.
+Request `Accept: text/markdown` on a page URL, or use its linked `index.md` resource. Ordinary browser requests receive HTML. The content API accepts anonymous GET and HEAD; the site has no write endpoint, hosted MCP server, or authorization server. OAuth/OIDC discovery and client registration are not applicable.

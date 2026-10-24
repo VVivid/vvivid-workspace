@@ -22,8 +22,35 @@ enableRobotsTXT = true
   baseName = "auth"
   isPlainText = true
 
+[outputFormats.ContentAPI]
+  mediaType = "application/json"
+  path = "api"
+  baseName = "content"
+  isPlainText = true
+
+[outputFormats.OpenAPI]
+  mediaType = "application/json"
+  path = "api"
+  baseName = "openapi"
+  isPlainText = true
+
+[mediaTypes."application/linkset+json"]
+  suffixes = [""]
+
+[outputFormats.APICatalog]
+  mediaType = "application/linkset+json"
+  path = ".well-known"
+  baseName = "api-catalog"
+  isPlainText = true
+
+[outputFormats.AgentSkills]
+  mediaType = "application/json"
+  path = ".well-known/agent-skills"
+  baseName = "index"
+  isPlainText = true
+
 [outputs]
-  home = ["HTML", "RSS", "Markdown", "LLMS", "Auth"]
+  home = ["HTML", "RSS", "Markdown", "LLMS", "Auth", "ContentAPI", "OpenAPI", "APICatalog", "AgentSkills"]
   page = ["HTML", "Markdown"]
   section = ["HTML", "RSS", "Markdown"]
   taxonomy = ["HTML", "RSS", "Markdown"]
