@@ -1,0 +1,4 @@
+bin
+*.private.json
+.git
+.development
