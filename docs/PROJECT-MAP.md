@@ -1,0 +1,24 @@
+# Project map
+
+Git is managed at the repository root. Projects have independent modules, dependencies, build contexts, runtime state, and releases. Read applicable documentation and consumers for the task. See [agent instructions](../AGENTS.md) and [the development guide](../DEVELOPMENT.md).
+
+| Project | Source and contracts | Build and checks | Runtime and operations |
+| --- | --- | --- | --- |
+| [AgentShoppingList](../AgentShoppingList/README.md) | `cmd/`, `internal/`, `web/`; [instructions](../AgentShoppingList/AGENTS.md), [requirements](../AgentShoppingList/REQUIREMENTS.md), [specification](../AgentShoppingList/SPEC.md), [architecture](../AgentShoppingList/ARCHITECTURE.md), [domain](../AgentShoppingList/docs/DOMAIN.md) | [Makefile](../AgentShoppingList/Makefile), [package.json](../AgentShoppingList/package.json), [CI](../.github/workflows/shopping.yml); root `make shopping-check shopping-build`, `make shopping-test` | [Runbook](../AgentShoppingList/docs/RUNBOOK.md), [authentication](../AgentShoppingList/docs/AUTH.md), `deploy/`; `reference/ui-demo/` is a visual prototype, not production UI |
+| [GoogleHealthMCP](../GoogleHealthMCP/README.md) | `cmd/`, `internal/collector/`; [architecture](../GoogleHealthMCP/ARCHITECTURE.md) | [Makefile](../GoogleHealthMCP/Makefile), [CI](../.github/workflows/google-health.yml); root `make google-health-check google-health-build`, `make google-health-test` | `deploy/`, [Compose](../GoogleHealthMCP/compose.yaml), `site/`; authorization, import, synchronization, and status commands |
+| [SSHMCP](../SSHMCP/README.md) | `cmd/sshmcp-gateway/`, `cmd/sshmcp-runner/`, `internal/`; [changelog](../SSHMCP/CHANGELOG.md) | [Makefile](../SSHMCP/Makefile), [CI](../.github/workflows/sshmcp.yml); root `make sshmcp-check sshmcp-build`, `make sshmcp-test` | `lab/`, `tools/`, `tests/`, `examples/`; [runner](../SSHMCP/lab/RUNNER.md), [MCP lab](../SSHMCP/lab/MCP.md). Lab lifecycle and integration commands may change VMs and services; inspect their scope before use |
+| [XTrace example](../examples/xtrace-example/README.md) | Go application, `traefik-plugin/`, `nginx/`; README explains causal tracing and limitations | [Makefile](../examples/xtrace-example/Makefile), [CI](../.github/workflows/xtrace-example.yml); root `make xtrace-check xtrace-build`, `make xtrace-test` | [Compose](../examples/xtrace-example/compose.yaml); local demonstration with a separate Go module for the Traefik plugin |
+
+## Shared entry points and boundaries
+
+- [Root Makefile](../Makefile): `make check`, `make test`, and `make build` delegate across projects. Select project targets for isolated changes and inspect prerequisites before broader checks.
+- [Development guide](../DEVELOPMENT.md): build conventions, independent versions, directory-prefixed release tags, and CI behavior.
+- [Migration report](../MIGRATION.md): historical import and publication evidence; moving source does not deploy it.
+- [Development workflow](DEVELOPMENT-WORKFLOW.md): checkpoint agreement, local records, validation, and cleanup.
+- [Repository skill](../.agents/skills/build-translate-review/SKILL.md): coding-stage instructions and agent settings.
+- [Modern Go Guidelines](../.agents/skills/use-modern-go/SKILL.md): version-aware Go guidance and portable wrappers; [provenance](../.agents/skills/use-modern-go/references/UPSTREAM.md) records the source and CLI pin.
+- [Cloud development](CLOUD-DEVELOPMENT.md): repository skills, toolchains, download/cache requirements, and Codex Cloud validation boundaries.
+
+AgentShoppingList serves its own MCP endpoint; shopping tools do not route through SSHMCP. GoogleHealthMCP's proposed SQL interface through SSHMCP is future work, not an implemented dependency. Shared infrastructure references do not establish shared source packages or deployments.
+
+Active task records live locally under each project's `.development/<task>/` and are absent from fresh clones. Repository-wide tasks use root `.development/<task>/`. These are never published navigation targets. Update this map and the compact root map when project boundaries or entry points change.

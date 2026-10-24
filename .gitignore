@@ -14,3 +14,6 @@ node_modules/
 # Default Go build output for the XTrace demo.
 /examples/xtrace-example/xtrace-example
 /examples/xtrace-example/bin/
+
+# Temporary development plans and handoffs at any project depth.
+.development/

@@ -11,3 +11,5 @@ By **David Ou**.
 Explore the folders. Each project has its own README.
 
 [Development guide](DEVELOPMENT.md)
+
+[Agent instructions](AGENTS.md) · [Project map](docs/PROJECT-MAP.md)

@@ -6,14 +6,14 @@ Build the agent-managed mobile shopping app described in REQUIREMENTS.md and SPE
 
 Use Go, html/template, Tailwind CSS, minimal JavaScript, and SQLite. Serve website, API, and MCP in one application. Reuse existing browser identity and Traefik. The user-approved shared MCPGateway project may front the shopping MCP endpoint using the documented signed identity contract. Keep shopping tools and domain authorization inside this application; never route them through SSHMCP execution.
 
-## Resume protocol
+## Development and resume
 
-- First read RESUME.md, CHECKPOINTS.md, REQUIREMENTS.md, SPEC.md, ARCHITECTURE.md, and docs/KEYCLOAK.md.
-- Inspect actual files and Git state, if present, before acting. Documentation is not runtime proof.
-- Continue the first incomplete checkpoint; preserve existing work. Do not recreate the project, reset data, or restart completed work merely because this is a new chat.
-- At each meaningful pause, update CHECKPOINTS.md and RESUME.md with changes, actual validation, failures, next action, and commit identifiers if available.
-- Keep checkpoints in progress until their exit criteria pass. Do not turn inspected cases into claims of executed tests.
-- Follow applicable session and skill instructions for implementation, Go guidance, and independent review. Do not claim independent review without an actual independent reviewer.
+Follow the [root instructions](../AGENTS.md), [shared workflow](../docs/DEVELOPMENT-WORKFLOW.md), and repository-local skill. These instructions add shopping-specific domain constraints.
+
+- Read REQUIREMENTS.md, SPEC.md, ARCHITECTURE.md, docs/DOMAIN.md, and relevant identity/operations docs.
+- Inspect actual files and Git state before acting; documentation is not runtime proof.
+- Resume matching ignored `.development/<task>/RESUME.md` and CHECKPOINTS.md records from the first incomplete agreed checkpoint. Imported unfinished handoffs remain local under `.development/imported-handoff/`; fresh clones do not contain them.
+- Preserve existing work and data. Record pauses and validation locally; never commit task records. Delete only completed task records after final handoff.
 
 ## Implementation boundaries
 
