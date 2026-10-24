@@ -52,6 +52,7 @@ func TestOfficialMCPClientThroughGateway(t *testing.T) {
 			seen := make(chan http.Header, 16)
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				seen <- r.Header.Clone()
+				writeBackendInformationalResponses(w)
 				transport.ServeHTTP(w, r)
 			}))
 			defer upstream.Close()

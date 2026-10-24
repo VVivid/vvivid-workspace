@@ -10,7 +10,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/http/httputil"
+	"net/textproto"
 	"net/url"
 	"os"
 	"slices"
@@ -157,7 +159,7 @@ func (s *Server) newRouteHandler(route Route, authenticator Authenticator, logge
 			return
 		}
 		start := time.Now()
-		proxy.ServeHTTP(w, r.WithContext(context.WithValue(ctx, tokenKey{}, token)))
+		proxy.ServeHTTP(proxyResponseWriter{w}, r.WithContext(context.WithValue(ctx, tokenKey{}, token)))
 		logger.Info("MCP request", "route", route.Name, "duration", time.Since(start))
 	})
 }
@@ -239,9 +241,38 @@ func newRouteProxy(route Route, logger *slog.Logger) *httputil.ReverseProxy {
 
 type tokenKey struct{}
 
+type proxyResponseWriter struct{ http.ResponseWriter }
+
+func (w proxyResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func (w proxyResponseWriter) WriteHeader(status int) {
+	if status >= 200 {
+		// ReverseProxy clears the writer's headers after each 1xx response.
+		// Restore gateway defaults ahead of final backend values, matching
+		// responses without 1xx while preserving those backend values.
+		if values := w.Header().Values("Cache-Control"); len(values) == 0 || values[0] != "no-store" {
+			w.Header()["Cache-Control"] = append([]string{"no-store"}, values...)
+		}
+		if values := w.Header().Values("X-Content-Type-Options"); len(values) == 0 || values[0] != "nosniff" {
+			w.Header()["X-Content-Type-Options"] = append([]string{"nosniff"}, values...)
+		}
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
 type backendTransport struct{ *http.Transport }
 
 func (t backendTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	// ReverseProxy forwards 1xx before ModifyResponse. Install this trace at
+	// dispatch, after its forwarding hook: WithClientTrace runs new hooks first.
+	// Stateless MCP has no informational metadata; preserve statuses and other
+	// instrumentation hooks, but discard headers before either can observe them.
+	r = r.WithContext(httptrace.WithClientTrace(r.Context(), &httptrace.ClientTrace{
+		Got1xxResponse: func(_ int, header textproto.MIMEHeader) error {
+			clear(header)
+			return nil
+		},
+	}))
 	resp, err := t.Transport.RoundTrip(r)
 	if err != nil {
 		return nil, err

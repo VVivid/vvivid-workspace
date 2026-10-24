@@ -1,17 +1,22 @@
 package gateway
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
+	"net/textproto"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -460,5 +465,222 @@ func TestCoreRejectsAuthenticatorWithoutValidTiming(t *testing.T) {
 	}
 	if f.calls.Load() != 0 {
 		t.Fatal("invalid normalized timing reached backend")
+	}
+}
+
+// Send distinct informational responses with metadata that must stay behind the
+// gateway. Clear the server's header map between responses, just as real
+// backends may send independent hints before their final response.
+func writeBackendInformationalResponses(w http.ResponseWriter) {
+	for _, code := range []int{http.StatusContinue, http.StatusProcessing, http.StatusEarlyHints, http.StatusEarlyHints} {
+		w.Header().Set("Set-Cookie", "private=backend")
+		w.Header().Set("Location", "http://private-backend.example/mcp")
+		w.Header().Set("WWW-Authenticate", `Bearer realm="private-backend"`)
+		w.Header().Set("Access-Control-Allow-Origin", "https://private-backend.example")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Mcp-Session-Id", "private-backend-session")
+		w.Header().Set("Trailer", "Set-Cookie")
+		w.Header().Set("Link", "<http://private-backend.example/assets>; rel=preload")
+		w.Header().Set("X-Backend-Hint", strconv.Itoa(code))
+		w.WriteHeader(code)
+		clear(w.Header())
+	}
+}
+
+func TestProxyDiscardsInformationalMetadata(t *testing.T) {
+	f := newFixture(t)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if string(body) != `{"hints":false}` {
+			writeBackendInformationalResponses(w)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "private")
+		w.Header().Set("X-Content-Type-Options", "backend-option")
+		w.Header().Set("X-Backend-Result", "ok")
+		w.Header().Set("Set-Cookie", "private=final")
+		w.Header().Set("Location", "http://private-backend.example/final")
+		w.Header().Set("WWW-Authenticate", `Bearer realm="private-final"`)
+		w.Header().Set("Access-Control-Allow-Origin", "https://private-backend.example")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Trailer", "Set-Cookie, X-Forwarded-User")
+		w.Write(body)
+		w.Header().Set("Set-Cookie", "private=trailer")
+		w.Header().Set("X-Forwarded-User", "private-trailer-user")
+	}))
+	defer upstream.Close()
+	f.config.Routes[0].Upstream = upstream.URL + "/mcp"
+	server := f.build(t)
+	var gotConn, gotFirstByte, gotInformational atomic.Int32
+	// Reuse one trace across requests: the gateway must compose fresh hooks,
+	// without replacing shared instrumentation or invoking it twice.
+	sharedTrace := &httptrace.ClientTrace{
+		GotConn:              func(httptrace.GotConnInfo) { gotConn.Add(1) },
+		GotFirstResponseByte: func() { gotFirstByte.Add(1) },
+		Got1xxResponse: func(_ int, header textproto.MIMEHeader) error {
+			gotInformational.Add(1)
+			if len(header) != 0 {
+				t.Error("backend informational metadata reached inherited trace")
+			}
+			return nil
+		},
+	}
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server.ServeHTTP(w, r.WithContext(httptrace.WithClientTrace(r.Context(), sharedTrace)))
+	}))
+	defer gateway.Close()
+	token := f.token(t, "rfc9068", "/shopping/mcp", nil)
+	r, err := http.NewRequestWithContext(t.Context(), http.MethodPost, gateway.URL+"/shopping/mcp", strings.NewReader(`{"hints":false}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Host = "gateway.example"
+	r.Header.Set("Authorization", "Bearer "+token)
+	baseline, err := gateway.Client().Do(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, readErr := io.Copy(io.Discard, baseline.Body)
+	baseline.Body.Close()
+	if readErr != nil || baseline.StatusCode != http.StatusOK || baseline.Header.Get("Cache-Control") != "no-store" || baseline.Header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("response without informational headers: %d %+v, %v", baseline.StatusCode, baseline.Header, readErr)
+	}
+	const requests = 8
+	t.Run("concurrent requests", func(t *testing.T) {
+		for i := range requests {
+			t.Run(strconv.Itoa(i), func(t *testing.T) {
+				t.Parallel()
+				var codes []int
+				trace := &httptrace.ClientTrace{Got1xxResponse: func(code int, header textproto.MIMEHeader) error {
+					codes = append(codes, code)
+					for name := range header {
+						if name != "Cache-Control" && name != "X-Content-Type-Options" {
+							t.Errorf("backend informational header %s reached client", name)
+						}
+					}
+					return nil
+				}}
+				body := `{"id":` + strconv.Itoa(i) + `}`
+				r, err := http.NewRequestWithContext(httptrace.WithClientTrace(t.Context(), trace), http.MethodPost, gateway.URL+"/shopping/mcp", strings.NewReader(body))
+				if err != nil {
+					t.Fatal(err)
+				}
+				r.Host = "gateway.example"
+				r.Header.Set("Authorization", "Bearer "+token)
+				resp, err := gateway.Client().Do(r)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer resp.Body.Close()
+				got, err := io.ReadAll(resp.Body)
+				if err != nil || resp.StatusCode != http.StatusOK || string(got) != body {
+					t.Fatalf("final response: %d %q, %v", resp.StatusCode, got, err)
+				}
+				if !slices.Equal(codes, []int{http.StatusContinue, http.StatusProcessing, http.StatusEarlyHints, http.StatusEarlyHints}) {
+					t.Errorf("informational status sequence = %v", codes)
+				}
+				if resp.Header.Get("Content-Type") != "application/json" || resp.Header.Get("X-Backend-Result") != "ok" || !slices.Contains(resp.Header.Values("Cache-Control"), "private") {
+					t.Error("final backend headers changed")
+				}
+				for _, name := range []string{"Cache-Control", "X-Content-Type-Options"} {
+					if !slices.Equal(resp.Header.Values(name), baseline.Header.Values(name)) || resp.Header.Get(name) != baseline.Header.Get(name) {
+						t.Errorf("final %s values = %v, without informational responses = %v", name, resp.Header.Values(name), baseline.Header.Values(name))
+					}
+				}
+				for _, name := range []string{"Set-Cookie", "Location", "WWW-Authenticate", "Access-Control-Allow-Origin", "Access-Control-Allow-Credentials", "Mcp-Session-Id", "Trailer", "Link", "X-Backend-Hint", "X-Forwarded-User"} {
+					if resp.Header.Get(name) != "" {
+						t.Errorf("backend header %s reached final response", name)
+					}
+				}
+				if len(resp.Trailer) != 0 {
+					t.Error("backend trailers reached client")
+				}
+			})
+		}
+	})
+	if gotConn.Load() != requests+1 || gotFirstByte.Load() != requests+1 || gotInformational.Load() != requests*4 {
+		t.Fatalf("trace calls: connections=%d, first bytes=%d, informational=%d", gotConn.Load(), gotFirstByte.Load(), gotInformational.Load())
+	}
+}
+
+func TestProxyPreservesInformationalTraceError(t *testing.T) {
+	f := newFixture(t)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeBackendInformationalResponses(w)
+		w.Write([]byte(`{}`))
+	}))
+	defer upstream.Close()
+	f.config.Routes[0].Upstream = upstream.URL + "/mcp"
+	server := f.build(t)
+	var calls atomic.Int32
+	trace := &httptrace.ClientTrace{Got1xxResponse: func(_ int, header textproto.MIMEHeader) error {
+		calls.Add(1)
+		if len(header) != 0 {
+			t.Error("backend informational metadata reached inherited trace")
+		}
+		return errors.New("instrumentation stopped request")
+	}}
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server.ServeHTTP(w, r.WithContext(httptrace.WithClientTrace(r.Context(), trace)))
+	}))
+	defer gateway.Close()
+	r, err := http.NewRequestWithContext(t.Context(), http.MethodPost, gateway.URL+"/shopping/mcp", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Host = "gateway.example"
+	r.Header.Set("Authorization", "Bearer "+f.token(t, "rfc9068", "/shopping/mcp", nil))
+	resp, err := gateway.Client().Do(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil || resp.StatusCode != http.StatusBadGateway || !strings.Contains(string(body), "Do not replay writes automatically") || calls.Load() != 1 {
+		t.Fatalf("trace error response: %d %q, calls=%d, %v", resp.StatusCode, body, calls.Load(), err)
+	}
+	if resp.Header.Get("Cache-Control") != "no-store" || resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatal("gateway error response policy lost after informational response")
+	}
+}
+
+func TestInformationalResponsesPreserveSSEStreaming(t *testing.T) {
+	f := newFixture(t)
+	release := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeBackendInformationalResponses(w)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Write([]byte("data: first\n\n"))
+		w.(http.Flusher).Flush()
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer upstream.Close()
+	defer close(release)
+	f.config.Routes[0].Upstream = upstream.URL + "/mcp"
+	gateway := httptest.NewServer(f.build(t))
+	defer gateway.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	r, err := http.NewRequestWithContext(ctx, http.MethodPost, gateway.URL+"/shopping/mcp", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Host = "gateway.example"
+	r.Header.Set("Authorization", "Bearer "+f.token(t, "rfc9068", "/shopping/mcp", nil))
+	resp, err := gateway.Client().Do(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	line, err := bufio.NewReader(resp.Body).ReadString('\n')
+	if err != nil || resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "text/event-stream" || line != "data: first\n" {
+		t.Fatalf("streamed response: %d %q, %v", resp.StatusCode, line, err)
 	}
 }

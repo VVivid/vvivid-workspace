@@ -45,7 +45,9 @@ a backend's configured canonical Host, notably Shopping. Public URLs require
 HTTPS; HTTP loopback is accepted for
 local development. Internal upstream HTTP requires a trusted private network.
 The gateway does not forward client cookies, identity headers, bearer tokens or
-HTTP trailers. Backend response trailers are also discarded.
+HTTP trailers. Backend response trailers are also discarded. Backend informational
+(1xx) responses retain their status codes, but their headers are discarded; this
+stateless MCP transport has no supported informational metadata.
 
 `GET /health/live` indicates a running HTTP handler. `/health/ready` indicates
 successful startup configuration, key loading and issuer discovery; neither
