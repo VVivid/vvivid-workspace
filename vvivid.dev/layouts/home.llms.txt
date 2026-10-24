@@ -1,0 +1,24 @@
+# {{ .Site.Title }}
+
+> {{ .Site.Params.description }}
+
+Ou David's public portfolio and technical writing. Pages are available as HTML and Markdown. The links below are generated from the site's published content.
+
+## Start here
+
+- [Home]({{ .Permalink }}): Profile and recent posts. [Markdown]({{ "index.md" | absURL }}).
+{{ range slice "/about" "/projects" "/posts" }}{{ with $.Site.GetPage . }}- [{{ .Title }}]({{ .Permalink }}){{ with .OutputFormats.Get "Markdown" }}: [Markdown]({{ .Permalink }}){{ end }}.
+{{ end }}{{ end }}
+## Posts
+
+{{ partial "markdown-list.html" (where .Site.RegularPages "Section" "posts").ByDate.Reverse }}
+## Projects
+
+{{ partial "markdown-list.html" (where .Site.RegularPages "Section" "projects").ByTitle }}
+## Access and discovery
+
+- [Access information]({{ "auth.md" | absURL }}): Anonymous public reading; no registration or API credentials.
+- [RSS feed]({{ "index.xml" | absURL }}): Published posts.
+- [Sitemap]({{ "sitemap.xml" | absURL }}): Published page URLs.
+
+Request `Accept: text/markdown` on a page URL, or use its linked `index.md` resource. Ordinary browser requests receive HTML. API catalog and OAuth/OIDC discovery are not applicable: this static portfolio does not expose an application API or authorization server.

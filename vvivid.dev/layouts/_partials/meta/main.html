@@ -1,2 +1,3 @@
 {{ partial "meta/standard.html" . }}
 {{ partial "meta/post.html" . }}
+{{ if .IsHome }}{{ partial "meta/home.html" . }}{{ end }}

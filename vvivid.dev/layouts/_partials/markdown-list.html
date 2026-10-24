@@ -1,0 +1,4 @@
+{{ range . }}- [{{ .Title }}]({{ .Permalink }}){{ with .OutputFormats.Get "Markdown" }} · [Markdown]({{ .Permalink }}){{ end }}{{ if not .Date.IsZero }} · {{ .Date.Format "2006-01-02" }}{{ end }}
+{{ with .Description }}  {{ . | plainify }}
+{{ end }}{{ else }}There are no published entries here yet.
+{{ end }}

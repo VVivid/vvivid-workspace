@@ -3,6 +3,32 @@ title = "Ou David | Systems Engineer"
 locale = "en-us"
 theme = "hugo-blog-awesome"
 enableRobotsTXT = true
+
+[mediaTypes."text/markdown"]
+  suffixes = ["md"]
+
+[outputFormats.Markdown]
+  mediaType = "text/markdown"
+  baseName = "index"
+  isPlainText = true
+
+[outputFormats.LLMS]
+  mediaType = "text/plain"
+  baseName = "llms"
+  isPlainText = true
+
+[outputFormats.Auth]
+  mediaType = "text/markdown"
+  baseName = "auth"
+  isPlainText = true
+
+[outputs]
+  home = ["HTML", "RSS", "Markdown", "LLMS", "Auth"]
+  page = ["HTML", "Markdown"]
+  section = ["HTML", "RSS", "Markdown"]
+  taxonomy = ["HTML", "RSS", "Markdown"]
+  term = ["HTML", "RSS", "Markdown"]
+
 [pagination]
   pagerSize = 5
 enableEmoji = true

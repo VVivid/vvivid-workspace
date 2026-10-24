@@ -46,6 +46,27 @@ Open [localhost:8080](http://localhost:8080/). The [Dockerfile](Dockerfile) buil
 
 The [GitHub workflow](../.github/workflows/website.yml) builds and smoke-checks the complete Docker image on site or workflow changes. Pull requests have read-only repository permissions. Matching pushes to `main` publish an immutable image to GHCR and deploy only live through restricted SSH over Tailscale after the [one-time setup](deploy/live/README.md). The deployment job uses the `vvivid-live` GitHub environment, serializes updates, verifies the exact running image and local/public HTTP health, and restores the previous live image on failure.
 
+The official `nginx:alpine` image includes the njs module used by
+[nginx/representations.js](nginx/representations.js) to parse HTTP `Accept`
+preferences. The Dockerfile loads that bundled module; a custom nginx installation
+must also load `ngx_http_js_module` and install this script before using
+[nginx.conf](nginx.conf). No application server or external conversion service is
+required. `nginx -t` is part of the image smoke check and catches a missing module.
+
+After building the image, run the real HTTP checks locally:
+
+```sh
+./vvivid.dev/scripts/smoke-image.sh vvivid-website:local
+```
+
+This needs Docker, curl, and Python 3. It starts a temporary container on an
+automatically assigned loopback port, checks the nginx configuration, runs
+[scripts/test-serving.py](scripts/test-serving.py), and removes the container.
+The existing website CI calls this same entry point. It checks HTML/Markdown,
+Accept quality values and exclusions, HEAD, conditional requests, redirects,
+errors, discovery resources, structured data, static asset caching, and blocked
+agent-guide URLs. It does not contact the live website.
+
 ## Source and dependencies
 
 - [content/](content/) contains the pages and posts; preserve existing front matter and URLs when editing.
@@ -57,6 +78,68 @@ The [GitHub workflow](../.github/workflows/website.yml) builds and smoke-checks 
 The site was imported from an attached source snapshot without original Git history. The archive's theme directory was empty and its theme revision could not be recovered. The pinned published theme makes the build reproducible, but exact visual parity with the original site cannot be verified. Content and asset files were preserved; template changes adapt the archive to the pinned Hugo version.
 
 Update `.hugo-version` and the Docker builder image version/digest together when deliberately upgrading Hugo, then validate the site and overrides. This project's independent release tags use `vvivid.dev/vX.Y.Z`; see the [workspace development guide](../DEVELOPMENT.md#independent-versions).
+
+## Public Markdown and discovery
+
+Hugo generates `index.md` alongside the HTML home, about, project, post, section,
+and taxonomy pages. Single-page Markdown uses the authored body without front
+matter, retaining code fences and links; home and listing templates add useful
+navigation, descriptions, and published entries. Both formats share the same
+published-content selection. Drafts and future content stay excluded by the
+production build. These templates currently require no shortcode conversion.
+
+On an existing page such as `/about/`, nginx serves Markdown for
+`Accept: text/markdown`. It compares valid quality values, honors `q=0` and
+more-specific media ranges, and serves HTML when both representations are equally
+preferred. Missing or wildcard-only preferences therefore keep ordinary browser
+behavior. If neither available format is acceptable, it returns `406`; missing
+pages remain `404`. Direct `/about/index.md` links always return Markdown and
+`/about/index.html` also supports negotiation. A URL missing its trailing slash
+retains the normal redirect. Hugo's development server exposes the generated
+files but does not perform nginx's HTTP negotiation.
+
+`/llms.txt` is generated from published pages on each build, with descriptions and
+HTML/Markdown links. `/auth.md` explains anonymous public reading and the absence
+of registration or credentials. HTML `<link>` elements and HTTP `Link` headers
+point to the actual alternate representation, content index, access document,
+RSS, and sitemap. The homepage's JSON-LD describes the existing website and author
+using configured public profile links.
+
+The API inventory is empty: this image serves static content and browser assets;
+it contains no application API handlers, MCP server, account system, or write
+endpoint. Articles and project links can discuss separately hosted APIs, and the
+optional analytics script uses another hostname. API catalog, OpenAPI,
+OAuth/OIDC discovery, and client registration are therefore not applicable.
+No synthetic catalog, authorization server, token, or registration endpoint is
+created or advertised. Revisit this inventory if an actual API is added.
+
+## Representation caching and deployment checks
+
+Page and discovery responses send `Cache-Control: no-store` and `Vary: Accept`,
+including their error responses. This deliberately avoids sharing HTML and
+Markdown at the same URL in a browser or CDN cache. Page/Markdown locations
+disable nginx ETags and `If-Modified-Since` handling: outputs can have identical
+build timestamps, so an HTML timestamp must not produce a Markdown `304` (or the
+reverse). `Last-Modified` may still be present as informational metadata;
+conditional date requests receive a full representation. Static image, CSS,
+and JavaScript assets retain their separate seven-day caching policy.
+
+Cloudflare does not include arbitrary `Vary` fields in its default cache key.
+The origin's `no-store` policy is the safe default for this feature without
+changing the Cloudflare plan or adding an account. Before an authorized
+deployment, confirm that no Cache Rule, Page Rule, Worker, or forced Edge TTL
+overrides origin cache control on pages, `.md`, `/llms.txt`, or error responses.
+Purge previously cached page responses when activating this configuration.
+`Vary: Accept` alone cannot repair an already cached response. A future explicit
+Free-plan Vary Cache Rule is a separate configuration choice; do not remove
+`no-store` merely because the header is present. See Cloudflare's
+[cache-control behavior](https://developers.cloudflare.com/cache/concepts/cache-control/)
+and [Vary support](https://developers.cloudflare.com/cache/concepts/vary/).
+
+After authorized deployment, repeat HTML/Markdown requests in both orders at the
+public hostname and inspect `Content-Type`, `Vary`, `Cache-Control`, `CF-Cache-Status`,
+and conditional responses. Local image checks establish origin behavior only;
+they do not establish the live CDN configuration or activate these resources.
 
 ## Deployment
 

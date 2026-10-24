@@ -11,14 +11,18 @@ RUN ./scripts/build.sh
 # Stage 2: Serve the site with Nginx
 FROM nginx:alpine
 
-# Remove default nginx static assets
-RUN rm -rf /usr/share/nginx/html/*
+# The official Alpine image bundles njs; use it for Accept quality parsing.
+RUN rm -rf /usr/share/nginx/html/* \
+    && sed -i '1i load_module /usr/lib/nginx/modules/ngx_http_js_module.so;' /etc/nginx/nginx.conf
 
 # Copy the built site from the builder stage
 COPY --from=builder /src/public /usr/share/nginx/html
+# Hugo preserves static-file modes, including restrictive checkout permissions.
+RUN chmod -R a+rX /usr/share/nginx/html
 
 # Copy custom nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx/representations.js /etc/nginx/representations.js
 
 # Expose port 80
 EXPOSE 80
