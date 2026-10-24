@@ -43,11 +43,11 @@ The [XTrace workflow](.github/workflows/xtrace-example.yml) runs automatically o
 
 SSHMCP, GoogleHealthMCP, AgentShoppingList, and WebhookControl each have a workflow filtered to their own directory. WebhookControl also watches its own workflow file. A change confined to another project does not trigger the XTrace workflow.
 
-The [website workflow](.github/workflows/website.yml) watches `vvivid.dev/**`, its own workflow file, and the root `Makefile`, including root-only Make changes. It builds the pinned Hugo stage from the site's standalone Docker context, including the version and agent-guide exclusion checks. Its only repository permission is `contents: read`, and it does not publish or deploy. Run website Make targets locally when changing root delegation; the workflow invokes the Docker builder directly.
+The [website workflow](.github/workflows/website.yml) watches `vvivid.dev/**` and its own workflow file. It runs deployment tests and checks the complete Hugo/nginx image, including pinned Hugo, output exclusion, and HTTP guide blocking. Pull requests use `contents: read`. Matching pushes to `main` publish a GHCR image and deploy its digest through the protected `vvivid-live` environment and restricted Tailscale/SSH access. The [live runbook](vvivid.dev/deploy/live/README.md) describes separate activation and recovery; preview stays outside this workflow. Root-only Make changes require explicit local website checks.
 
 If merge rules are added later, account for path-filtered workflows being skipped on unrelated pull requests before making their checks required globally.
 
-This configures CI. Deployment automation can be added per project when a deployment destination and release credentials are defined; the XTrace demo currently runs locally.
+Deployment automation is configured per project with its own destination and credentials; the XTrace demo currently runs locally.
 
 ## Independent versions
 
