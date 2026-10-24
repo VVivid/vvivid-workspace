@@ -133,7 +133,7 @@ func (s *Server) newRouteHandler(route Route, authenticator Authenticator, logge
 			}
 		}
 		principal, err := authenticator.Authenticate(ctx, raw, resource)
-		if err != nil {
+		if err != nil || !validTokenLifetime(principal, route, time.Now()) {
 			w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+metadataURL+`"`)
 			http.Error(w, "Authentication required", 401)
 			return
@@ -190,9 +190,24 @@ func newRouteProxy(route Route, logger *slog.Logger) *httputil.ReverseProxy {
 				pr.Out.Host = route.UpstreamHost
 			}
 			pr.Out.Header = make(http.Header)
-			for _, h := range []string{"Content-Type", "Accept", "Mcp-Protocol-Version", "Last-Event-Id"} {
+			for _, h := range []string{
+				"Content-Type",
+				"Accept",
+				"Mcp-Protocol-Version",
+				"Last-Event-Id",
+				"Mcp-Method",
+				"Mcp-Name",
+			} {
 				if v := pr.In.Header.Get(h); v != "" {
 					pr.Out.Header.Set(h, v)
+				}
+			}
+			// SEP-2243 reserves Mcp-Param-{Name} for schema-annotated tool
+			// arguments. These are untrusted protocol data, never identity.
+			// The backend SDK validates them against the tool schema and body.
+			for name, values := range pr.In.Header {
+				if suffix, ok := strings.CutPrefix(http.CanonicalHeaderKey(name), "Mcp-Param-"); ok && suffix != "" {
+					pr.Out.Header[name] = slices.Clone(values)
 				}
 			}
 			pr.Out.Header.Set("Authorization", "Bearer "+token)
@@ -241,15 +256,18 @@ func (t backendTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.ServeHTTP(w, r) }
 
 func (s *Server) issue(p trust.Principal, r Route) (string, error) {
+	now := time.Now()
+	if !validTokenLifetime(p, r, now) {
+		return "", errors.New("access token lifetime invalid before dispatch")
+	}
 	scopes := []string{}
 	for scope := range strings.FieldsSeq(p.Scope) {
 		if slices.Contains(r.ForwardScopes, scope) && !slices.Contains(scopes, scope) {
 			scopes = append(scopes, scope)
 		}
 	}
-	now := time.Now()
 	expires := now.Add(60 * time.Second)
-	if !p.ExpiresAt.IsZero() && p.ExpiresAt.Before(expires) {
+	if p.ExpiresAt.Before(expires) {
 		expires = p.ExpiresAt
 	}
 	if !expires.After(now) {

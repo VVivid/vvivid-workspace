@@ -21,14 +21,15 @@ type Config struct {
 }
 
 type Route struct {
-	Name           string   `json:"name"`
-	Path           string   `json:"path"`
-	Upstream       string   `json:"upstream"`
-	UpstreamHost   string   `json:"upstream_host,omitempty"`
-	Audience       string   `json:"audience"`
-	RequiredScopes []string `json:"required_scopes"`
-	ForwardScopes  []string `json:"forward_scopes"`
-	ClientIDs      []string `json:"client_ids"`
+	Name                    string   `json:"name"`
+	Path                    string   `json:"path"`
+	Upstream                string   `json:"upstream"`
+	UpstreamHost            string   `json:"upstream_host,omitempty"`
+	Audience                string   `json:"audience"`
+	RequiredScopes          []string `json:"required_scopes"`
+	ForwardScopes           []string `json:"forward_scopes"`
+	ClientIDs               []string `json:"client_ids"`
+	MaxTokenLifetimeSeconds int64    `json:"max_token_lifetime_seconds"`
 }
 
 func Load(file string) (Config, error) {
@@ -98,6 +99,9 @@ func (c Config) Validate() error {
 		}
 		if r.Audience == "" || len(r.RequiredScopes) == 0 || len(r.ForwardScopes) == 0 || len(r.ClientIDs) == 0 {
 			return errors.New("route requires backend audience, required/forward scopes and allowed client IDs")
+		}
+		if r.MaxTokenLifetimeSeconds <= 0 {
+			return errors.New("route requires a positive max_token_lifetime_seconds")
 		}
 		for _, values := range [][]string{r.RequiredScopes, r.ForwardScopes, r.ClientIDs} {
 			seen := map[string]bool{}

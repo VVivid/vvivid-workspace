@@ -38,9 +38,11 @@ backends. Keep configuration and credentials outside images and source control.
 Adapt [gateway.json](examples/gateway.json). Required top-level fields are
 `listen`, public `origin`, OAuth/OIDC `issuer`, `signing_key_file` and `routes`.
 Each route requires a distinct name, canonical path ending `/mcp`, fixed upstream,
-distinct backend audience, required scopes, forwarded scopes and allowed OAuth
-client IDs. `upstream_host` optionally preserves a backend's configured canonical
-Host, notably Shopping. Public URLs require HTTPS; HTTP loopback is accepted for
+distinct backend audience, required scopes, forwarded scopes, allowed OAuth
+client IDs and a positive `max_token_lifetime_seconds`. Missing, zero, negative
+or non-integer lifetime limits fail startup. `upstream_host` optionally preserves
+a backend's configured canonical Host, notably Shopping. Public URLs require
+HTTPS; HTTP loopback is accepted for
 local development. Internal upstream HTTP requires a trusted private network.
 The gateway does not forward client cookies, identity headers, bearer tokens or
 HTTP trailers. Backend response trailers are also discarded.
@@ -66,6 +68,19 @@ or `JWT` tokens explicitly marked with payload `typ=Bearer` and `azp` (Keycloak)
 Opaque tokens, arbitrary JWT profiles and ID tokens are unsupported. Verification
 requires exact issuer, exactly one route-resource audience, valid expiry/issued-at
 and not-before, subject and client identity. Conflicting client claims fail.
+
+The core applies each route's `max_token_lifetime_seconds` to verified token
+timing, regardless of provider: issuance must be positive and not in the future,
+expiry must be in the future, and both the issued lifetime and remaining lifetime
+must fit the limit. The examples set 300 seconds for Shopping and SSH. Shopping
+requires at most 300 seconds to preserve its provider revocation bound; do not
+increase that route's limit. Choose an explicit revocation bound for each new
+backend and configure its provider to issue compatible access tokens. An old,
+long-lived token is rejected even when fewer than 300 seconds remain. The gateway
+rechecks timing after reading the request body, before issuing backend identity.
+Internal tokens expire within 60 seconds and never after the external expiry;
+minting another internal token cannot extend the external grant. Clients obtain
+fresh external access tokens through their provider's authorized refresh flow.
 
 Each resource is the exact public origin plus route path. Configure provider
 clients, callbacks, PKCE, consent, resource/audience bindings and permissions for
@@ -126,8 +141,13 @@ clients separately. No shared tool catalog or tool renaming is performed.
 
 V1 targets the existing Go MCP SDK v1.8.0 stateless Streamable HTTP backends and
 protocol versions they support. It forwards POST, GET and DELETE to exact fixed
-paths, preserving Accept, Content-Type and MCP protocol-version headers. JSON
-responses and request-bound SSE can stream; session IDs, resumable standalone
+paths, preserving Accept, Content-Type and MCP protocol-version headers.
+Requests also preserve `Mcp-Method`, `Mcp-Name` and the protocol-defined
+`Mcp-Param-{Name}` namespace (SEP-2243 schema-annotated tool arguments), supporting
+protocol `2026-07-28` without fallback. These headers are untrusted protocol data;
+the backend SDK validates them against the message body and tool schema. Other
+`Mcp-*` headers are not implicitly forwarded. JSON responses and request-bound
+SSE can stream; session IDs, resumable standalone
 streams, WebSockets, stdio, combined catalogs and server-initiated long-lived
 sessions are unsupported. A backend issuing an MCP session ID is rejected.
 

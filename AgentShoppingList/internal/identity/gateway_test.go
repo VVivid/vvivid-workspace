@@ -5,11 +5,13 @@ import (
 	"agentshoppinglist/internal/store/sqlite"
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/base64"
 	"encoding/json"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -37,9 +39,12 @@ func TestGatewayEnrollmentScopesAndNoFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mint := func(subject, original, client, scope string) string {
+	mint := func(subject, original, client, scope string, changes ...func(*gatewaytrust.Claims)) string {
 		now := time.Now()
 		c := gatewaytrust.Claims{Claims: jwt.Claims{Issuer: cfg.Issuer, Subject: subject, Audience: jwt.Audience{cfg.Audience}, IssuedAt: jwt.NewNumericDate(now), NotBefore: jwt.NewNumericDate(now), Expiry: jwt.NewNumericDate(now.Add(time.Minute))}, IdentityIssuer: original, ClientID: client, Scope: scope}
+		for _, change := range changes {
+			change(&c)
+		}
 		raw, err := jwt.Signed(signer).Claims(c).Serialize()
 		if err != nil {
 			t.Fatal(err)
@@ -68,6 +73,24 @@ func TestGatewayEnrollmentScopesAndNoFallback(t *testing.T) {
 			}
 		}
 	}
+	t.Run("wrong backend audience", func(t *testing.T) {
+		raw := mint("alice", m.cfg.Issuer, "shopping-codex", Read, func(c *gatewaytrust.Claims) { c.Audience = jwt.Audience{"ssh-backend"} })
+		if _, err := m.AuthenticateBearer(t.Context(), raw, m.MCPAudience()); err == nil {
+			t.Fatal("identity for another backend accepted")
+		}
+	})
+	t.Run("bad gateway signature", func(t *testing.T) {
+		parts := strings.Split(mint("alice", m.cfg.Issuer, "shopping-codex", Read), ".")
+		signature, err := base64.RawURLEncoding.DecodeString(parts[2])
+		if err != nil {
+			t.Fatal(err)
+		}
+		signature[0] ^= 0x80
+		parts[2] = base64.RawURLEncoding.EncodeToString(signature)
+		if _, err := m.AuthenticateBearer(t.Context(), strings.Join(parts, "."), m.MCPAudience()); err == nil {
+			t.Fatal("bad gateway signature accepted")
+		}
+	})
 	external := issuer.bearer("alice", "shopping-codex", m.MCPAudience(), Read, nil)
 	if _, err := m.AuthenticateBearer(t.Context(), external, m.MCPAudience()); err == nil {
 		t.Fatal("gateway-only MCP accepted external token")

@@ -37,6 +37,17 @@ Do not regenerate this file on ordinary startup. Ciphertext is bound to its purp
 
 ## Explicit enrollment
 
+In shared-gateway mode, MCPGateway validates the external caller's access token,
+including the Shopping route's explicit `max_token_lifetime_seconds` of at most
+300 seconds. Shopping validates the separate signed internal token for its own
+backend audience, then maps the preserved original `(identity_issuer, sub)` to
+the same active internal owner used by browser sessions. It checks allowed agent
+clients and Shopping scopes and retains every domain ownership check. An
+unregistered or disabled identity is denied; successful gateway authentication
+does not create or link an account. Browser login and `/api/v1` authentication
+remain separate and use the existing provider flow. See the
+[gateway identity contract](../../MCPGateway/docs/IDENTITY.md).
+
 Build `bin/shopping-admin` with `make build`. Use a private file containing the exact subject of the user's verified Keycloak account, obtained through the authorized identity administration workflow. Do not put the subject or credentials in a committed document. Enrollment requires all account preferences explicitly; the following shell variables are operator inputs, not defaults:
 
 ```sh
@@ -74,7 +85,7 @@ Keep access-token lifetimes at or below 300 seconds. Validate the resulting toke
 ## Revocation and rotation limits
 
 - Each browser request checks local session revocation and active enrollment. A request at least 60 seconds after the last provider check refreshes the grant before proceeding; it refreshes sooner near expiry. Failed refresh revokes the local session. The session has an absolute 12 hour limit. Concurrent requests within this single application instance serialize a cookie's rotating refresh token outside database transactions.
-- MCP/API access JWT validation is stateless at the issuer boundary and checks active local enrollment every request. Provider revocation propagates by token expiry, at most 300 seconds for accepted tokens. There is no online introspection or back-channel logout endpoint. Confirm that this bound is acceptable and achieved by the actual Keycloak client settings before release. Operator disable blocks new authenticated requests immediately.
+- MCP/API access JWT validation is stateless at the issuer boundary and checks active local enrollment every request. Provider revocation propagates by token expiry, at most 300 seconds for accepted tokens. In gateway mode, the gateway enforces that external lifetime bound and caps every internal identity at the external expiry and 60 seconds. Shopping verifies only that internal identity for MCP; browser/API validation stays here. There is no online introspection or back-channel logout endpoint. Confirm that this bound is acceptable and achieved by the actual provider client settings and gateway route policy before release. Operator disable blocks new authenticated requests immediately.
 - Unknown signing keys trigger a bounded JWKS fetch through go-oidc. Publish the previous public signing key for at least the remaining 300 second token lifetime during planned rotation. A cached old key may validate a still-current token until that token expires. Emergency response must account for this bound; do not describe rotation as instant token revocation.
 - For session-key rotation, add a new random key as active and retain the previous decrypt-only key on the server, then restart the app. Refreshes reseal state with the active key. Retain old keys for at least 12 hours 10 minutes so existing sessions can expire. Removing a key early signs out sessions encrypted with it. There is no plaintext or fresh-key fallback. The user's server-only policy excludes backup copies and Mac recovery keys.
 

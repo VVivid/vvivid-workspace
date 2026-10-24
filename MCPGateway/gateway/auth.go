@@ -15,7 +15,8 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 )
 
-// Authenticator is the provider boundary. The core router uses verified identities.
+// Authenticator is the provider boundary. Implementations return verified identity
+// and token issuance/expiry times; the core enforces each route's lifetime policy.
 type Authenticator interface {
 	Authenticate(context.Context, string, string) (trust.Principal, error)
 }
@@ -104,7 +105,24 @@ func (a *OIDCAuthenticator) Authenticate(ctx context.Context, raw, resource stri
 	if c.ClientID == "" {
 		return trust.Principal{}, invalid
 	}
-	return trust.Principal{Issuer: c.Issuer, Subject: c.Subject, ClientID: c.ClientID, Scope: c.Scope, ExpiresAt: time.Unix(int64(*c.Expiry), 0)}, nil
+	return trust.Principal{
+		Issuer:    c.Issuer,
+		Subject:   c.Subject,
+		ClientID:  c.ClientID,
+		Scope:     c.Scope,
+		IssuedAt:  time.Unix(int64(*c.IssuedAt), 0),
+		ExpiresAt: time.Unix(int64(*c.Expiry), 0),
+	}, nil
+}
+
+func validTokenLifetime(p trust.Principal, r Route, now time.Time) bool {
+	issued, expires, current := p.IssuedAt.Unix(), p.ExpiresAt.Unix(), now.Unix()
+	if r.MaxTokenLifetimeSeconds <= 0 || issued <= 0 || issued > current || expires <= current {
+		return false
+	}
+	// The ordering above makes both differences nonnegative and overflow-safe,
+	// including timestamps supplied by a future non-OIDC authenticator.
+	return expires-issued <= r.MaxTokenLifetimeSeconds && expires-current <= r.MaxTokenLifetimeSeconds
 }
 
 func allowed(p trust.Principal, r Route) bool {
