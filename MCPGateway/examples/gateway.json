@@ -1,29 +1,28 @@
 {
   "listen": "127.0.0.1:8088",
   "origin": "https://mcp.example.com",
-  "issuer": "https://identity.example.com/realms/example",
+  "issuer": "https://identity.example.com",
   "signing_key_file": "/run/secrets/gateway.private.json",
   "routes": [
     {
-      "name": "shopping",
-      "path": "/shopping/mcp",
+      "name": "service-a",
+      "path": "/service-a/mcp",
       "upstream": "http://127.0.0.1:8090/mcp",
-      "upstream_host": "shopping.example.com",
-      "audience": "shopping-mcp",
+      "audience": "service-a-mcp",
       "max_token_lifetime_seconds": 300,
-      "required_scopes": ["shopping:read"],
-      "forward_scopes": ["shopping:read", "shopping:products:write", "shopping:lists:write", "shopping:purchases:write", "shopping:preferences:write"],
-      "client_ids": ["shopping-codex", "shopping-chatgpt"]
+      "required_scopes": ["service-a:use"],
+      "forward_scopes": ["service-a:use"],
+      "client_ids": ["example-agent"]
     },
     {
-      "name": "ssh",
-      "path": "/ssh/mcp",
-      "upstream": "http://127.0.0.1:18080/mcp",
-      "audience": "ssh-mcp",
+      "name": "service-b",
+      "path": "/service-b/mcp",
+      "upstream": "http://127.0.0.1:8091/mcp",
+      "audience": "service-b-mcp",
       "max_token_lifetime_seconds": 300,
-      "required_scopes": ["sshmcp:admin"],
-      "forward_scopes": ["sshmcp:admin"],
-      "client_ids": ["sshmcp-codex", "sshmcp-chatgpt"]
+      "required_scopes": ["service-b:use"],
+      "forward_scopes": ["service-b:use"],
+      "client_ids": ["example-agent"]
     }
   ]
 }

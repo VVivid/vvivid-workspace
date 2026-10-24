@@ -12,7 +12,6 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/modelcontextprotocol/go-sdk/auth"
 
-	"sshmcp/internal/gatewaytrust"
 	"sshmcp/internal/runner"
 )
 
@@ -61,21 +60,4 @@ func verifiedOwner(info *auth.TokenInfo) (runner.Owner, error) {
 		}
 	}
 	return runner.Owner{}, errors.New("verified identity is unavailable; authenticate again")
-}
-
-// NewBackendTokenVerifier accepts only gateway-issued identities. No external
-// token fallback exists in backend mode. Runner ownership keeps issuer+subject.
-func NewBackendTokenVerifier(config gatewaytrust.Config) (auth.TokenVerifier, error) {
-	verifier, err := gatewaytrust.NewVerifier(config)
-	if err != nil {
-		return nil, err
-	}
-	return func(_ context.Context, raw string, _ *http.Request) (*auth.TokenInfo, error) {
-		p, err := verifier.Verify(raw)
-		if err != nil {
-			return nil, auth.ErrInvalidToken
-		}
-		owner := runner.Owner{Issuer: p.Issuer, Subject: p.Subject}
-		return &auth.TokenInfo{Scopes: strings.Fields(p.Scope), Expiration: p.ExpiresAt, UserID: p.Issuer + "\x00" + p.Subject, Extra: map[string]any{"owner": owner}}, nil
-	}, nil
 }

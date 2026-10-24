@@ -16,7 +16,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
 
-	"sshmcp/internal/gatewaytrust"
 	"sshmcp/internal/runner"
 )
 
@@ -25,11 +24,10 @@ type RPC interface {
 }
 
 type Config struct {
-	Gateway  *gatewaytrust.Config `json:"gateway,omitempty"`
-	Listen   string               `json:"listen"`
-	Issuer   string               `json:"issuer"`
-	Resource string               `json:"resource"`
-	SSH      SSHConfig            `json:"ssh"`
+	Listen   string    `json:"listen"`
+	Issuer   string    `json:"issuer"`
+	Resource string    `json:"resource"`
+	SSH      SSHConfig `json:"ssh"`
 }
 
 type ConnectInput struct {
@@ -64,13 +62,10 @@ func NewHandler(config Config, rpc RPC, verifier auth.TokenVerifier) (http.Handl
 		resource.RawQuery != "" || resource.Fragment != "" {
 		return nil, errors.New("resource must be http://127.0.0.1:<listen-port>/mcp")
 	}
-	if config.Gateway == nil {
-		issuer, err := url.Parse(config.Issuer)
-		if err != nil || issuer.Scheme != "http" || issuer.Hostname() != "127.0.0.1" || issuer.Path != "/realms/sshmcp" {
-			return nil, errors.New("issuer must be the private loopback sshmcp realm")
-		}
-	} else {
-		config.Issuer = config.Gateway.Issuer
+	issuer, err := url.Parse(config.Issuer)
+	if err != nil || issuer.Scheme != "http" || issuer.Hostname() != "127.0.0.1" ||
+		issuer.Path != "/realms/sshmcp" {
+		return nil, errors.New("issuer must be the private loopback sshmcp realm")
 	}
 	s := &server{rpc: rpc}
 	m := mcp.NewServer(&mcp.Implementation{Name: "sshmcp", Version: "0.5.0"}, &mcp.ServerOptions{Instructions: "Use connect(lab-target) for an independent persistent Bash shell. Save each execute idempotency_key before submission. Optional wait_ms up to 10000 returns completion/output in execute or waits for new job-status output. Poll status with job_id and byte cursors; never wait by resubmitting a command. On uncertain acknowledgement, use lookup with the SAME key. SSH/gateway loss does not cancel jobs. Disconnect closes the managed shell. Shell and retained job results expire; lost jobs are never replayed. This is a private administrative lab."})

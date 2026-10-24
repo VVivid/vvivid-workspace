@@ -1,9 +1,3 @@
-> **Shared MCP gateway integration:** `cmd/sshmcp-server` exposes the existing SSH
-> tools as a gateway-authenticated backend without Keycloak discovery or its
-> compatibility proxy. The target runner and execution semantics remain here.
-> See [MCPGateway](../MCPGateway/README.md). Legacy lab commands below remain
-> available; this source change does not migrate a deployed service.
-
 # SSHMCP
 
 Version **1.0.0** provides an authenticated MCP gateway and native execution

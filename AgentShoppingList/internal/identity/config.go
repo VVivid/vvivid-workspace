@@ -14,8 +14,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-
-	"agentshoppinglist/internal/gatewaytrust"
 )
 
 const (
@@ -29,7 +27,6 @@ const (
 var shoppingScopes = []string{Read, ProductsWrite, ListsWrite, PurchasesWrite, PreferencesWrite}
 
 type Config struct {
-	Gateway         *gatewaytrust.Config
 	Origin          string
 	Issuer          string
 	WebClientID     string
@@ -60,12 +57,6 @@ func LoadConfig(lookup func(string) (string, bool)) (*Config, error) {
 		configured = configured || present
 		values[name] = value
 	}
-	gatewayIssuer, gi := lookup("SHOPPING_GATEWAY_ISSUER")
-	gatewayAudience, ga := lookup("SHOPPING_GATEWAY_AUDIENCE")
-	gatewayKeys, gk := lookup("SHOPPING_GATEWAY_JWKS_FILE")
-	if (gi || ga || gk) && (!configured || gatewayIssuer == "" || gatewayAudience == "" || gatewayKeys == "") {
-		return nil, fmt.Errorf("gateway trust requires complete shopping identity and gateway issuer, audience and JWKS")
-	}
 	if !configured {
 		return nil, nil
 	}
@@ -81,9 +72,6 @@ func LoadConfig(lookup func(string) (string, bool)) (*Config, error) {
 		APIAudience:  values["SHOPPING_API_AUDIENCE"],
 		MCPAudience:  values["SHOPPING_MCP_AUDIENCE"],
 		MCPClientIDs: strings.Split(values["SHOPPING_MCP_CLIENT_IDS"], ","),
-	}
-	if gi || ga || gk {
-		cfg.Gateway = &gatewaytrust.Config{Issuer: gatewayIssuer, Audience: gatewayAudience, JWKSFile: gatewayKeys}
 	}
 	secret, err := readPrivateFile(values["SHOPPING_WEB_CLIENT_SECRET_FILE"])
 	if err != nil {

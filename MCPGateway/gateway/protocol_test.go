@@ -60,9 +60,9 @@ func TestOfficialMCPClientThroughGateway(t *testing.T) {
 			f.config.Routes[0].UpstreamHost = ""
 			gateway := httptest.NewServer(f.build(t))
 			defer gateway.Close()
-			token := f.token(t, "rfc9068", "/shopping/mcp", nil)
+			token := f.token(t, "rfc9068", "/service-a/mcp", nil)
 			client := mcp.NewClient(&mcp.Implementation{Name: "gateway-test", Version: "1"}, nil)
-			session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: gateway.URL + "/shopping/mcp", HTTPClient: &http.Client{Transport: accessTransport{token}}, DisableStandaloneSSE: true, MaxRetries: -1}, nil)
+			session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: gateway.URL + "/service-a/mcp", HTTPClient: &http.Client{Transport: accessTransport{token}}, DisableStandaloneSSE: true, MaxRetries: -1}, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -72,7 +72,7 @@ func newFixture(t *testing.T) *fixture {
 	writeJSON(t, privateFile, jwk)
 	writeJSON(t, publicFile, jose.JSONWebKeySet{Keys: []jose.JSONWebKey{jwk.Public()}})
 	f := &fixture{key: jwk, issuer: issuer.URL, seen: make(chan trust.Principal, 32)}
-	verifier, err := trust.NewVerifier(trust.Config{Issuer: "https://gateway.example", Audience: "shopping-backend", JWKSFile: publicFile})
+	verifier, err := trust.NewVerifier(trust.Config{Issuer: "https://gateway.example", Audience: "service-a-backend", JWKSFile: publicFile})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func newFixture(t *testing.T) *fixture {
 			return
 		}
 		f.seen <- p
-		if r.Host != "shopping.example" || r.URL.Path != "/mcp" || r.Header.Get("Cookie") != "" || r.Header.Get("X-Forwarded-User") != "" || r.Header.Get("Origin") != "" || r.Header.Get("Idempotency-Key") != "" {
+		if r.Host != "service-a.example" || r.URL.Path != "/mcp" || r.Header.Get("Cookie") != "" || r.Header.Get("X-Forwarded-User") != "" || r.Header.Get("Origin") != "" || r.Header.Get("Idempotency-Key") != "" {
 			t.Error("unsafe upstream request")
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -93,8 +93,8 @@ func newFixture(t *testing.T) *fixture {
 	}))
 	t.Cleanup(upstream.Close)
 	f.config = Config{Listen: "127.0.0.1:8080", Origin: "https://gateway.example", Issuer: issuer.URL, SigningKeyFile: privateFile, Routes: []Route{
-		{Name: "shopping", Path: "/shopping/mcp", Upstream: upstream.URL + "/mcp", UpstreamHost: "shopping.example", Audience: "shopping-backend", RequiredScopes: []string{"shopping:read"}, ForwardScopes: []string{"shopping:read", "shopping:lists:write"}, ClientIDs: []string{"shopping-client"}, MaxTokenLifetimeSeconds: 300},
-		{Name: "ssh", Path: "/ssh/mcp", Upstream: upstream.URL + "/mcp", Audience: "ssh-backend", RequiredScopes: []string{"sshmcp:admin"}, ForwardScopes: []string{"sshmcp:admin"}, ClientIDs: []string{"ssh-client"}, MaxTokenLifetimeSeconds: 300},
+		{Name: "service-a", Path: "/service-a/mcp", Upstream: upstream.URL + "/mcp", UpstreamHost: "service-a.example", Audience: "service-a-backend", RequiredScopes: []string{"service-a:use"}, ForwardScopes: []string{"service-a:use", "service-a:extra"}, ClientIDs: []string{"service-a-client"}, MaxTokenLifetimeSeconds: 300},
+		{Name: "service-b", Path: "/service-b/mcp", Upstream: upstream.URL + "/mcp", Audience: "service-b-backend", RequiredScopes: []string{"service-b:use"}, ForwardScopes: []string{"service-b:use"}, ClientIDs: []string{"service-b-client"}, MaxTokenLifetimeSeconds: 300},
 	}}
 	f.server = f.build(t)
 	return f
@@ -114,14 +114,14 @@ func (f *fixture) build(t *testing.T) *Server {
 func (f *fixture) token(t *testing.T, profile, route string, change func(map[string]any)) string {
 	t.Helper()
 	now := time.Now().Unix()
-	c := map[string]any{"iss": f.issuer, "sub": "alice", "aud": []string{f.config.Origin + route}, "iat": now, "exp": now + 300, "scope": "shopping:read shopping:lists:write sshmcp:admin"}
+	c := map[string]any{"iss": f.issuer, "sub": "alice", "aud": []string{f.config.Origin + route}, "iat": now, "exp": now + 300, "scope": "service-a:use service-a:extra service-b:use"}
 	typ := "at+jwt"
 	if profile == "keycloak" {
 		typ = "JWT"
 		c["typ"] = "Bearer"
-		c["azp"] = "shopping-client"
+		c["azp"] = "service-a-client"
 	} else {
-		c["client_id"] = "shopping-client"
+		c["client_id"] = "service-a-client"
 	}
 	if change != nil {
 		change(c)
@@ -153,12 +153,12 @@ func TestProviderProfilesAndIdentityForwarding(t *testing.T) {
 	for _, profile := range []string{"keycloak", "rfc9068"} {
 		t.Run(profile, func(t *testing.T) {
 			body := `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`
-			w := request(f.server, "/shopping/mcp", f.token(t, profile, "/shopping/mcp", nil), body)
+			w := request(f.server, "/service-a/mcp", f.token(t, profile, "/service-a/mcp", nil), body)
 			if w.Code != 200 || w.Body.String() != body || w.Header().Get("Set-Cookie") != "" {
 				t.Fatalf("response %d: %s", w.Code, w.Body.String())
 			}
 			p := <-f.seen
-			if p.Subject != "alice" || p.Issuer != f.issuer || p.ClientID != "shopping-client" || p.Scope != "shopping:read shopping:lists:write" {
+			if p.Subject != "alice" || p.Issuer != f.issuer || p.ClientID != "service-a-client" || p.Scope != "service-a:use service-a:extra" {
 				t.Fatalf("identity or scope escalation: %+v", p)
 			}
 		})
@@ -168,25 +168,25 @@ func TestAuthenticationAndRouteIsolation(t *testing.T) {
 	f := newFixture(t)
 	for name, change := range map[string]func(map[string]any){
 		"issuer":   func(c map[string]any) { c["iss"] = "https://other.example" },
-		"audience": func(c map[string]any) { c["aud"] = []string{f.config.Origin + "/ssh/mcp"} },
+		"audience": func(c map[string]any) { c["aud"] = []string{f.config.Origin + "/service-b/mcp"} },
 		"multiple audiences": func(c map[string]any) {
-			c["aud"] = []string{f.config.Origin + "/shopping/mcp", f.config.Origin + "/ssh/mcp"}
+			c["aud"] = []string{f.config.Origin + "/service-a/mcp", f.config.Origin + "/service-b/mcp"}
 		},
 		"expired":         func(c map[string]any) { c["exp"] = time.Now().Unix() - 1 },
 		"future":          func(c map[string]any) { c["nbf"] = time.Now().Unix() + 60 },
 		"ID token":        func(c map[string]any) { delete(c, "typ") },
 		"missing subject": func(c map[string]any) { delete(c, "sub") },
-		"wrong client":    func(c map[string]any) { c["azp"] = "ssh-client" },
-		"missing scope":   func(c map[string]any) { c["scope"] = "shopping:lists:write" },
+		"wrong client":    func(c map[string]any) { c["azp"] = "service-b-client" },
+		"missing scope":   func(c map[string]any) { c["scope"] = "service-a:extra" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			w := request(f.server, "/shopping/mcp", f.token(t, "keycloak", "/shopping/mcp", change), `{}`)
+			w := request(f.server, "/service-a/mcp", f.token(t, "keycloak", "/service-a/mcp", change), `{}`)
 			if w.Code != 401 && w.Code != 403 {
 				t.Fatalf("accepted: %d", w.Code)
 			}
 		})
 	}
-	if w := request(f.server, "/ssh/mcp", f.token(t, "keycloak", "/shopping/mcp", nil), `{}`); w.Code != 401 {
+	if w := request(f.server, "/service-b/mcp", f.token(t, "keycloak", "/service-a/mcp", nil), `{}`); w.Code != 401 {
 		t.Fatal(w.Code)
 	}
 	if f.calls.Load() != 0 {
@@ -196,16 +196,16 @@ func TestAuthenticationAndRouteIsolation(t *testing.T) {
 func TestMetadataLimitsHostAndNoReplay(t *testing.T) {
 	f := newFixture(t)
 	w := httptest.NewRecorder()
-	f.server.ServeHTTP(w, httptest.NewRequest("GET", "https://gateway.example/.well-known/oauth-protected-resource/shopping/mcp", nil))
-	if w.Code != 200 || !strings.Contains(w.Body.String(), f.config.Origin+"/shopping/mcp") {
+	f.server.ServeHTTP(w, httptest.NewRequest("GET", "https://gateway.example/.well-known/oauth-protected-resource/service-a/mcp", nil))
+	if w.Code != 200 || !strings.Contains(w.Body.String(), f.config.Origin+"/service-a/mcp") {
 		t.Fatal(w.Body.String())
 	}
-	token := f.token(t, "keycloak", "/shopping/mcp", nil)
-	if w := request(f.server, "/shopping/mcp", token, strings.Repeat("x", MaxRequestBytes+1)); w.Code != 413 {
+	token := f.token(t, "keycloak", "/service-a/mcp", nil)
+	if w := request(f.server, "/service-a/mcp", token, strings.Repeat("x", MaxRequestBytes+1)); w.Code != 413 {
 		t.Fatal(w.Code)
 	}
 	for _, header := range []string{"Host", "Origin"} {
-		r := httptest.NewRequest("POST", "https://gateway.example/shopping/mcp", nil)
+		r := httptest.NewRequest("POST", "https://gateway.example/service-a/mcp", nil)
 		if header == "Host" {
 			r.Host = "evil.example"
 		} else {
@@ -231,7 +231,7 @@ func TestMetadataLimitsHostAndNoReplay(t *testing.T) {
 	defer broken.Close()
 	f.config.Routes[0].Upstream = broken.URL + "/mcp"
 	s := f.build(t)
-	if w := request(s, "/shopping/mcp", token, `{"method":"tools/call"}`); w.Code != 502 {
+	if w := request(s, "/service-a/mcp", token, `{"method":"tools/call"}`); w.Code != 502 {
 		t.Fatal(w.Code)
 	}
 	if count.Load() != 1 {
@@ -240,7 +240,7 @@ func TestMetadataLimitsHostAndNoReplay(t *testing.T) {
 }
 func TestConfigRejectsAmbiguity(t *testing.T) {
 	f := newFixture(t)
-	for _, mutate := range []func(*Config){func(c *Config) { c.Routes[1].Path = c.Routes[0].Path }, func(c *Config) { c.Routes[0].RequiredScopes = nil }, func(c *Config) { c.Routes[0].Path = "/shopping/../ssh/mcp" }, func(c *Config) { c.Origin = "http://public.example" }, func(c *Config) { c.Routes[0].ClientIDs = nil }} {
+	for _, mutate := range []func(*Config){func(c *Config) { c.Routes[1].Path = c.Routes[0].Path }, func(c *Config) { c.Routes[0].RequiredScopes = nil }, func(c *Config) { c.Routes[0].Path = "/service-a/../service-b/mcp" }, func(c *Config) { c.Origin = "http://public.example" }, func(c *Config) { c.Routes[0].ClientIDs = nil }} {
 		c := f.config
 		c.Routes = slices.Clone(c.Routes)
 		mutate(&c)
@@ -252,7 +252,7 @@ func TestConfigRejectsAmbiguity(t *testing.T) {
 
 func TestConfigRejectsRoutePatternsBeforeMuxRegistration(t *testing.T) {
 	f := newFixture(t)
-	for _, path := range []string{"/shopping/{id}/mcp", "/shopping/{/mcp", "/shopping/}/mcp", "/shopping/\x00/mcp"} {
+	for _, path := range []string{"/service-a/{id}/mcp", "/service-a/{/mcp", "/service-a/}/mcp", "/service-a/\x00/mcp"} {
 		t.Run(path, func(t *testing.T) {
 			c := f.config
 			c.Routes = slices.Clone(c.Routes)
@@ -271,16 +271,16 @@ func TestAccessProfilesRequireTheirClientClaim(t *testing.T) {
 	f := newFixture(t)
 	for _, profile := range []string{"keycloak", "rfc9068"} {
 		t.Run(profile, func(t *testing.T) {
-			token := f.token(t, profile, "/shopping/mcp", func(c map[string]any) {
+			token := f.token(t, profile, "/service-a/mcp", func(c map[string]any) {
 				if profile == "keycloak" {
 					delete(c, "azp")
-					c["client_id"] = "shopping-client"
+					c["client_id"] = "service-a-client"
 				} else {
 					delete(c, "client_id")
-					c["azp"] = "shopping-client"
+					c["azp"] = "service-a-client"
 				}
 			})
-			if w := request(f.server, "/shopping/mcp", token, `{}`); w.Code != http.StatusUnauthorized {
+			if w := request(f.server, "/service-a/mcp", token, `{}`); w.Code != http.StatusUnauthorized {
 				t.Fatalf("incorrect profile accepted: %d", w.Code)
 			}
 		})
@@ -310,13 +310,13 @@ func TestProxyStripsRequestAndResponseTrailers(t *testing.T) {
 	f.config.Routes[0].Upstream = upstream.URL + "/mcp"
 	gateway := httptest.NewServer(f.build(t))
 	defer gateway.Close()
-	r, err := http.NewRequestWithContext(t.Context(), http.MethodPost, gateway.URL+"/shopping/mcp", strings.NewReader(`{}`))
+	r, err := http.NewRequestWithContext(t.Context(), http.MethodPost, gateway.URL+"/service-a/mcp", strings.NewReader(`{}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.Host = "gateway.example"
 	r.ContentLength = -1
-	r.Header.Set("Authorization", "Bearer "+f.token(t, "rfc9068", "/shopping/mcp", nil))
+	r.Header.Set("Authorization", "Bearer "+f.token(t, "rfc9068", "/service-a/mcp", nil))
 	r.Trailer = http.Header{"Cookie": {"private=client"}, "X-Forwarded-User": {"mallory"}}
 	resp, err := gateway.Client().Do(r)
 	if err != nil {
@@ -346,8 +346,8 @@ func TestCancellationReachesBackend(t *testing.T) {
 	s := f.build(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	r := httptest.NewRequest("POST", f.config.Origin+"/shopping/mcp", strings.NewReader(`{}`)).WithContext(ctx)
-	r.Header.Set("Authorization", "Bearer "+f.token(t, "keycloak", "/shopping/mcp", nil))
+	r := httptest.NewRequest("POST", f.config.Origin+"/service-a/mcp", strings.NewReader(`{}`)).WithContext(ctx)
+	r.Header.Set("Authorization", "Bearer "+f.token(t, "keycloak", "/service-a/mcp", nil))
 	done := make(chan struct{})
 	go func() { s.ServeHTTP(httptest.NewRecorder(), r); close(done) }()
 	select {
@@ -367,8 +367,8 @@ func TestCancellationReachesBackend(t *testing.T) {
 func TestForwardedIdentityExpiryDoesNotExtendGrant(t *testing.T) {
 	f := newFixture(t)
 	expiry := time.Now().Add(5 * time.Second).Unix()
-	token := f.token(t, "rfc9068", "/shopping/mcp", func(c map[string]any) { c["exp"] = expiry })
-	w := request(f.server, "/shopping/mcp", token, `{}`)
+	token := f.token(t, "rfc9068", "/service-a/mcp", func(c map[string]any) { c["exp"] = expiry })
+	w := request(f.server, "/service-a/mcp", token, `{}`)
 	if w.Code != 200 {
 		t.Fatalf("request: %d", w.Code)
 	}
@@ -394,7 +394,7 @@ func TestExternalTokenLifetimeBeforeDispatch(t *testing.T) {
 			"extreme expiry":   func(c map[string]any) { c["exp"] = int64(1<<63 - 1) },
 		} {
 			t.Run(profile+"/"+name, func(t *testing.T) {
-				w := request(f.server, "/shopping/mcp", f.token(t, profile, "/shopping/mcp", change), `{}`)
+				w := request(f.server, "/service-a/mcp", f.token(t, profile, "/service-a/mcp", change), `{}`)
 				if w.Code != http.StatusUnauthorized {
 					t.Fatalf("invalid external lifetime accepted: %d", w.Code)
 				}
@@ -420,11 +420,11 @@ func TestRouteTokenLifetimePolicy(t *testing.T) {
 	f.config.Routes[0].MaxTokenLifetimeSeconds = 30
 	s := f.build(t)
 	for _, profile := range []string{"keycloak", "rfc9068"} {
-		if w := request(s, "/shopping/mcp", f.token(t, profile, "/shopping/mcp", nil), `{}`); w.Code != http.StatusUnauthorized {
+		if w := request(s, "/service-a/mcp", f.token(t, profile, "/service-a/mcp", nil), `{}`); w.Code != http.StatusUnauthorized {
 			t.Fatalf("%s ignored route policy: %d", profile, w.Code)
 		}
-		short := f.token(t, profile, "/shopping/mcp", func(c map[string]any) { c["exp"] = c["iat"].(int64) + 30 })
-		if w := request(s, "/shopping/mcp", short, `{}`); w.Code != http.StatusOK {
+		short := f.token(t, profile, "/service-a/mcp", func(c map[string]any) { c["exp"] = c["iat"].(int64) + 30 })
+		if w := request(s, "/service-a/mcp", short, `{}`); w.Code != http.StatusOK {
 			t.Fatalf("%s rejected bounded grant: %d", profile, w.Code)
 		}
 	}
@@ -439,7 +439,7 @@ func (a fixedAuthenticator) Authenticate(context.Context, string, string) (trust
 func TestCoreRejectsAuthenticatorWithoutValidTiming(t *testing.T) {
 	f := newFixture(t)
 	now := time.Now()
-	valid := trust.Principal{Issuer: f.issuer, Subject: "alice", ClientID: "shopping-client", Scope: "shopping:read", IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute)}
+	valid := trust.Principal{Issuer: f.issuer, Subject: "alice", ClientID: "service-a-client", Scope: "service-a:use", IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute)}
 	for name, mutate := range map[string]func(*trust.Principal){
 		"missing issuance": func(p *trust.Principal) { p.IssuedAt = time.Time{} },
 		"missing expiry":   func(p *trust.Principal) { p.ExpiresAt = time.Time{} },
@@ -455,7 +455,7 @@ func TestCoreRejectsAuthenticatorWithoutValidTiming(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if w := request(s, "/shopping/mcp", "synthetic", `{}`); w.Code != http.StatusUnauthorized {
+			if w := request(s, "/service-a/mcp", "synthetic", `{}`); w.Code != http.StatusUnauthorized {
 				t.Fatalf("invalid normalized timing accepted: %d", w.Code)
 			}
 			if _, err := s.issue(p, f.config.Routes[0]); err == nil {
@@ -533,8 +533,8 @@ func TestProxyDiscardsInformationalMetadata(t *testing.T) {
 		server.ServeHTTP(w, r.WithContext(httptrace.WithClientTrace(r.Context(), sharedTrace)))
 	}))
 	defer gateway.Close()
-	token := f.token(t, "rfc9068", "/shopping/mcp", nil)
-	r, err := http.NewRequestWithContext(t.Context(), http.MethodPost, gateway.URL+"/shopping/mcp", strings.NewReader(`{"hints":false}`))
+	token := f.token(t, "rfc9068", "/service-a/mcp", nil)
+	r, err := http.NewRequestWithContext(t.Context(), http.MethodPost, gateway.URL+"/service-a/mcp", strings.NewReader(`{"hints":false}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -565,7 +565,7 @@ func TestProxyDiscardsInformationalMetadata(t *testing.T) {
 					return nil
 				}}
 				body := `{"id":` + strconv.Itoa(i) + `}`
-				r, err := http.NewRequestWithContext(httptrace.WithClientTrace(t.Context(), trace), http.MethodPost, gateway.URL+"/shopping/mcp", strings.NewReader(body))
+				r, err := http.NewRequestWithContext(httptrace.WithClientTrace(t.Context(), trace), http.MethodPost, gateway.URL+"/service-a/mcp", strings.NewReader(body))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -628,12 +628,12 @@ func TestProxyPreservesInformationalTraceError(t *testing.T) {
 		server.ServeHTTP(w, r.WithContext(httptrace.WithClientTrace(r.Context(), trace)))
 	}))
 	defer gateway.Close()
-	r, err := http.NewRequestWithContext(t.Context(), http.MethodPost, gateway.URL+"/shopping/mcp", strings.NewReader(`{}`))
+	r, err := http.NewRequestWithContext(t.Context(), http.MethodPost, gateway.URL+"/service-a/mcp", strings.NewReader(`{}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.Host = "gateway.example"
-	r.Header.Set("Authorization", "Bearer "+f.token(t, "rfc9068", "/shopping/mcp", nil))
+	r.Header.Set("Authorization", "Bearer "+f.token(t, "rfc9068", "/service-a/mcp", nil))
 	resp, err := gateway.Client().Do(r)
 	if err != nil {
 		t.Fatal(err)
@@ -668,12 +668,12 @@ func TestInformationalResponsesPreserveSSEStreaming(t *testing.T) {
 	defer gateway.Close()
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
-	r, err := http.NewRequestWithContext(ctx, http.MethodPost, gateway.URL+"/shopping/mcp", strings.NewReader(`{}`))
+	r, err := http.NewRequestWithContext(ctx, http.MethodPost, gateway.URL+"/service-a/mcp", strings.NewReader(`{}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	r.Host = "gateway.example"
-	r.Header.Set("Authorization", "Bearer "+f.token(t, "rfc9068", "/shopping/mcp", nil))
+	r.Header.Set("Authorization", "Bearer "+f.token(t, "rfc9068", "/service-a/mcp", nil))
 	resp, err := gateway.Client().Do(r)
 	if err != nil {
 		t.Fatal(err)

@@ -1,7 +1,7 @@
 # Container deployment behind an existing HTTPS proxy on a private network.
 # Adapt gateway.json listen to :8088 and upstreams to private service addresses.
-# SSH backend is loopback-only: run it and the gateway on the same host/network
-# namespace, or use an explicit private tunnel. Do not publish backend ports.
+# Keep backend ports private. Loopback upstreams require the same host/network
+# namespace; separate containers need explicit private service addresses.
 services:
   gateway:
     build: ..

@@ -1,6 +1,6 @@
-.PHONY: check test build integration
+.PHONY: check test build integration demo
 check:
-	@test -z "$$(gofmt -l cmd gateway trust)" || (gofmt -l cmd gateway trust; exit 1)
+	@test -z "$$(gofmt -l cmd gateway trust internal integration)" || (gofmt -l cmd gateway trust internal integration; exit 1)
 	go vet ./...
 	go test -race ./...
 test:
@@ -9,6 +9,8 @@ build:
 	go build -trimpath -o bin/mcp-gateway ./cmd/mcp-gateway
 	go build -trimpath -o bin/gateway-keygen ./cmd/gateway-keygen
 	go build -trimpath -o bin/example-mcp ./cmd/example-mcp
+	go build -trimpath -o bin/local-demo ./cmd/local-demo
 integration: build
-	cd ../AgentShoppingList && MCP_GATEWAY_BIN="$(CURDIR)/bin/mcp-gateway" go test -race -count=1 ./internal/web -run TestSharedGatewayShoppingMCP
-	cd ../SSHMCP && MCP_GATEWAY_BIN="$(CURDIR)/bin/mcp-gateway" go test -race -count=1 ./internal/gateway -run TestSharedGatewaySSHProtocol
+	MCP_GATEWAY_BIN="$(CURDIR)/bin/mcp-gateway" go test -race -tags=integration -count=1 -v ./integration
+demo: build
+	./bin/local-demo --gateway "$(CURDIR)/bin/mcp-gateway"

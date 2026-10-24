@@ -40,9 +40,6 @@ func run() error {
 	if err := decoder.Decode(&config); err != nil {
 		return err
 	}
-	if config.Gateway != nil {
-		return errors.New("gateway trust requires sshmcp-server backend mode")
-	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	// Public issuer URL stays on 18081. Keycloak itself binds only the separate
