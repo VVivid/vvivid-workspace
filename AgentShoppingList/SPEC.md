@@ -2,8 +2,6 @@
 
 Draft specification for a mobile shopping app managed primarily by AI agents through MCP. The user opens a ready shopping list, identifies products, and checks items while shopping. The agent maintains products, lists, purchase records, and preferences. The server derives metrics from purchase records.
 
-Status: October 19, 2026. CP01/02/04/05/07/08/09 are locally complete with independent approval. CP03/06 live acceptance and CP10 deployment remain in progress. The current no-backup correction requires its own local validation and independent review. See CHECKPOINTS.md for actual evidence.
-
 # Product behavior
 
 The mobile app opens My list by default. Four compact tabs remain: My list, Products, History, and Insights. No management dashboard or chat interface is required.
@@ -290,12 +288,8 @@ Connection loss must never display an unsaved checkbox as synced. V1 may require
 
 5. Keep stock tracking, shared households, automated Walmart imports, custom metrics, and offline writes out of v1 unless explicitly added.
 
-# Development checkpoints and resume
+# Development workflow
 
-The canonical project is /Users/oudavid/works/opensource/vvivid-workspace/AgentShoppingList. Local SPEC.md, REQUIREMENTS.md, ARCHITECTURE.md, CHECKPOINTS.md, and RESUME.md are the development handoff. The Page is a reference mirror; update it deliberately when project requirements change.
+Use the [shared workflow](../docs/DEVELOPMENT-WORKFLOW.md) and [project instructions](AGENTS.md). REQUIREMENTS.md, this specification, ARCHITECTURE.md, and docs/DOMAIN.md describe maintained requirements and contracts; the reference Page is a mirror updated deliberately when requirements change.
 
-CP00–CP02, CP04/CP05, CP07/CP08 and CP09 are locally complete. Local identity, all 16 MCP tools and the prior release slice completed independent Review. Actual Keycloak/phone/client acceptance and CP10 deployment remain incomplete. The no-backup correction is a new local slice; its Translation, final validation and fresh Review must complete before replacement images are built. CHECKPOINTS.md records authoritative evidence; docs/DOMAIN.md describes current contracts.
-
-At a pause or new-chat handoff, update CHECKPOINTS.md and RESUME.md with completed work, remaining work, actual validation results, failures, relevant commit IDs if Git exists, and the next concrete action. Mark a checkpoint complete only after its exit criteria pass. Partial work remains in progress; resuming verifies the current files and continues unfinished work rather than restarting or deleting state.
-
-Local development has started at CP01 under the development chat's authorization. The original planning handoff did not authorize changes to live Keycloak/Traefik; live integration and deployment remain a separate scope.
+Keep active checkpoint and resume records under ignored `.development/<task>/`. Inspect source and Git state when resuming, preserve unfinished work, and continue the first incomplete agreed checkpoint. Planning does not authorize live identity, routing, deployment, or data changes. Dated reports under docs/validation describe executed checks and their limits; they do not prove current runtime state.

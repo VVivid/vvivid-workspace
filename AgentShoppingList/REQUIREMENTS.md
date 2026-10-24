@@ -1,7 +1,5 @@
 # User requirements
 
-Status: October 19, 2026. CP01/02/04/05/07/08/09 are locally complete with independent approval. CP03/06 live acceptance and CP10 deployment remain in progress. The current no-backup correction is in the local implementation workflow; prior image approval does not cover it. See CHECKPOINTS.md for actual evidence.
-
 ## Intended use
 
 The app is mainly managed by an agent through MCP. The user opens a ready shopping list when planning or having an opportunity to shop, mainly at Walmart. The UI should demand very little typing or management.

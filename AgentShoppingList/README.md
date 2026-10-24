@@ -1,19 +1,16 @@
 # AgentShoppingList
 
-V1 beta is deployed at https://shopping.vvivid.dev. Current build: `0.1.0-beta.3` / application `b739622`, including six-hour public sharing of selected shopping items. Browser sign-in/refresh, Codex and ChatGPT MCP reads/writes, and live restart persistence were verified in prior beta acceptance; sharing rollout preservation, readiness and live selection controls passed. Physical-phone and real-receipt checks remain beta follow-up. See [RESUME.md](RESUME.md) and the [sharing rollout](docs/validation/SHARING-DEPLOYMENT-2026-10-19.md) for evidence and limits.
+V1 beta is hosted at https://shopping.vvivid.dev. Dated rollout reports document six-hour public sharing and subsequent History changes. Browser sign-in/refresh, Codex and ChatGPT MCP reads/writes, and live restart persistence were verified in prior beta acceptance; sharing rollout preservation, readiness and live selection controls passed. Physical-phone and real-receipt checks remain beta follow-up. See the [sharing rollout](docs/validation/SHARING-DEPLOYMENT-2026-10-19.md) and [History rollout](docs/validation/COMPACT-HISTORY-DEPLOYMENT-2026-10-21.md) for dated evidence and limits; inspect runtime state before claiming the current deployed version.
 
 A mobile shopping list managed primarily by AI agents through built-in MCP. Open the list at Walmart, identify the right product, and check it off. Agents maintain product details, lists, purchase history, and preferences; the server computes insights.
-
-Status: October 19, 2026. The V1 beta is deployed. Browser sign-in and refresh, both MCP clients, sourced example creation and live restart persistence have passed. CP01/02/04/05/07/08/09 are locally complete with independent approval. CP03/06/10 retain the remaining phone, real-receipt and live security acceptance checks; those checks are not claimed complete. Automatic migration backups are removed and the correction is independently approved. See CHECKPOINTS.md for the evidence ledger.
 
 The Go application serves four compact mobile views, a narrow browser API and16 built-in MCP tools over shared owner/scope-checked services. Agents maintain sourced purchase drafts, confirmation and full void/replacement corrections; History uses immutable confirmed snapshots and Insights computes recorded spending/compatible quantities. Complete Keycloak configuration enables sign-in, encrypted durable sessions and bearer authentication. Accounts and personal data are never automatically seeded. Readiness checks configured identity and live persistence/migrations; the unconfigured shell stays503. See [docs/DOMAIN.md](docs/DOMAIN.md) and the [release and persistence runbook](docs/RUNBOOK.md).
 
 ## Start or resume
 
-1. Read `AGENTS.md`.
-2. Read `RESUME.md` for the actual current state and next action.
-3. Read `REQUIREMENTS.md`, `SPEC.md`, and `ARCHITECTURE.md`.
-4. Work through `CHECKPOINTS.md` from the first incomplete checkpoint.
+1. Read [root instructions](../AGENTS.md), local [AGENTS.md](AGENTS.md), and the [shared workflow](../docs/DEVELOPMENT-WORKFLOW.md).
+2. Read REQUIREMENTS.md, SPEC.md, ARCHITECTURE.md, and relevant domain/operations docs.
+3. Resume a matching local `.development/<task>/` record if present; otherwise agree a new checkpoint plan. Temporary handoffs are ignored and absent from fresh clones.
 
 ## Selected stack
 
@@ -26,8 +23,6 @@ Go + `html/template` + Tailwind CSS + minimal JavaScript + SQLite. One Go applic
 | REQUIREMENTS.md | User requirements, scope, and acceptance mapping |
 | SPEC.md | Domain model, API routes, MCP tools, scopes, and behavior |
 | ARCHITECTURE.md | Runtime layout, persistence, security, deployment and restart design |
-| CHECKPOINTS.md | Ordered milestones, exit criteria, and evidence ledger |
-| RESUME.md | New-chat entry point and current progress |
 | docs/KEYCLOAK.md | Prior read-only deployment findings and integration constraints |
 | docs/AUTH.md | Identity configuration, local enrollment, rotation and live acceptance |
 | docs/RUNBOOK.md | Immutable image, prepared Compose/Traefik, restart tests and server-only persistence policy |
@@ -78,4 +73,4 @@ The default development listener is local. The deployed beta uses `https://shopp
 
 SQLite uses WAL, one writer, a bounded read-only pool and per-connection foreign keys. Embedded migrations reject altered/newer/gapped history and existing schemas without application history. No accounts are seeded; identity lookup never enrolls automatically. Fresh startup, enrollment and supported upgrades create no backup archive or backup scratch directory. Keep shopping data and runtime secrets on the server: no backups, snapshots, off-server copies, schedules or Mac recovery keys. Existing manual backup tools require a future explicit request and are not invoked by application paths. See [docs/RUNBOOK.md](docs/RUNBOOK.md). Data files are Git-ignored. Restricted local validation can use `GOMODCACHE=$PWD/.cache/go-mod GOCACHE=$PWD/.cache/go-build make check build`.
 
-The deployed beta enrolls only the owner and has separate Codex and ChatGPT OAuth clients. Owner preferences are America/New_York, USD, Walmart, Monday week start; these are user selections, not global defaults. A new deployment must provision its own private secrets, exact callbacks and explicitly enrolled subject; the repository contains no live credentials or database. Follow [CHECKPOINTS.md](CHECKPOINTS.md) and [RESUME.md](RESUME.md) for verification and next work.
+The deployed beta enrolls only the owner and has separate Codex and ChatGPT OAuth clients. Owner preferences are America/New_York, USD, Walmart, Monday week start; these are user selections, not global defaults. A new deployment must provision its own private secrets, exact callbacks and explicitly enrolled subject; the repository contains no live credentials or database. Follow [authentication](docs/AUTH.md) and the [runbook](docs/RUNBOOK.md) for verification; keep active task progress in ignored local records.
