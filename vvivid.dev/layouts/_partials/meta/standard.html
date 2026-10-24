@@ -1,0 +1,58 @@
+<meta charset="utf-8">
+<meta http-equiv="content-type" content="text/html">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+{{- $pageTitle := "" -}}
+{{- if .IsHome -}}
+{{- $pageTitle = .Site.Title -}}
+{{- else -}}
+{{- $pageTitle = printf "%s | %s" .Title .Site.Title -}}
+{{- end -}}
+
+<title itemprop="name">{{ $pageTitle }}</title>
+<meta property="og:title" content="{{ $pageTitle }}" />
+<meta name="twitter:title" content="{{ $pageTitle }}" />
+<meta itemprop="name" content="{{ $pageTitle }}" />
+<meta name="application-name" content="{{ $pageTitle }}" />
+<meta property="og:site_name" content="{{ .Site.Params.sitename }}" />
+
+<meta name="twitter:card" content="summary_large_image" />
+
+{{/* Description Logic */}}
+{{- $description := "" -}}
+{{- if .IsHome -}}
+{{- $description = .Site.Params.description -}}
+{{- else if .Params.description -}}
+{{- $description = .Params.description -}}
+{{- else if .Summary -}}
+{{- $description = .Summary -}}
+{{- else -}}
+{{- $description = .Site.Params.description -}}
+{{- end -}}
+
+<meta name="description" content="{{ $description }}">
+<meta itemprop="description" content="{{ $description }}" />
+<meta property="og:description" content="{{ $description }}" />
+<meta name="twitter:description" content="{{ $description }}" />
+
+<meta property="og:locale" content="{{ .Site.Language.Locale }}" />
+<meta name="language" content="{{ .Site.Language.Locale }}" />
+{{ range .AllTranslations }}
+<link rel="alternate" hreflang="{{ .Language.Lang }}" href="{{ .Permalink }}" title="{{ .Language.Label }}" />
+{{ end }}
+
+{{/* Image Logic */}}
+{{- $image := "" -}}
+{{- if .Params.image -}}
+{{- $image = .Params.image -}}
+{{- else if .Site.Params.ogimage -}}
+{{- $image = .Site.Params.ogimage -}}
+{{- end -}}
+
+{{- if $image -}}
+{{- $imageURL := $image | absURL -}}
+<meta itemprop="image" content="{{ $imageURL }}" />
+<meta property="og:image" content="{{ $imageURL }}" />
+<meta name="twitter:image" content="{{ $imageURL }}" />
+<meta name="twitter:image:src" content="{{ $imageURL }}" />
+{{- end -}}

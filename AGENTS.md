@@ -15,6 +15,7 @@
 | `GoogleHealthMCP/` | Google Health / Fitbit importer with SQLite persistence | [README](GoogleHealthMCP/README.md) |
 | `SSHMCP/` | Authenticated MCP gateway and persistent SSH execution runner | [README](SSHMCP/README.md) |
 | `examples/xtrace-example/` | Distributed tracing demonstration | [README](examples/xtrace-example/README.md) |
+| `vvivid.dev/` | Personal website built with Hugo Extended and a vendored theme | [README](vvivid.dev/README.md), [local instructions](vvivid.dev/AGENTS.md) |
 | Repository root | Shared build delegation, CI, documentation, and agent skills | [Development guide](DEVELOPMENT.md) |
 
 ## Shared rules
