@@ -10,6 +10,8 @@ By **David Ou**.
 
 Explore the folders. Each project has its own README.
 
+[Personal website source and local build](vvivid.dev/README.md)
+
 [Development guide](DEVELOPMENT.md)
 
 [Agent instructions](AGENTS.md) · [Project map](docs/PROJECT-MAP.md)
