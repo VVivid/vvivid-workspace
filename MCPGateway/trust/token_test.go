@@ -45,7 +45,8 @@ func TestIdentityContract(t *testing.T) {
 		"issuer": func(c *Claims) { c.Issuer = "other" }, "audience": func(c *Claims) { c.Audience = jwt.Audience{"other"} },
 		"expired": func(c *Claims) { c.Expiry = jwt.NewNumericDate(now.Add(-time.Second)) }, "missing expiry": func(c *Claims) { c.Expiry = nil },
 		"future": func(c *Claims) { c.NotBefore = jwt.NewNumericDate(now.Add(time.Minute)) }, "long lifetime": func(c *Claims) { c.Expiry = jwt.NewNumericDate(now.Add(2 * time.Minute)) },
-		"missing subject": func(c *Claims) { c.Subject = "" }, "missing original issuer": func(c *Claims) { c.IdentityIssuer = "" }, "missing client": func(c *Claims) { c.ClientID = "" },
+		"extreme issued-at": func(c *Claims) { c.IssuedAt = new(jwt.NumericDate(-1 << 63)) },
+		"missing subject":   func(c *Claims) { c.Subject = "" }, "missing original issuer": func(c *Claims) { c.IdentityIssuer = "" }, "missing client": func(c *Claims) { c.ClientID = "" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			c := base

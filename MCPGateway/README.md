@@ -42,7 +42,8 @@ distinct backend audience, required scopes, forwarded scopes and allowed OAuth
 client IDs. `upstream_host` optionally preserves a backend's configured canonical
 Host, notably Shopping. Public URLs require HTTPS; HTTP loopback is accepted for
 local development. Internal upstream HTTP requires a trusted private network.
-The gateway does not forward client cookies, identity headers or bearer tokens.
+The gateway does not forward client cookies, identity headers, bearer tokens or
+HTTP trailers. Backend response trailers are also discarded.
 
 `GET /health/live` indicates a running HTTP handler. `/health/ready` indicates
 successful startup configuration, key loading and issuer discovery; neither

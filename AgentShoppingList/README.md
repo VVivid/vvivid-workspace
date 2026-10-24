@@ -14,7 +14,7 @@ The Go application serves four compact mobile views, a narrow browser API and16 
 
 ## Selected stack
 
-Go + `html/template` + Tailwind CSS + minimal JavaScript + SQLite. One Go application serves the mobile site, Web API, and MCP endpoint. Reuse existing Traefik and Keycloak. **No separate MCP gateway.**
+Go + `html/template` + Tailwind CSS + minimal JavaScript + SQLite. One Go application serves the mobile site, Web API, and MCP endpoint. Reuse existing Traefik and Keycloak. The optional [shared MCPGateway](../MCPGateway/README.md) can front MCP access; browser identity, enrollment, tools and domain authorization stay in Shopping.
 
 ## Documents
 

@@ -83,7 +83,15 @@ func (v *Verifier) Verify(raw string) (Principal, error) {
 		return Principal{}, invalid
 	}
 	now := time.Now().Unix()
-	if c.Issuer != v.config.Issuer || len(c.Audience) != 1 || c.Audience[0] != v.config.Audience || c.Expiry == nil || c.IssuedAt == nil || c.NotBefore == nil || int64(*c.Expiry) <= now || int64(*c.IssuedAt) > now+5 || int64(*c.NotBefore) > now || int64(*c.Expiry)-int64(*c.IssuedAt) > 60 || *c.Expiry <= *c.IssuedAt || c.IdentityIssuer == "" || strings.ContainsRune(c.IdentityIssuer, 0) || c.Subject == "" || strings.ContainsRune(c.Subject, 0) || len(c.Subject) > 255 || c.ClientID == "" {
+	if c.Issuer != v.config.Issuer || len(c.Audience) != 1 || c.Audience[0] != v.config.Audience || c.IdentityIssuer == "" || strings.ContainsRune(c.IdentityIssuer, 0) || c.Subject == "" || strings.ContainsRune(c.Subject, 0) || len(c.Subject) > 255 || c.ClientID == "" {
+		return Principal{}, invalid
+	}
+	if c.Expiry == nil || c.IssuedAt == nil || c.NotBefore == nil {
+		return Principal{}, invalid
+	}
+	expires, issued, notBefore := int64(*c.Expiry), int64(*c.IssuedAt), int64(*c.NotBefore)
+	// Check expiry first so expires-60 is safe even for extreme signed timestamps.
+	if expires <= now || issued > now+5 || notBefore > now || issued < expires-60 || expires <= issued {
 		return Principal{}, invalid
 	}
 	return Principal{Issuer: c.IdentityIssuer, Subject: c.Subject, ClientID: c.ClientID, Scope: c.Scope, ExpiresAt: time.Unix(int64(*c.Expiry), 0)}, nil
