@@ -1,0 +1,9 @@
+{
+  "id": "source-a-agent",
+  "source_ids": ["source-a"],
+  "actions": ["config.read", "config.write", "config.activate", "preview", "events.read", "events.replay", "deliveries.read", "deliveries.retry"],
+  "destination_origins": ["https://receiver.example"],
+  "secret_names": ["source-a-auth", "receiver-a-header"],
+  "original_retention": {"max_seconds": 86400, "allow_indefinite": false},
+  "delivery_retention": {"max_seconds": 604800, "allow_indefinite": false}
+}

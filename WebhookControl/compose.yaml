@@ -1,0 +1,47 @@
+services:
+  webhook-control:
+    image: webhook-control:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+      secrets:
+        - proxy_ca
+    user: "1000:1000"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - type: bind
+        source: ${WEBHOOK_CONFIG_FILE:-./config.json}
+        target: /etc/webhook-control/config.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${WEBHOOK_DATA_DIR:-./data}
+        target: /data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${WEBHOOK_KEY_FILE:-./secrets/database.key}
+        target: /run/secrets/database-key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${WEBHOOK_DIGEST_KEY_FILE:-./secrets/digest.key}
+        target: /run/secrets/digest-key
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m,uid=1000,gid=1000,mode=0700
+    stop_grace_period: 15s
+secrets:
+  # Public trust bundle for builds, never a runtime credential. In managed
+  # environments set WEBHOOK_BUILD_CA_FILE=$CODEX_PROXY_CERT if required.
+  proxy_ca:
+    file: ${WEBHOOK_BUILD_CA_FILE:-/etc/ssl/certs/ca-certificates.crt}
