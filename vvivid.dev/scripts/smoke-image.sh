@@ -42,11 +42,6 @@ if [ -n "$leaked_guide" ]; then
     printf 'Agent guide exists in the serving image.\n' >&2
     exit 1
 fi
-for path in AGENTS.md aGeNt.md nested/AGENT.md; do
-    status=$(curl --silent --max-time 5 --noproxy '*' --output /dev/null --write-out '%{http_code}' "$origin/$path")
-    if [ "$status" != 404 ]; then
-        printf 'Agent guide URL /%s returned %s; expected 404.\n' "$path" "$status" >&2
-        exit 1
-    fi
-done
-printf 'Serving image passed HTTP and agent-guide checks.\n'
+script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
+python3 "$script_dir/test-serving.py" "$origin"
+printf 'Serving image passed representation, discovery, cache, and agent-guide checks.\n'

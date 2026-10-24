@@ -7,6 +7,11 @@
     {{/* Canonical link, RSS */}}
 
     <link rel="canonical" href="{{ .Permalink }}">
+    {{- with .OutputFormats.Get "Markdown" }}
+    <link href="{{ .RelPermalink }}" rel="alternate" type="text/markdown" title="{{ $.Title }} (Markdown)">
+    {{- end }}
+    <link href="{{ "llms.txt" | relURL }}" rel="describedby" type="text/plain" title="Published content index">
+    <link href="{{ "auth.md" | relURL }}" rel="describedby" type="text/markdown" title="Public access information">
     {{- with .OutputFormats.Get "RSS" }}
     <link href="{{ .RelPermalink }}" rel="alternate" type="application/rss+xml" title="{{ $.Site.Title }}">
     <link href="{{ .RelPermalink }}" rel="feed" type="application/rss+xml" title="{{ $.Site.Title }}">
