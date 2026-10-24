@@ -175,6 +175,8 @@ inputs belong to this module. Copy this directory alone to another location and
 run the same commands; no parent checkout, sibling sources or repository scripts
 are required. The dedicated CI workflow also runs these checks from an isolated
 module copy. Dependency downloads still need normal Go package access.
+The Make and container builds disable VCS stamping, so Git metadata is not a
+build input.
 
 Production rollout additionally needs reviewed provider registration,
 TLS/network setup, key delivery and actual client login/refresh/use. See the

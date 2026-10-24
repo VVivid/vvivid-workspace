@@ -60,6 +60,7 @@ func New(config trust.Config, clientID, requiredScope string, jsonResponse bool)
 	transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{
 		Stateless: true, JSONResponse: jsonResponse, MaxRequestBodyBytes: 128 << 10,
 	})
+	protectedTransport := http.NewCrossOriginProtection().Handler(transport)
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if len(r.Header.Values("Authorization")) != 1 {
@@ -80,7 +81,7 @@ func New(config trust.Config, clientID, requiredScope string, jsonResponse bool)
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
-		transport.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey{}, principal)))
+		protectedTransport.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey{}, principal)))
 	}))
 	return mux, nil
 }
