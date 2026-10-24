@@ -1,6 +1,6 @@
 # vvivid.dev agent guidance
 
-Follow the [root instructions](../AGENTS.md) and shared workflow. This project owns the Hugo site, content, layout overrides, static assets, and its vendored theme. The original archive's GitLab deployment is retained only as [legacy reference](deploy/legacy/gitlab-ci.yml); it is not an active workflow.
+Follow the [root instructions](../AGENTS.md) and shared workflow. This project owns the Hugo site, content, layout overrides, static assets, and its vendored theme. The original archive's GitLab deployment is retained only as [legacy reference](deploy/legacy/gitlab-ci.yml); it is not an active repository workflow. GitHub live deployment setup and recovery are documented in the [live runbook](deploy/live/README.md); preview remains outside that workflow.
 
 ## Content and author
 
@@ -20,4 +20,4 @@ Keep this file and agent-only notes outside `content/`, `static/`, and `assets/`
 
 Public examples and links must use public hostnames. Never expose internal VPN addresses, private IPs, `sslip.io`, or registry hostnames in published content. Preserve existing public `gitlab.vvivid.dev` references unless an authorized content change replaces them.
 
-Operational scripts and Compose configuration are imported references to the former infrastructure. Building the site does not authorize running those operations or deploying it.
+Legacy operational scripts and the project-root Compose configuration are imported references to the former infrastructure. The live deployment helper has its own fixed server scope in the live runbook. Building the site does not authorize running those operations or deploying it.

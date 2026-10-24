@@ -1,0 +1,6 @@
+# Apply only this image expression to the EXISTING vvivid-live service in the
+# server's compose.yml. Keep all existing live labels, networks, and options.
+# This fragment is documentation, not an additional Compose deployment.
+services:
+  vvivid-live:
+    image: ${VVIVID_LIVE_IMAGE:-${VVIVID_IMAGE}:${VVIVID_LIVE_TAG}}

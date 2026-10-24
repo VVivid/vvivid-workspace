@@ -4,7 +4,7 @@ Ou David's personal website, built with Hugo Extended. This project owns its con
 
 ## Native build and preview
 
-Install Make, a POSIX shell, and **Hugo Extended 0.162.1**, the version recorded in [.hugo-version](.hugo-version). No Node or Go installation is needed. Download the matching Extended archive for your platform from the [official release](https://github.com/gohugoio/hugo/releases/tag/v0.162.1) and verify its published checksum.
+Install Make, a POSIX shell, Python 3, Bash for deployment workflow tests, and **Hugo Extended 0.162.1**, the version recorded in [.hugo-version](.hugo-version). No Node or Go installation is needed. Download the matching Extended archive for your platform from the [official release](https://github.com/gohugoio/hugo/releases/tag/v0.162.1) and verify its published checksum.
 
 For Linux amd64, a temporary installation can be used without changing system tools:
 
@@ -19,7 +19,7 @@ tar -xzf "$site_hugo_dir/hugo.tar.gz" -C "$site_hugo_dir"
 HUGO="$site_hugo_dir/hugo" make -C vvivid.dev check
 ```
 
-Use `make website-check`, `make website-test`, or `make website-build` at the repository root, or `make check`, `make test`, or `make build` inside this directory. All three project targets render the production site through [scripts/build.sh](scripts/build.sh); there is no separate unit-test suite. The script requires the pinned Extended version, minifies output, and fails if any case variant of `AGENTS.md` or `AGENT.md` reaches the output. Generated `public/` and `resources/` directories are ignored by Git.
+Use `make website-check`, `make website-test`, or `make website-build` at the repository root, or `make check`, `make test`, or `make build` inside this directory. All three project targets render the production site through [scripts/build.sh](scripts/build.sh). Check and test also run the [deployment tests](deploy/live/README.md#local-checks) with fake Docker/HTTP/GitHub commands; no remote service is contacted. Build remains a render-only target. The build script requires the pinned Extended version, minifies output, and fails if any case variant of `AGENTS.md` or `AGENT.md` reaches the output. Generated `public/` and `resources/` directories are ignored by Git.
 
 Set `HUGO=/absolute/path/to/hugo` when the binary is outside `PATH`. `HUGO_DESTINATION` changes the output directory; relative paths are resolved from `vvivid.dev/`. `HUGO_BASEURL` overrides the production default of `https://vvivid.dev/`.
 
@@ -44,7 +44,7 @@ docker run --rm --publish 127.0.0.1:8080:80 vvivid-website:local
 
 Open [localhost:8080](http://localhost:8080/). The [Dockerfile](Dockerfile) builds with a Hugo image pinned by version and digest, runs the same production build script, and serves the generated site with nginx. Omit `--build-arg HUGO_BASEURL=...` to build with the production URL. This local command uses Docker's default network and requires no external Traefik network. The nginx configuration blocks agent-guide filenames at every URL depth.
 
-The [GitHub workflow](../.github/workflows/website.yml) builds only the Dockerfile's Hugo `builder` stage on site, workflow, or root Makefile changes. It checks the production output with read-only repository permissions; it has no publishing or deployment step.
+The [GitHub workflow](../.github/workflows/website.yml) builds and smoke-checks the complete Docker image on site or workflow changes. Pull requests have read-only repository permissions. Matching pushes to `main` publish an immutable image to GHCR and deploy only live through restricted SSH over Tailscale after the [one-time setup](deploy/live/README.md). The deployment job uses the `vvivid-live` GitHub environment, serializes updates, verifies the exact running image and local/public HTTP health, and restores the previous live image on failure.
 
 ## Source and dependencies
 
@@ -58,8 +58,10 @@ The site was imported from an attached source snapshot without original Git hist
 
 Update `.hugo-version` and the Docker builder image version/digest together when deliberately upgrading Hugo, then validate the site and overrides. This project's independent release tags use `vvivid.dev/vX.Y.Z`; see the [workspace development guide](../DEVELOPMENT.md#independent-versions).
 
-## Deployment references
+## Deployment
+
+The [live deployment runbook](deploy/live/README.md) owns GitHub/Tailscale setup, restricted server installation, the live-only Compose change, cutover, and rollback. Deployment activation is a separate operational step; local builds do not change external services. The existing preview deployment remains outside this GitHub workflow.
 
 The archived GitLab pipeline is retained under [deploy/legacy/](deploy/legacy/README.md), outside the active CI filename. Its registry, external `/infra/compose.yml`, preview/live services, Traefik configuration, and credentials were not migrated.
 
-The root [docker-compose.yml](docker-compose.yml), [cleanup script](scripts/cleanup-vvivid-images.sh), and [live-tag script](scripts/persist-vvivid-live-tag.sh) remain operational references to that infrastructure. Invoking them can change external services, images, or environment files. The Make targets and GitHub build do not run these operations. Source import and local builds do not establish a live deployment.
+The root [docker-compose.yml](docker-compose.yml), [cleanup script](scripts/cleanup-vvivid-images.sh), and [live-tag script](scripts/persist-vvivid-live-tag.sh) remain operational references to that infrastructure. Invoking them can change external services, images, or environment files. The Make targets and GitHub workflow do not run these legacy operations. Source import and local builds do not establish a live deployment.

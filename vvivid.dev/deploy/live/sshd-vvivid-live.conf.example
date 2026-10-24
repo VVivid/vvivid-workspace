@@ -1,0 +1,12 @@
+# Install only after the restricted user, helper and authorized key are ready.
+# Preserve the existing SSH listen addresses and port.
+Match User vvivid-deploy
+    AuthorizedKeysFile /etc/ssh/authorized_keys/vvivid-deploy
+    AuthenticationMethods publickey
+    PasswordAuthentication no
+    KbdInteractiveAuthentication no
+    PermitEmptyPasswords no
+    PermitTTY no
+    DisableForwarding yes
+    PermitUserRC no
+    ForceCommand /usr/local/libexec/vvivid-live-ssh
