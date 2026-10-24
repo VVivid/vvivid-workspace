@@ -54,7 +54,7 @@ func startSharedGateway(t *testing.T, issuer, backend, host, scope, client, audi
 	address := listener.Addr().String()
 	listener.Close()
 	origin := "http://" + address
-	write(configFile, map[string]any{"listen": address, "origin": origin, "issuer": issuer, "signing_key_file": privateFile, "routes": []any{map[string]any{"name": "test", "path": "/service/mcp", "upstream": backend, "upstream_host": host, "audience": audience, "required_scopes": []string{scope}, "forward_scopes": []string{scope}, "client_ids": []string{client}}}})
+	write(configFile, map[string]any{"listen": address, "origin": origin, "issuer": issuer, "signing_key_file": privateFile, "routes": []any{map[string]any{"name": "test", "path": "/service/mcp", "upstream": backend, "upstream_host": host, "audience": audience, "max_token_lifetime_seconds": 300, "required_scopes": []string{scope}, "forward_scopes": []string{scope}, "client_ids": []string{client}}}})
 	command := exec.Command(binary, "--config", configFile)
 	command.Stdout = io.Discard
 	command.Stderr = io.Discard
@@ -93,7 +93,17 @@ func TestSharedGatewayShoppingMCP(t *testing.T) {
 	}
 	f, service, _, product, _ := setup(t)
 	var handler http.Handler
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r) }))
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			if r.Header.Get("Mcp-Protocol-Version") != "2026-07-28" || r.Header.Get("Mcp-Method") == "" {
+				t.Error("Shopping backend did not receive current MCP protocol metadata")
+			}
+			if r.Header.Get("Mcp-Method") == "tools/call" && r.Header.Get("Mcp-Name") == "" {
+				t.Error("Shopping backend did not receive tool name")
+			}
+		}
+		handler.ServeHTTP(w, r)
+	}))
 	defer backend.Close()
 	settings := f.Environment()
 	origin, publicFile, resource := startSharedGateway(t, settings["SHOPPING_OIDC_ISSUER"], backend.URL+"/mcp", "shopping.example", identity.Read, "shopping-codex", "shopping-backend")
@@ -115,6 +125,9 @@ func TestSharedGatewayShoppingMCP(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { session.Close() })
+		if got := session.InitializeResult().ProtocolVersion; got != "2026-07-28" {
+			t.Fatalf("Shopping negotiated protocol %q, want 2026-07-28", got)
+		}
 		return session
 	}
 	alice := connect("alice")

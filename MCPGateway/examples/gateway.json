@@ -10,6 +10,7 @@
       "upstream": "http://127.0.0.1:8090/mcp",
       "upstream_host": "shopping.example.com",
       "audience": "shopping-mcp",
+      "max_token_lifetime_seconds": 300,
       "required_scopes": ["shopping:read"],
       "forward_scopes": ["shopping:read", "shopping:products:write", "shopping:lists:write", "shopping:purchases:write", "shopping:preferences:write"],
       "client_ids": ["shopping-codex", "shopping-chatgpt"]
@@ -19,6 +20,7 @@
       "path": "/ssh/mcp",
       "upstream": "http://127.0.0.1:18080/mcp",
       "audience": "ssh-mcp",
+      "max_token_lifetime_seconds": 300,
       "required_scopes": ["sshmcp:admin"],
       "forward_scopes": ["sshmcp:admin"],
       "client_ids": ["sshmcp-codex", "sshmcp-chatgpt"]

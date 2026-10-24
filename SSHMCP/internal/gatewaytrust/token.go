@@ -17,6 +17,7 @@ import (
 const TokenType = "mcp-gateway+jwt"
 
 type Principal struct {
+	IssuedAt  time.Time `json:"-"`
 	ExpiresAt time.Time `json:"-"`
 	Issuer    string    `json:"identity_issuer"`
 	Subject   string    `json:"sub"`
@@ -94,5 +95,12 @@ func (v *Verifier) Verify(raw string) (Principal, error) {
 	if expires <= now || issued > now+5 || notBefore > now || issued < expires-60 || expires <= issued {
 		return Principal{}, invalid
 	}
-	return Principal{Issuer: c.IdentityIssuer, Subject: c.Subject, ClientID: c.ClientID, Scope: c.Scope, ExpiresAt: time.Unix(int64(*c.Expiry), 0)}, nil
+	return Principal{
+		Issuer:    c.IdentityIssuer,
+		Subject:   c.Subject,
+		ClientID:  c.ClientID,
+		Scope:     c.Scope,
+		IssuedAt:  time.Unix(int64(*c.IssuedAt), 0),
+		ExpiresAt: time.Unix(int64(*c.Expiry), 0),
+	}, nil
 }

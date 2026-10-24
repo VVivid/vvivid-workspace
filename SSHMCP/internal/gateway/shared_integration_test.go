@@ -56,7 +56,7 @@ func startSharedGateway(t *testing.T, issuer, backend, host, scope, client, audi
 	address := listener.Addr().String()
 	listener.Close()
 	origin := "http://" + address
-	write(configFile, map[string]any{"listen": address, "origin": origin, "issuer": issuer, "signing_key_file": privateFile, "routes": []any{map[string]any{"name": "test", "path": "/service/mcp", "upstream": backend, "upstream_host": host, "audience": audience, "required_scopes": []string{scope}, "forward_scopes": []string{scope}, "client_ids": []string{client}}}})
+	write(configFile, map[string]any{"listen": address, "origin": origin, "issuer": issuer, "signing_key_file": privateFile, "routes": []any{map[string]any{"name": "test", "path": "/service/mcp", "upstream": backend, "upstream_host": host, "audience": audience, "max_token_lifetime_seconds": 300, "required_scopes": []string{scope}, "forward_scopes": []string{scope}, "client_ids": []string{client}}}})
 	command := exec.Command(binary, "--config", configFile)
 	command.Stdout = io.Discard
 	command.Stderr = io.Discard
@@ -118,7 +118,17 @@ func TestSharedGatewaySSHProtocol(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	backend.Config.Handler = handler
+	backend.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			if r.Header.Get("Mcp-Protocol-Version") != "2026-07-28" || r.Header.Get("Mcp-Method") == "" {
+				t.Error("SSH backend did not receive current MCP protocol metadata")
+			}
+			if r.Header.Get("Mcp-Method") == "tools/call" && r.Header.Get("Mcp-Name") == "" {
+				t.Error("SSH backend did not receive tool name")
+			}
+		}
+		handler.ServeHTTP(w, r)
+	})
 	backend.Start()
 	defer backend.Close()
 	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: jwk}, (&jose.SignerOptions{}).WithType("at+jwt"))
@@ -136,6 +146,9 @@ func TestSharedGatewaySSHProtocol(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Close()
+	if got := session.InitializeResult().ProtocolVersion; got != "2026-07-28" {
+		t.Fatalf("SSH negotiated protocol %q, want 2026-07-28", got)
+	}
 	tools, err := session.ListTools(t.Context(), nil)
 	if err != nil || len(tools.Tools) != 3 {
 		t.Fatalf("tool catalog: %v", err)

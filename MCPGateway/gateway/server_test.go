@@ -88,8 +88,8 @@ func newFixture(t *testing.T) *fixture {
 	}))
 	t.Cleanup(upstream.Close)
 	f.config = Config{Listen: "127.0.0.1:8080", Origin: "https://gateway.example", Issuer: issuer.URL, SigningKeyFile: privateFile, Routes: []Route{
-		{Name: "shopping", Path: "/shopping/mcp", Upstream: upstream.URL + "/mcp", UpstreamHost: "shopping.example", Audience: "shopping-backend", RequiredScopes: []string{"shopping:read"}, ForwardScopes: []string{"shopping:read", "shopping:lists:write"}, ClientIDs: []string{"shopping-client"}},
-		{Name: "ssh", Path: "/ssh/mcp", Upstream: upstream.URL + "/mcp", Audience: "ssh-backend", RequiredScopes: []string{"sshmcp:admin"}, ForwardScopes: []string{"sshmcp:admin"}, ClientIDs: []string{"ssh-client"}},
+		{Name: "shopping", Path: "/shopping/mcp", Upstream: upstream.URL + "/mcp", UpstreamHost: "shopping.example", Audience: "shopping-backend", RequiredScopes: []string{"shopping:read"}, ForwardScopes: []string{"shopping:read", "shopping:lists:write"}, ClientIDs: []string{"shopping-client"}, MaxTokenLifetimeSeconds: 300},
+		{Name: "ssh", Path: "/ssh/mcp", Upstream: upstream.URL + "/mcp", Audience: "ssh-backend", RequiredScopes: []string{"sshmcp:admin"}, ForwardScopes: []string{"sshmcp:admin"}, ClientIDs: []string{"ssh-client"}, MaxTokenLifetimeSeconds: 300},
 	}}
 	f.server = f.build(t)
 	return f
@@ -369,5 +369,96 @@ func TestForwardedIdentityExpiryDoesNotExtendGrant(t *testing.T) {
 	}
 	if p := <-f.seen; p.ExpiresAt.Unix() > expiry {
 		t.Fatal("gateway extended the external grant")
+	}
+}
+
+func TestExternalTokenLifetimeBeforeDispatch(t *testing.T) {
+	f := newFixture(t)
+	for _, profile := range []string{"keycloak", "rfc9068"} {
+		for name, change := range map[string]func(map[string]any){
+			"long remaining lifetime": func(c map[string]any) { c["exp"] = time.Now().Unix() + 86400 },
+			"long issued lifetime near expiry": func(c map[string]any) {
+				c["iat"] = time.Now().Unix() - 3600
+				c["exp"] = time.Now().Unix() + 10
+			},
+			"future issuance":  func(c map[string]any) { c["iat"] = time.Now().Unix() + 10 },
+			"missing issuance": func(c map[string]any) { delete(c, "iat") },
+			"missing expiry":   func(c map[string]any) { delete(c, "exp") },
+			"zero issuance":    func(c map[string]any) { c["iat"] = 0 },
+			"extreme issuance": func(c map[string]any) { c["iat"] = int64(-1 << 63) },
+			"extreme expiry":   func(c map[string]any) { c["exp"] = int64(1<<63 - 1) },
+		} {
+			t.Run(profile+"/"+name, func(t *testing.T) {
+				w := request(f.server, "/shopping/mcp", f.token(t, profile, "/shopping/mcp", change), `{}`)
+				if w.Code != http.StatusUnauthorized {
+					t.Fatalf("invalid external lifetime accepted: %d", w.Code)
+				}
+			})
+		}
+	}
+	if f.calls.Load() != 0 {
+		t.Fatal("invalid lifetime reached backend")
+	}
+}
+
+func TestRouteTokenLifetimePolicy(t *testing.T) {
+	f := newFixture(t)
+	for _, limit := range []int64{0, -1} {
+		c := f.config
+		c.Routes = slices.Clone(c.Routes)
+		c.Routes[0].MaxTokenLifetimeSeconds = limit
+		if c.Validate() == nil {
+			t.Fatalf("accepted token lifetime policy %d", limit)
+		}
+	}
+	// The limit belongs to the route, independent of the provider profile.
+	f.config.Routes[0].MaxTokenLifetimeSeconds = 30
+	s := f.build(t)
+	for _, profile := range []string{"keycloak", "rfc9068"} {
+		if w := request(s, "/shopping/mcp", f.token(t, profile, "/shopping/mcp", nil), `{}`); w.Code != http.StatusUnauthorized {
+			t.Fatalf("%s ignored route policy: %d", profile, w.Code)
+		}
+		short := f.token(t, profile, "/shopping/mcp", func(c map[string]any) { c["exp"] = c["iat"].(int64) + 30 })
+		if w := request(s, "/shopping/mcp", short, `{}`); w.Code != http.StatusOK {
+			t.Fatalf("%s rejected bounded grant: %d", profile, w.Code)
+		}
+	}
+}
+
+type fixedAuthenticator struct{ principal trust.Principal }
+
+func (a fixedAuthenticator) Authenticate(context.Context, string, string) (trust.Principal, error) {
+	return a.principal, nil
+}
+
+func TestCoreRejectsAuthenticatorWithoutValidTiming(t *testing.T) {
+	f := newFixture(t)
+	now := time.Now()
+	valid := trust.Principal{Issuer: f.issuer, Subject: "alice", ClientID: "shopping-client", Scope: "shopping:read", IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute)}
+	for name, mutate := range map[string]func(*trust.Principal){
+		"missing issuance": func(p *trust.Principal) { p.IssuedAt = time.Time{} },
+		"missing expiry":   func(p *trust.Principal) { p.ExpiresAt = time.Time{} },
+		"future issuance":  func(p *trust.Principal) { p.IssuedAt = now.Add(time.Second * 30) },
+		"long lifetime":    func(p *trust.Principal) { p.IssuedAt = now.Add(-time.Hour) },
+		"extreme expiry":   func(p *trust.Principal) { p.ExpiresAt = time.Unix(1<<63-1, 0) },
+		"expired":          func(p *trust.Principal) { p.ExpiresAt = now.Add(-time.Second) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := valid
+			mutate(&p)
+			s, err := New(f.config, fixedAuthenticator{p}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if w := request(s, "/shopping/mcp", "synthetic", `{}`); w.Code != http.StatusUnauthorized {
+				t.Fatalf("invalid normalized timing accepted: %d", w.Code)
+			}
+			if _, err := s.issue(p, f.config.Routes[0]); err == nil {
+				t.Fatal("invalid identity issued at dispatch")
+			}
+		})
+	}
+	if f.calls.Load() != 0 {
+		t.Fatal("invalid normalized timing reached backend")
 	}
 }
