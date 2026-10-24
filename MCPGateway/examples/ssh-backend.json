@@ -1,0 +1,15 @@
+{
+  "listen": "127.0.0.1:18080",
+  "resource": "http://127.0.0.1:18080/mcp",
+  "gateway": {
+    "issuer": "https://mcp.example.com",
+    "audience": "ssh-mcp",
+    "jwks_file": "/etc/mcp-gateway/public.jwks.json"
+  },
+  "ssh": {
+    "address": "TARGET_PRIVATE_IP:22",
+    "user": "mcp-test",
+    "private_key": "/run/secrets/runner-ssh-key",
+    "host_key": "REPLACE_WITH_ENROLLED_ED25519_PUBLIC_HOST_KEY"
+  }
+}

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"agentshoppinglist/internal/gatewaytrust"
 	"agentshoppinglist/internal/store/sqlite"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v4"
@@ -74,6 +75,7 @@ type providerMetadata struct {
 }
 
 type Manager struct {
+	gateway    *gatewaytrust.Verifier
 	cfg        Config
 	store      *sqlite.Store
 	client     *http.Client
@@ -119,6 +121,12 @@ func New(ctx context.Context, cfg Config, store *sqlite.Store) (*Manager, error)
 		Endpoint:     endpoint,
 		RedirectURL:  cfg.Origin + "/auth/callback",
 		Scopes:       []string{"openid", Read, ListsWrite},
+	}
+	if cfg.Gateway != nil {
+		m.gateway, err = gatewaytrust.NewVerifier(*cfg.Gateway)
+		if err != nil {
+			return nil, err
+		}
 	}
 	m.keys = oidc.NewRemoteKeySet(oidc.ClientContext(context.Background(), client), metadata.JWKS)
 	m.idVerifier = oidc.NewVerifier(cfg.Issuer, m.keys, &oidc.Config{ClientID: cfg.WebClientID, SupportedSigningAlgs: []string{oidc.RS256}, Now: func() time.Time { return m.now() }})
@@ -195,6 +203,18 @@ func (m *Manager) principal(ctx context.Context, claims accessClaims) (Principal
 }
 
 func (m *Manager) AuthenticateBearer(ctx context.Context, raw, audience string) (Principal, error) {
+	if audience == m.cfg.MCPAudience && m.gateway != nil {
+		p, err := m.gateway.Verify(raw)
+		if err != nil || p.Issuer != m.cfg.Issuer || !slices.Contains(m.cfg.MCPClientIDs, p.ClientID) {
+			return Principal{}, ErrUnauthenticated
+		}
+		for _, scope := range strings.Fields(p.Scope) {
+			if !slices.Contains(shoppingScopes, scope) {
+				return Principal{}, ErrForbidden
+			}
+		}
+		return m.principal(ctx, accessClaims{Issuer: p.Issuer, Subject: p.Subject, ClientID: p.ClientID, Scope: p.Scope})
+	}
 	claims, err := m.verifyAccess(ctx, raw, audience)
 	if err != nil {
 		return Principal{}, err

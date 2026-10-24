@@ -1,0 +1,29 @@
+name: MCPGateway
+on:
+  pull_request:
+    paths: ['MCPGateway/**', 'AgentShoppingList/**', 'SSHMCP/**', '.github/workflows/mcp-gateway.yml']
+  push:
+    branches: [main]
+    paths: ['MCPGateway/**', 'AgentShoppingList/**', 'SSHMCP/**', '.github/workflows/mcp-gateway.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mcp-gateway-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: MCPGateway/go.mod
+          cache-dependency-path: |
+            MCPGateway/go.sum
+            AgentShoppingList/go.sum
+            SSHMCP/go.sum
+      - run: make -C MCPGateway check build integration
+      - name: Check identity contract implementations stay aligned
+        run: python3 MCPGateway/scripts/check-contract.py
