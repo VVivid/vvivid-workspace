@@ -1,173 +1,165 @@
 ---
-title: "The Process API Behind Every Shell Command"
+title: "What Really Happens When You Run a Shell Command?"
 date: 2026-06-15T13:31:48+07:00
 author: "Ou David"
 draft: false
 tags: ["operating-systems", "unix", "processes", "systems-programming"]
 categories: ["Technical Deep Dives"]
-description: "What OSTEP's Process API chapter taught me about fork, exec, wait, and the shell."
+description: "How three UNIX process primitives make execution, redirection, and pipelines possible."
 image: "images/thumbnails/process-api-shell.png"
 toc: false
 math: false
 ---
 
-I've been reading [Operating Systems: Three Easy Pieces](https://pages.cs.wisc.edu/~remzi/OSTEP/), and today I went through chapter 05, the interlude on the Process API. It is a short chapter, but it clarified something important about how processes actually work.
-
-If you want to see the same idea in practical Go code, I put a small runnable example in the public case-study repo: [go/process-api-shell](https://gitlab.vvivid.dev/showcase/go-lang-case-study/-/tree/main/go/process-api-shell). It uses Go's standard `os/exec` package to run commands, redirect output, build a simple pipeline, and wait for the processes to finish.
+Every time I run a command like this:
 
 ```sh
 grep "error" app.log | wc -l
 ```
 
-This is a simple shell command. One program reads a file, another program counts the matching lines, and the shell connects them together. Underneath that simple line is one of the most important UNIX ideas: process creation, process replacement, and process coordination.
+it looks like a single operation: find lines containing `error`, then count them.
 
-The chapter focuses on three calls:
+But the shell is doing much more than passing text between commands. It starts separate processes, connects their input and output, and coordinates what happens next. Two programs that know nothing about each other end up working together.
 
-- `fork()`
-- `exec()`
-- `wait()`
+I recently read Chapter 5, The Process API, in Operating Systems: Three Easy Pieces. It helped me see how much of the UNIX shell comes down to three small ideas:
 
-You can do a lot with just these three system calls. Once I thought about them through the shell, the design started to feel very intentional.
+- `fork()` creates a new process.
 
-### The Real Problem
+- `exec()` replaces the program running inside a process.
 
-The operating system has to answer a practical question:
+- `wait()` lets a parent wait for a child to finish.
 
-> How should one program create and control another program?
+The interesting part isn’t just what each operation does. It’s why UNIX keeps them separate. This post follows the traditional fork-and-exec model for external commands. Shell builtins and alternative launch mechanisms can take different paths.
 
-We can come up with something very simple like:
+### First, `fork()` creates another process
 
-```c
-run_program("wc", args);
-```
+Suppose a shell needs to run `wc`. It could use a single operation that creates and launches the new program. In the traditional fork-and-exec model, the shell first creates a child process.
 
-That would be easy to understand. But we would lose a lot of useful control. For example, the parent might want to change where its input comes from, where its output goes, which environment variables it sees, or whether the parent should wait for its child.
+After a successful `fork()`, both processes continue from the point where `fork()` returned. The child gets a different process ID and its own logical address space. Changes to a variable in the child won’t change the parent’s variable.
 
-UNIX solves this by separating the process lifecycle into smaller steps.
+At first, I assumed the child would wait for the parent to tell it to start. It doesn’t. Both are eligible to run, and the scheduler decides when each one gets CPU time.
 
-### Creates a Copy with `fork()`
+The child also inherits the parent’s open file descriptors. Those descriptors refer to the same underlying open file descriptions, which is why the two processes may initially write to the same terminal or file.
 
-When a process calls `fork()`, the operating system creates a new process that is almost a copy of the current one. The child gets its own process ID, its own address space, and copies of the parent's variables and file descriptors. Both processes continue running from the same place in the code, but `fork()` returns different values in each one:
+That inheritance turns out to be essential.
 
-```c
-pid_t pid = fork();
+### Then, `exec()` turns it into another program
 
-if (pid < 0) {
-    // fork failed
-} else if (pid == 0) {
-    // child process
-} else {
-    // parent process, pid is the child's process ID
-}
-```
+A forked child is initially running the same program as its parent. A shell normally wants something else: `grep`, `wc`, `ls`, or whatever command I typed.
 
-This is the part that confused me at first. I thought the child process would be created first, then wait until the parent explicitly told it to start. But that is not how `fork()` works. Once the fork succeeds, the child is runnable. The CPU scheduler still decides when it actually runs, but from the program's point of view there are now two processes continuing from the same line.
-
-Because the file descriptors are copied, both processes may still write to the same terminal or file unless we change that. The return value is what lets the program split its behavior: the child can do child-specific work, while the parent keeps control of the larger flow.
-
-The important detail is that the child is still a separate process. If the child changes a variable in memory, it is not changing the parent's copy of that variable.
-
-### Makes Ordering Explicit with `wait()`
-
-Once there are two processes, scheduling becomes visible.
-
-After `fork()`, either the parent or child may run first. That is the first nondeterministic part. We should not build logic that depends on whichever process happens to run first. If the parent needs the child to finish before continuing, it has to say that explicitly:
-
-```c
-pid_t pid = fork();
-
-if (pid == 0) {
-    printf("child\n");
-} else {
-    wait(NULL);
-    printf("parent\n");
-}
-```
-
-Here, the parent blocks until the child exits. That gives the program a real ordering guarantee. Without `wait()`, the output order is up to the scheduler.
-
-This is a useful system design lesson beyond operating systems. Whenever we work with concurrency, we have to know which parts of the program are nondeterministic and where the real synchronization points are. If we need a sequence, we should create one explicitly.
-
-### Replaces the Current Program with `exec()`
-
-`fork()` by itself only gives us another copy of the same program. That is useful sometimes, but a shell usually wants to run a different program.
-
-That is where `exec()` comes in.
-
-In the child process, we can call one of the `exec` functions to replace the current process image with another program:
+So the child calls an exec-family function:
 
 ```c
 char *args[] = {"wc", "-l", "app.log", NULL};
 execvp(args[0], args);
 
-// If execvp succeeds, this line never runs.
+// Reached only if execvp fails.
 perror("execvp");
+_exit(127);
 ```
 
-The key idea is that `exec()` does not create a new process. It transforms the current process into a different program. The process keeps its PID, but its code, stack, heap, and program image are replaced.
+The distinction matters: `exec()` does not create another process. It replaces the program image of the current one. The process retains its PID, but begins executing different code. Open file descriptors normally survive exec unless marked close-on-exec, which is why the redirection remains in place when the new program starts.
 
-That is why the common shell pattern is:
+This gives the shell a useful sequence:
 
-1. The shell calls `fork()`.
-2. The child prepares its environment.
-3. The child calls `exec()` to become the requested program.
-4. The parent calls `wait()` if it is running the command in the foreground.
+1. Call `fork()` to create a child.
 
-Once you understand this flow, a shell starts to feel like a loop around these primitives.
+2. Configure the child’s environment and file descriptors.
 
-### Why Split `fork()` and `exec()`?
+3. Call `exec()` to launch the requested program.
 
-The design becomes powerful because there is a gap between `fork()` and `exec()`.
+And here is the clever part: the shell gets a window to configure the child before the new program begins.
 
-In that gap, the child is still running shell-controlled code. It has not become `grep`, `wc`, `ls`, or any other program yet. The shell can change the child process before the new program starts.
+### That small window gives the shell a convenient place to set up redirection.
 
-For example, output redirection works because the child can change its file descriptors before calling `exec()`:
+Consider:
+
+```sh
+wc -l app.log > out.txt
+```
+
+The `wc` program doesn’t need to know what `>` means. The shell handles that before it executes `wc`.
+
+In the child, the essential redirection step looks like this:
+
+```c
+int fd = open("out.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+if (fd < 0) { perror("open"); _exit(1); }
+
+if (fd != STDOUT_FILENO) {
+    if (dup2(fd, STDOUT_FILENO) < 0) {
+        perror("dup2");
+        _exit(1);
+    }
+    close(fd);
+}
+
+char *args[] = {"wc", "-l", "app.log", NULL};
+execvp(args[0], args);
+perror("execvp");
+_exit(127);
+```
+
+`dup2()` makes standard output (file descriptor 1) refer to `out.txt`. When `wc` starts, it simply writes to standard output as usual. It doesn’t know that its output is going to a file.
+
+The shell sets up the environment; the program just does its job.
+
+### What about `wait()`?
+
+Creating a process doesn’t guarantee which one runs first. Without explicit coordination, the parent and child might print in either order.
+
+When the shell runs a foreground command, it normally needs to wait until that command finishes. The parent can use `wait()` or `waitpid()` for that synchronization:
 
 ```c
 pid_t pid = fork();
 
 if (pid == 0) {
-    close(STDOUT_FILENO);
-    open("out.txt", O_CREAT | O_WRONLY | O_TRUNC, 0644);
-
-    char *args[] = {"wc", "-l", "app.log", NULL};
-    execvp(args[0], args);
-    perror("execvp");
+    puts("child");
+    exit(0);
+} else if (pid > 0) {
+    waitpid(pid, NULL, 0);
+    puts("parent");
 }
-
-wait(NULL);
 ```
 
-The future `wc` program does not need to know anything about shell redirection. It still writes to standard output. The trick is that standard output now points to a file before `wc` starts running.
+Here, the parent waits for the specific child before printing parent, assuming `waitpid()` succeeds. This simplified example omits error handling: `waitpid()` can fail or be interrupted by a caught signal, so production code should check its return value and retry on `EINTR`. Waiting also lets the parent collect the child’s termination status and reap the terminated child; this example passes `NULL` to discard the status.
 
-That is a clean abstraction. The shell handles process setup. The program just reads from standard input and writes to standard output.
+That’s a useful lesson beyond operating systems: concurrent execution doesn’t imply an order. If the order matters, synchronization must be explicit.
 
-### Pipes Use the Same Idea
+### Pipes use exactly the same building blocks
 
-Pipes are another version of the same pattern.
-
-When we run:
+Now back to the original command:
 
 ```sh
 grep "error" app.log | wc -l
 ```
 
-the shell creates a pipe, forks child processes, connects one child's standard output to the pipe's write end, connects the other child's standard input to the pipe's read end, and then calls `exec()` in both children.
+The shell creates a pipe and two child processes. It connects `grep`’s standard output to the pipe’s write end and `wc`’s standard input to its read end. Then each child executes its program.
 
-Neither `grep` nor `wc` needs custom logic for this composition. `grep` writes bytes. `wc` reads bytes. The shell and operating system make the connection.
+```text
+grep  --stdout-->  [ pipe ]  --stdin-->  wc -l
+```
 
-This is the part of the chapter I liked most. The API is not only about starting a process. It is about making small programs composable without requiring those programs to know about the other programs around them. That is separation of concerns.
+The shell also closes unused pipe ends so readers can detect end-of-file correctly, and waits for the foreground pipeline as needed. A reader reaches EOF after buffered data has been consumed and all descriptors referring to the pipe’s write end are closed, including inherited duplicates.
 
-### The Takeaway
+Neither command needs special knowledge of the other. `grep` writes bytes; `wc` reads bytes. The operating system provides the mechanism, and the shell assembles the pieces.
 
-The UNIX process API looks odd at first because `fork()` is not how we usually expect function calls to behave. But the split between `fork()`, `exec()`, and `wait()` gives the shell a precise place to control a child process before it becomes another program.
+### Why this design stayed with me
 
-That small design decision explains a lot of daily command-line behavior:
+Before reading this chapter, I thought of `fork()`, `exec()`, and `wait()` as separate low-level APIs to memorize. Now I see them as a design for composing programs without coupling them together.
 
-- running a program,
-- waiting for it to finish,
-- redirecting output,
-- connecting programs with pipes,
-- keeping programs simple by standardizing input and output.
+The separation gives each operation a clear role in this traditional model:
 
-The shell feels high level, but it is built from low-level process primitives. That is the beauty of the design: each primitive is small, but together they create a flexible programming environment.
+- `fork()` gives the shell a child it can configure.
+
+- `exec()` allows that child to become a different program.
+
+- `wait()` provides coordination when the parent needs it.
+
+From these primitives, we get everyday features such as foreground commands, output redirection, and pipelines.
+
+The shell feels high-level, but its power comes from a small set of low-level operations with clear responsibilities. That’s the part of UNIX design I appreciate most.
+
+Reading: [*Operating Systems: Three Easy Pieces*, Chapter 5 — The Process API](https://pages.cs.wisc.edu/~remzi/OSTEP/cpu-api.pdf).
+
+For a runnable Go example, see [go/process-api-shell](https://gitlab.vvivid.dev/showcase/go-lang-case-study/-/tree/main/go/process-api-shell). It uses Go’s standard `os/exec` package to run commands, redirect output, build a simple pipeline, and wait for the processes to finish.
