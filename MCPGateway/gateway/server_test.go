@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -164,6 +165,76 @@ func TestProviderProfilesAndIdentityForwarding(t *testing.T) {
 		})
 	}
 }
+
+func TestAccessTokenRequiresCompactProtectedType(t *testing.T) {
+	f := newFixture(t)
+	for _, profile := range []struct {
+		name string
+		typ  string
+	}{{"rfc9068", "at+jwt"}, {"keycloak", "JWT"}} {
+		t.Run(profile.name, func(t *testing.T) {
+			protected := f.token(t, profile.name, "/service-a/mcp", nil)
+			parts := strings.Split(protected, ".")
+			payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+			if err != nil {
+				t.Fatal(err)
+			}
+			signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: f.key}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Preserve every claim, but sign without a protected token type.
+			signed, err := signer.Sign(payload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			untyped, err := signed.CompactSerialize()
+			if err != nil {
+				t.Fatal(err)
+			}
+			parts = strings.Split(untyped, ".")
+			signature := map[string]any{
+				"protected": parts[0], "signature": parts[2],
+				"header": map[string]string{"typ": profile.typ},
+			}
+			flattened, err := json.Marshal(map[string]any{
+				"payload": parts[1], "protected": parts[0], "signature": parts[2],
+				"header": signature["header"],
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			general, err := json.Marshal(map[string]any{
+				"payload": parts[1], "signatures": []map[string]any{signature},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, token := range []struct {
+				name   string
+				raw    string
+				status int
+			}{
+				{"compact protected type", protected, http.StatusOK},
+				{"compact missing type", untyped, http.StatusUnauthorized},
+				{"flattened JSON unsigned type", string(flattened), http.StatusUnauthorized},
+				{"general JSON unsigned type", string(general), http.StatusUnauthorized},
+			} {
+				t.Run(token.name, func(t *testing.T) {
+					calls := f.calls.Load()
+					w := request(f.server, "/service-a/mcp", token.raw, `{}`)
+					if w.Code != token.status {
+						t.Fatalf("response %d, want %d", w.Code, token.status)
+					}
+					if token.status == http.StatusUnauthorized && f.calls.Load() != calls {
+						t.Fatal("invalid access token reached backend")
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestAuthenticationAndRouteIsolation(t *testing.T) {
 	f := newFixture(t)
 	for name, change := range map[string]func(map[string]any){

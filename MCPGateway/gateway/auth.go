@@ -54,11 +54,11 @@ func (a *OIDCAuthenticator) Authenticate(ctx context.Context, raw, resource stri
 	if len(raw) == 0 || len(raw) > 32<<10 {
 		return trust.Principal{}, invalid
 	}
-	signed, err := jose.ParseSigned(raw, []jose.SignatureAlgorithm{jose.RS256})
+	signed, err := jose.ParseSignedCompact(raw, []jose.SignatureAlgorithm{jose.RS256})
 	if err != nil || len(signed.Signatures) != 1 {
 		return trust.Principal{}, invalid
 	}
-	typ := signed.Signatures[0].Header.ExtraHeaders[jose.HeaderType]
+	typ := signed.Signatures[0].Protected.ExtraHeaders[jose.HeaderType]
 	if typ != "at+jwt" && typ != "JWT" {
 		return trust.Principal{}, invalid
 	}
