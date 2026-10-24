@@ -1,45 +1,46 @@
-# Staged rollout and live acceptance
+# Standalone acceptance and later rollout
 
-This PR changes source and examples, not existing production listeners, provider
-registrations, data or credentials. Run the gateway first in the cloud workspace
-with synthetic services; deploy only after the release artifacts and exact
-production configuration are reviewed.
+The standalone MVP runs with synthetic callers and the included harmless sample
+application. Accept it first with `make check build integration demo`, including
+a copy containing only this module. No real service integration, account changes,
+provider administration, live grants or deployment are part of that scenario.
+Integrating an actual service requires separate approval after MVP acceptance.
 
-1. Select canonical gateway origin and route resources. Register exact clients,
-   callbacks, S256 PKCE and consent in the chosen provider. Verify newly issued
-   token audiences, client identities, permissions and positive issuance/expiry
-   times. Set each route's `max_token_lifetime_seconds` explicitly and configure
-   provider access lifetimes within that limit: at most 300 seconds for Shopping;
-   the SSH example also uses 300 seconds. Verify both issued and remaining lifetime
-   enforcement and expiry-based revocation. Preserve existing issuer
-   and user subjects during the initial rollout.
-2. Generate and deliver a gateway signing key outside the repository. Install its
-   public JWKS on the two backends. Restrict backend ingress to the gateway.
-3. Start the independent SSH backend on a separate loopback port for comparison,
-   preserving existing target pins/keys and runner state. Configure its gateway
-   audience; test original issuer+subject ownership and all three tools.
-4. Stage Shopping with complete gateway trust settings. Preserve its existing
-   browser identity/session settings, database and enrollment. Confirm browser
-   login, API and owner isolation before directing clients to the gateway.
-   Verify two original issuer+subject pairs map to separate internal owners,
-   unregistered/disabled pairs fail, and bad signatures/wrong backend audiences
-   fail before domain access. Gateway login must never auto-enroll a user.
-5. Apply HTTPS reverse-proxy routing and canonical Host preservation. Verify
-   unauthenticated route challenges and per-route protected-resource metadata.
-6. Use actual Codex and ChatGPT clients to authenticate separately to both
-   endpoints. Verify login, consent, refresh and tools/list/call, including the
-   negotiated protocol version and required MCP metadata at each backend. Prove Shopping
-   tokens cannot access SSH, SSH tokens cannot access Shopping, and foreign user
-   records/jobs remain inaccessible. Repeat with a second compatible issuer in a
-   disposable deployment before claiming provider portability acceptance.
-7. Interrupt gateway requests/restart the gateway after accepted work. Verify
-   Shopping idempotent retries and SSH lookup preserve outcomes without duplicate
-   writes, and that SSH cancellation still uses independent runner control.
-8. Retire old externally reachable MCP endpoints only after acceptance. Keep a
-   configuration rollback path and compatible binaries; never reset application
-   data or replay uncertain jobs as part of rollback.
+For a later approved rollout:
 
-Do not route Shopping through the SSH execution service. Shared routing and
-identity live in MCPGateway; application logic and persistence stay in each
-backend. Do not broaden the old Keycloak resource guard to accept arbitrary
-resources to make the new endpoints work.
+1. Select the canonical HTTPS origin and exact per-route resources. Register
+   clients, callbacks, S256 PKCE and consent at the selected issuer. Verify
+   issued token profiles, sole resource audiences, client identities, scopes
+   and positive issuance/expiry times. Set each route's maximum external token
+   lifetime and issue provider tokens within it. Test both issued and remaining
+   lifetime enforcement and expiry-based revocation.
+2. Review the service's independent implementation of [identity contract
+   v1](IDENTITY.md), account mapping, allowed clients, domain permissions and
+   ownership checks. Preserve original issuer+subject. Matching email or subject
+   text alone must never link accounts. Decide explicitly how unknown and
+   disabled identities are handled before accepting domain operations.
+3. Generate a gateway signing key outside source control; deliver only public
+   JWKS to backends. Review rotation, emergency removal, clock synchronization
+   and private-key access. Keep backend ingress private to the gateway.
+4. Add one fixed stateless MCP route, its own audience and explicit permission
+   allowlist per service. Configure canonical Host and streaming at the HTTPS
+   reverse proxy. Verify health checks, unauthenticated route challenges and
+   per-route protected-resource metadata.
+5. Use the actual intended clients to test login, consent, refresh, tool
+   discovery and calls with the current MCP protocol. Verify wrong issuers,
+   signatures, audiences, client IDs, scopes and expired/overlong tokens fail.
+   Prove one route's token cannot access another route or backend. Test at least
+   two original identity pairs against the service's stored-data ownership rules.
+   A second real issuer needs its own disposable acceptance setup before
+   claiming provider portability.
+6. Test cancellation, process restart and uncertain outcomes. The gateway
+   propagates request cancellation but does not roll back work accepted by a
+   service. Services with writes need their own idempotency, status and recovery
+   contract; never replay an uncertain write automatically.
+7. Review the exact production configuration and compatible artifacts before
+   deployment. Retire any previous endpoint only after explicit acceptance,
+   preserving a configuration rollback path and application data.
+
+Local automation does not establish real-provider or actual-client acceptance.
+The gateway does not administer providers, manage user accounts or implement
+backend application policy.

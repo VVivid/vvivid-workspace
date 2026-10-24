@@ -13,7 +13,6 @@
 | --- | --- | --- |
 | `AgentShoppingList/` | Agent-managed mobile shopping app with built-in MCP | [README](AgentShoppingList/README.md), [local instructions](AgentShoppingList/AGENTS.md) |
 | `GoogleHealthMCP/` | Google Health / Fitbit importer with SQLite persistence | [README](GoogleHealthMCP/README.md) |
-| `MCPGateway/` | Provider-independent authenticated MCP routing | [README](MCPGateway/README.md), [identity contract](MCPGateway/docs/IDENTITY.md) |
 | `SSHMCP/` | Authenticated MCP gateway and persistent SSH execution runner | [README](SSHMCP/README.md) |
 | `examples/xtrace-example/` | Distributed tracing demonstration | [README](examples/xtrace-example/README.md) |
 | Repository root | Shared build delegation, CI, documentation, and agent skills | [Development guide](DEVELOPMENT.md) |

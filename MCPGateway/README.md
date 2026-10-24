@@ -1,185 +1,182 @@
 # MCPGateway
 
-A self-hosted MCP gateway with separate configured endpoints for independent MCP
-services. The gateway authenticates callers, checks route access and forwards a
-short-lived verifiable identity. Services own their tools, data and authorization.
-Keycloak is an initial OAuth/OIDC provider, not a core dependency.
-
-Status: V1 implementation under development; live provider/client acceptance is
-pending. See [rollout acceptance](docs/ROLLOUT.md). No production deployment is
-implied by this source change.
+A standalone authenticated router for stateless Streamable HTTP MCP services.
+Each backend has its own public route, audience and permission policy. The
+router verifies an external access token, forwards only granted permissions,
+and signs a short-lived identity for the selected backend. It contains no
+application-specific service logic or dependency on another project.
 
 ```mermaid
 flowchart LR
-    Client[MCP client] --> Gateway[MCPGateway]
-    Provider[Configured OAuth/OIDC issuer] -. Discovery and JWKS .-> Gateway
-    Gateway -->|/shopping/mcp| Shopping[Shopping MCP and domain permissions]
-    Gateway -->|/ssh/mcp| SSH[SSH MCP adapter]
-    SSH --> Runner[Persistent target runner]
+    Agent[MCP client] --> Gateway[MCPGateway]
+    Gateway --> Issuer[Configured OAuth/OIDC issuer]
+    Gateway -->|/service-a/mcp| A[Service A]
+    Gateway -->|/service-b/mcp| B[Service B]
 ```
 
-## Build and run
+## Try the local application
 
-Go 1.26.9 or newer:
+From this directory, with Go 1.26.9 or a compatible newer toolchain and Make:
 
 ```sh
-make check build
-# Use an operator-owned private configuration directory; never commit its keys.
+make demo
+```
+
+This builds the binaries and runs a local agent-style client against the actual
+gateway process and two copies of the included sample MCP backend. The client
+uses the official MCP Go SDK to discover and call `echo`, `add` and `whoami` over
+JSON and SSE, and verifies identity, permission and audience isolation plus
+rejected requests. Everything binds to ephemeral `127.0.0.1` ports. The
+self-contained mock OIDC issuer and ephemeral signing keys are development-only;
+no accounts, provider credentials or external services are needed. Keys and
+bearer tokens are never printed, and temporary files, listeners and the child
+process are cleaned up on exit. See [the demo](docs/DEMO.md) for the scenario and
+its limits.
+
+The sample tools only return text, add two numbers and show the verified caller.
+They do not execute commands, persist data or contact external services. The
+sample server retains the SDK's localhost/origin protection and its executable
+accepts only IP loopback listeners.
+
+## Configure the gateway
+
+```sh
+make build
 bin/gateway-keygen --private /private/gateway.private.json --public /private/public.jwks.json
 bin/mcp-gateway --config /private/gateway.json
 ```
 
-The key generator refuses to overwrite files. If its second output fails, retain
-and inspect the first output before retrying; it does not roll back key creation.
-Gateway startup never generates or rotates credentials. Give the runtime user
-read access to its private JWK (0400/0600), and distribute only the public JWKS to
-backends. Keep configuration and credentials outside images and source control.
+Adapt [examples/gateway.json](examples/gateway.json) for your own issuer and
+backends. The production gateway always requires a configured discovered issuer
+and a private signing JWK. It has no mock-authentication flag or identity bypass;
+the demo issuer is confined to the separate demo executable.
 
-Adapt [gateway.json](examples/gateway.json). Required top-level fields are
-`listen`, public `origin`, OAuth/OIDC `issuer`, `signing_key_file` and `routes`.
-Each route requires a distinct name, canonical path ending `/mcp`, fixed upstream,
-distinct backend audience, required scopes, forwarded scopes, allowed OAuth
-client IDs and a positive `max_token_lifetime_seconds`. Missing, zero, negative
-or non-integer lifetime limits fail startup. `upstream_host` optionally preserves
-a backend's configured canonical Host, notably Shopping. Public URLs require
-HTTPS; HTTP loopback is accepted for
-local development. Internal upstream HTTP requires a trusted private network.
+Configuration is strict JSON: canonical public origin, issuer, private signing
+JWK and 1–64 routes. Each route specifies an exact path ending `/mcp`, a fixed
+upstream, a distinct backend audience, required scopes, forwarded scopes, allowed
+OAuth client IDs and a positive integer `max_token_lifetime_seconds`. Missing,
+zero, negative or non-integer lifetime limits fail startup. `upstream_host` can
+preserve an upstream's configured canonical Host. Public URLs require HTTPS;
+HTTP loopback is accepted for local development. Internal upstream HTTP requires
+a trusted private network.
+
+Clients use one route endpoint per service. Public protected-resource metadata
+is at `/.well-known/oauth-protected-resource/<service>/mcp` and advertises that
+route's exact resource and the configured issuer. `/health/live` indicates a
+running handler; `/health/ready` indicates startup configuration, key loading
+and issuer discovery. Neither asserts backend availability or ongoing issuer
+connectivity. Health probes also require the configured canonical Host.
+
 The gateway does not forward client cookies, identity headers, bearer tokens or
-HTTP trailers. Backend response trailers are also discarded. Backend informational
-(1xx) responses retain their status codes, but their headers are discarded; this
-stateless MCP transport has no supported informational metadata.
+HTTP trailers. Backend response trailers are discarded. Backend informational
+(1xx) statuses are preserved with their headers discarded; this stateless MCP
+transport has no supported informational metadata.
 
-`GET /health/live` indicates a running HTTP handler. `/health/ready` indicates
-successful startup configuration, key loading and issuer discovery; neither
-asserts backend availability or ongoing issuer connectivity. Requests must use
-the configured canonical Host, including health probes. Metadata is public at
-`/.well-known/oauth-protected-resource/<service>/mcp` for each route.
-
-HTTPS terminates at the operator's existing reverse proxy. Preserve canonical
-Host and streaming, restrict the internal listener, and do not expose backends.
-[Container deployment skeleton](examples/compose.yaml) needs environment-specific
-networking and HTTPS routing before use. The loopback SSH backend and gateway
-must share a host/network namespace or use an explicit private tunnel. Image
-builds use this directory as context: `docker build -t mcp-gateway .`.
+HTTPS terminates at the operator's reverse proxy. Preserve canonical Host and
+streaming, restrict the internal listener, and keep backend ingress private.
+The [container skeleton](examples/compose.yaml) requires environment-specific
+networking and HTTPS routing. Build with this directory as the entire context:
+`docker build -t mcp-gateway .`. Its runtime image contains only the production
+gateway, excluding the development issuer and example application.
 
 ## Authentication and permissions
 
 The built-in authenticator supports signed RS256 JWT access tokens from one
 configured discovered issuer. It accepts RFC 9068 `at+jwt` tokens with `client_id`,
-or `JWT` tokens explicitly marked with payload `typ=Bearer` and `azp` (Keycloak).
-Opaque tokens, arbitrary JWT profiles and ID tokens are unsupported. Verification
-requires exact issuer, exactly one route-resource audience, valid expiry/issued-at
-and not-before, subject and client identity. Conflicting client claims fail.
+or `JWT` tokens explicitly marked with payload `typ=Bearer` and `azp` (the
+Keycloak profile). Opaque tokens, arbitrary JWT profiles and ID tokens are
+unsupported. Verification requires the exact issuer, exactly one route-resource
+audience, valid expiry/issued-at/not-before, subject and client identity.
+Conflicting client claims fail.
 
-The core applies each route's `max_token_lifetime_seconds` to verified token
-timing, regardless of provider: issuance must be positive and not in the future,
-expiry must be in the future, and both the issued lifetime and remaining lifetime
-must fit the limit. The examples set 300 seconds for Shopping and SSH. Shopping
-requires at most 300 seconds to preserve its provider revocation bound; do not
-increase that route's limit. Choose an explicit revocation bound for each new
-backend and configure its provider to issue compatible access tokens. An old,
-long-lived token is rejected even when fewer than 300 seconds remain. The gateway
-rechecks timing after reading the request body, before issuing backend identity.
-Internal tokens expire within 60 seconds and never after the external expiry;
-minting another internal token cannot extend the external grant. Clients obtain
-fresh external access tokens through their provider's authorized refresh flow.
+Each route's `max_token_lifetime_seconds` bounds both the issued and remaining
+external lifetime. Issuance must be positive and no later than the current time;
+expiry must be in the future. The examples use 300 seconds. Choose an explicit
+revocation bound for each backend and configure its provider accordingly. An old
+long-lived token fails even when little time remains. Timing is checked again
+after reading the body and before issuing backend identity. Internal tokens
+expire within 60 seconds and never after the external expiry. Repeated requests
+cannot extend the external grant. Clients refresh through their provider's
+authorized flow.
 
-Each resource is the exact public origin plus route path. Configure provider
-clients, callbacks, PKCE, consent, resource/audience bindings and permissions for
-those resources. Discovery tells clients which issuer to use; the gateway is not
-an authorization server, token issuer for clients, client-registration service or
-OAuth login proxy. A provider's unsupported resource behavior needs an explicit
-provider integration, not weakened audience checks. Existing SSH Keycloak
-compatibility guards remain in the legacy lab path.
+A route resource is the exact public origin plus path. Provider clients,
+callbacks, PKCE, consent, resource/audience bindings and permissions require
+separate configuration. Discovery identifies the issuer; the gateway is not an
+authorization server, client registration service or OAuth login proxy. A
+provider's unsupported resource behavior needs an explicit integration rather
+than relaxed audience verification.
 
-Route access requires both an allowed OAuth client and all configured required
-scopes. Only the intersection of granted scopes and the route's `forward_scopes`
-is sent to its backend: configuration never invents a permission. Each backend
-still enforces domain scopes and ownership. Avoid combining SSH and Shopping
-audiences or permissions in a client grant.
+Route access requires an allowed OAuth client and every required scope. Only
+the intersection of granted scopes and `forward_scopes` reaches the backend:
+configuration never invents a permission. Backends verify the signed identity
+and enforce their own client, permission and ownership policies.
+`gateway.Authenticator` is the extension boundary for future authentication
+methods. Multiple simultaneous issuers and account linking are outside V1.
 
-`gateway.Authenticator` is the extension boundary for a future authentication
-method. Routing accepts a normalized principal; it contains no provider roles,
-Keycloak realms or hardcoded services. Multiple simultaneous issuers, account
-linking and provider administration are outside V1.
+## Backend contract
 
-## Backend identity and integration
+External access tokens never reach a backend. Each backend verifies a separate
+gateway-signed token for its own audience and retains original `(issuer,
+subject)`, OAuth client identity and granted permissions. The backend owns its
+internal account mapping and all application authorization. See [identity
+contract v1](docs/IDENTITY.md).
 
-See [the v1 identity contract](docs/IDENTITY.md). External access tokens are never
-passed to the backend. Backends verify a separate gateway-signed token for their
-own audience, preserving original `(issuer, subject)` and OAuth client identity.
+The runnable reference server uses that same contract:
 
-**Shopping:** retain its complete existing identity configuration. Add:
-
-```text
-SHOPPING_GATEWAY_ISSUER=https://mcp.example.com
-SHOPPING_GATEWAY_AUDIENCE=shopping-mcp
-SHOPPING_GATEWAY_JWKS_FILE=/etc/mcp-gateway/public.jwks.json
+```sh
+bin/example-mcp --listen 127.0.0.1:8090 \
+  --gateway-issuer https://mcp.example.com --audience service-a-mcp \
+  --jwks /private/public.jwks.json --client-id example-agent \
+  --required-scope service-a:use
 ```
 
-When configured, `/mcp` accepts only gateway identity tokens. Browser login,
-sessions and `/api/v1` retain existing authentication. Shopping still requires an
-active enrolled original issuer+subject, allowed shopping client and shopping
-permissions. Switching identity issuers requires explicit account enrollment or
-migration; matching emails does not link accounts. Without gateway settings,
-existing direct MCP authentication remains available for staged migration.
-
-**SSH:** build/run `SSHMCP/cmd/sshmcp-server` with
-[backend configuration](examples/ssh-backend.json), not the legacy
-`sshmcp-gateway` executable. It exposes the existing three tools over loopback
-HTTP with gateway-only authentication. It does no OIDC discovery and starts no
-Keycloak proxy. SSH host pinning, restricted runner RPC, persistent shells,
-durable jobs, idempotency and cancellation stay in SSHMCP. The existing legacy
-lab executable remains available until the rollout is verified.
-
-**Reference backend:** `bin/example-mcp --listen 127.0.0.1:8099 --gateway-issuer https://mcp.example.com --audience example-mcp --jwks /private/public.jwks.json` exposes `whoami` with `example:read`. Add an `/example/mcp` route to its internal `/mcp` endpoint and configure that permission and allowed client. This is a synthetic demonstration, not a domain service.
-
-**New service:** deploy a stateless Streamable HTTP MCP server, implement the
-identity contract, add a route and provider resource/client permissions, then
-verify discovery, calls, denied access and user isolation. Add its endpoint to
-clients separately. No shared tool catalog or tool renaming is performed.
+This matches the example service-a route. It still needs a running configured
+gateway and a compatible access token; `make demo` supplies its own complete
+local environment. Real-service integration is a separate, later approved step
+after standalone MVP acceptance. Adding a service involves its identity
+verification, own policy, one fixed route and provider resource configuration;
+the gateway does not combine catalogs or rename tools.
 
 ## Protocol and failure boundaries
 
-V1 targets the existing Go MCP SDK v1.8.0 stateless Streamable HTTP backends and
-protocol versions they support. It forwards POST, GET and DELETE to exact fixed
-paths, preserving Accept, Content-Type and MCP protocol-version headers.
-Requests also preserve `Mcp-Method`, `Mcp-Name` and the protocol-defined
-`Mcp-Param-{Name}` namespace (SEP-2243 schema-annotated tool arguments), supporting
-protocol `2026-07-28` without fallback. These headers are untrusted protocol data;
-the backend SDK validates them against the message body and tool schema. Other
-`Mcp-*` headers are not implicitly forwarded. JSON responses and request-bound
-SSE can stream; session IDs, resumable standalone
+V1 targets the pinned MCP Go SDK v1.8.0 and stateless Streamable HTTP. It forwards
+POST, GET and DELETE to exact fixed paths, preserving Accept, Content-Type and
+MCP protocol-version headers. It also preserves `Mcp-Method`, `Mcp-Name` and the
+protocol-defined `Mcp-Param-{Name}` namespace for schema-annotated arguments
+(SEP-2243), supporting protocol `2026-07-28` without fallback. These are untrusted
+protocol fields; the backend SDK validates them against message bodies and tool
+schemas. Other `Mcp-*` headers are not implicitly forwarded.
+
+JSON and request-bound SSE can stream. Session IDs, resumable standalone
 streams, WebSockets, stdio, combined catalogs and server-initiated long-lived
-sessions are unsupported. A backend issuing an MCP session ID is rejected.
+sessions are unsupported. Backends issuing an MCP session ID are rejected.
 
 Bodies are fully bounded to 6,422,528 bytes before dispatch. There are 64 active
-requests per route and at most 64 routes, with a 35-second upstream request budget.
-Header, connection and TLS waits are bounded. There is no automatic retry of
-POST tool calls, even after a lost acknowledgement. Cancellation propagates to
-the backend request; it does not promise rollback or cancellation of a durable
-job. Use service-specific idempotency/status/lookup to resolve uncertain writes.
+requests per route and at most 64 routes, with a 35-second upstream budget.
+Header, connection and TLS waits are bounded. POST calls are never retried
+automatically, including after a lost acknowledgement. Cancellation propagates
+to the backend request; it does not promise rollback of accepted work. Services
+with writes must provide their own idempotency/status/lookup rules.
 
-Routes, keys and policy load at startup; reload requires a restart. Gateway state
-is not the durable store for application jobs. Logs contain route, duration and
-safe operational messages, not tool payloads, tokens, cookies or user subjects.
+Routes, keys and policy load at startup; changes require restart. The gateway
+is not an application's durable store. Logs contain route, duration and safe
+operational messages, excluding payloads, tokens, cookies and user subjects.
 
 ## Validation
 
 ```sh
-make check build
-python3 scripts/check-contract.py
-# From a full monorepo checkout; synthetic identities and data only:
-make integration
+make check build integration demo
 ```
 
-The cross-project tests run the production gateway process and official SDK
-clients against actual Shopping handlers/SQLite and SSH tool handlers with a
-recording runner RPC. They do not execute commands on real SSH targets. The
-existing runner and lab tests remain the execution validation boundary.
+`check` runs formatting, vet and the module's race tests. `integration` runs the
+local agent scenario with race detection against the built gateway executable,
+mock issuer and sample backend handlers. All sources, tests, manifests and build
+inputs belong to this module. Copy this directory alone to another location and
+run the same commands; no parent checkout, sibling sources or repository scripts
+are required. The dedicated CI workflow also runs these checks from an isolated
+module copy. Dependency downloads still need normal Go package access.
 
-A clean production rollout additionally needs reviewed provider registrations,
-TLS/network setup, key delivery, actual Codex and ChatGPT login/refresh/use,
-service isolation, and real runner interruption acceptance. See
+Production rollout additionally needs reviewed provider registration,
+TLS/network setup, key delivery and actual client login/refresh/use. See the
 [rollout checklist](docs/ROLLOUT.md). Licensing for external redistribution must
 be established before claiming an externally distributable release.

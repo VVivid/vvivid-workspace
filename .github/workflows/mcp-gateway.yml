@@ -1,10 +1,10 @@
 name: MCPGateway
 on:
   pull_request:
-    paths: ['MCPGateway/**', 'AgentShoppingList/**', 'SSHMCP/**', '.github/workflows/mcp-gateway.yml']
+    paths: ['MCPGateway/**', '.github/workflows/mcp-gateway.yml']
   push:
     branches: [main]
-    paths: ['MCPGateway/**', 'AgentShoppingList/**', 'SSHMCP/**', '.github/workflows/mcp-gateway.yml']
+    paths: ['MCPGateway/**', '.github/workflows/mcp-gateway.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,10 +20,10 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: MCPGateway/go.mod
-          cache-dependency-path: |
-            MCPGateway/go.sum
-            AgentShoppingList/go.sum
-            SSHMCP/go.sum
-      - run: make -C MCPGateway check build integration
-      - name: Check identity contract implementations stay aligned
-        run: python3 MCPGateway/scripts/check-contract.py
+          cache-dependency-path: MCPGateway/go.sum
+      - name: Verify the module without sibling projects
+        run: |
+          standalone_dir="$(mktemp -d "${RUNNER_TEMP}/mcp-gateway.XXXXXX")"
+          trap 'rm -rf "$standalone_dir"' EXIT
+          cp -a MCPGateway/. "$standalone_dir/"
+          make -C "$standalone_dir" check build integration demo
