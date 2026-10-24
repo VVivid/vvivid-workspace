@@ -1,0 +1,23 @@
+{{- define "main" -}}
+<div class="wrapper list-page">
+    <header class="header">
+        <h1 class="header-title center">{{ .Title }}</h1>
+        {{ with .Description }}
+        <p class="center">{{ . }}</p>
+        {{ end }}
+    </header>
+    <main class="page-content" aria-label="Content">
+        {{ $projects := .Pages }}
+        {{ if gt (len $projects) 0 }}
+        {{ range $projects }}
+        {{ partial "projectCard" . }}
+        {{ end }}
+        {{ else }}
+        <section class="projects-empty-state" aria-label="Projects status">
+            <h2>Projects are being refreshed</h2>
+            <p>I've temporarily hidden older projects that are no longer maintained. I'll add current work here once it's ready to share.</p>
+        </section>
+        {{ end }}
+    </main>
+</div>
+{{- end -}}
