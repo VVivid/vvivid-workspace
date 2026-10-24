@@ -1,10 +1,10 @@
 .PHONY: check test build xtrace-check xtrace-test xtrace-build website-check website-test website-build
 
-check: xtrace-check sshmcp-check google-health-check shopping-check website-check
+check: xtrace-check sshmcp-check google-health-check shopping-check website-check webhook-control-check
 
-test: xtrace-test sshmcp-test google-health-test shopping-test website-test
+test: xtrace-test sshmcp-test google-health-test shopping-test website-test webhook-control-test
 
-build: xtrace-build sshmcp-build google-health-build shopping-build website-build
+build: xtrace-build sshmcp-build google-health-build shopping-build website-build webhook-control-build
 
 website-check:
 	$(MAKE) -C vvivid.dev check
@@ -55,3 +55,14 @@ shopping-test:
 
 shopping-build:
 	$(MAKE) -C AgentShoppingList build
+
+.PHONY: webhook-control-check webhook-control-test webhook-control-build
+
+webhook-control-check:
+	$(MAKE) -C WebhookControl check
+
+webhook-control-test:
+	$(MAKE) -C WebhookControl test
+
+webhook-control-build:
+	$(MAKE) -C WebhookControl build

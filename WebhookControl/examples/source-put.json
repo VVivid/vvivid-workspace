@@ -1,0 +1,25 @@
+{
+  "source_id": "source-a",
+  "expected_revision": 0,
+  "input": {
+    "configuration": {
+      "source": {
+        "id": "source-a", "revision": 1, "name": "Synthetic notices", "enabled": true,
+        "auth": {"kind": "hmac-sha256", "secret": {"name": "source-a-auth", "version": "v1"}},
+        "original_ttl": 86400, "delivery_ttl": 604800
+      },
+      "rules": [
+        {"id": "notice-rule", "revision": 1, "source_id": "source-a", "expression": "event.kind == 'notice'"}
+      ],
+      "templates": [
+        {"id": "notice-template", "revision": 1, "source_id": "source-a", "fields": {"message": "event.message", "contact": "mask(event.contact)"}}
+      ],
+      "transporters": [
+        {"id": "receiver-a", "revision": 1, "source_id": "source-a", "kind": "http", "http": {"url": "https://receiver.example/receive", "timeout_seconds": 10, "secret_headers": {"Authorization": {"name": "receiver-a-header", "version": "v1"}}}}
+      ],
+      "routes": [
+        {"id": "notice-route", "revision": 1, "source_id": "source-a", "enabled": true, "rules": [{"id": "notice-rule", "revision": 1}], "template": {"id": "notice-template", "revision": 1}, "transporters": [{"id": "receiver-a", "revision": 1}]}
+      ]
+    }
+  }
+}

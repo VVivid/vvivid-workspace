@@ -15,6 +15,7 @@ Before Go edits, use [Modern Go Guidelines](.agents/skills/use-modern-go/SKILL.m
 | `SSHMCP` | Authenticated MCP gateway and persistent SSH execution runner | [SSHMCP README](SSHMCP/README.md) |
 | `GoogleHealthMCP` | Google Health / Fitbit importer backed by SQLite | [Google Health README](GoogleHealthMCP/README.md) |
 | `AgentShoppingList` | Agent-managed mobile shopping app with built-in MCP | [Shopping README](AgentShoppingList/README.md) |
+| `WebhookControl` | Standalone JSON webhook router with durable delivery | [Webhook Control README](WebhookControl/README.md) |
 | `examples/xtrace-example` | A runnable distributed tracing demonstration | [XTrace README](examples/xtrace-example/README.md#run) |
 | `vvivid.dev` | Personal website built with Hugo Extended | [Website README](vvivid.dev/README.md) |
 
@@ -22,7 +23,7 @@ Each project owns its dependencies, build configuration, and tests. The root Mak
 
 ## Build and check
 
-Run `make sshmcp-check`, `make google-health-check`, or `make shopping-check` for an application. Use `make website-check`, `make website-test`, or `make website-build` for the personal website; each renders and validates the production Hugo output. Install the pinned Hugo Extended version from `vvivid.dev/.hugo-version` or set `HUGO=/absolute/path/to/hugo`; the [website README](vvivid.dev/README.md) covers installation and Docker alternatives. `make check`, `make test`, and `make build` cover all projects. Each project remains independently runnable; Docker builds use its directory as the build context.
+Run `make sshmcp-check`, `make google-health-check`, `make shopping-check`, or `make webhook-control-check` for an application. Each also has matching `-test` and `-build` targets. Use `make website-check`, `make website-test`, or `make website-build` for the personal website; each renders and validates the production Hugo output. Install the pinned Hugo Extended version from `vvivid.dev/.hugo-version` or set `HUGO=/absolute/path/to/hugo`; the [website README](vvivid.dev/README.md) covers installation and Docker alternatives. `make check`, `make test`, and `make build` cover all projects. Each project remains independently runnable; Docker builds use its directory as the build context.
 
 For XTrace, install Make, Go 1.26 or newer, a C compiler for SQLite and the race detector, and Docker with the Compose plugin. Run from the repository root:
 
@@ -40,7 +41,7 @@ Use `make xtrace-check`, `make xtrace-test`, or `make xtrace-build` to select XT
 
 The [XTrace workflow](.github/workflows/xtrace-example.yml) runs automatically only for pull requests that change `examples/xtrace-example/**` and for matching pushes to `main`. It runs `make -C examples/xtrace-example check` directly, independently of the root Makefile. Changes confined to root files or workflow configuration do not trigger it; it can still be started manually.
 
-SSHMCP, GoogleHealthMCP, and AgentShoppingList each have a workflow filtered to their own directory. A change confined to another project does not trigger the XTrace workflow.
+SSHMCP, GoogleHealthMCP, AgentShoppingList, and WebhookControl each have a workflow filtered to their own directory. WebhookControl also watches its own workflow file. A change confined to another project does not trigger the XTrace workflow.
 
 The [website workflow](.github/workflows/website.yml) watches `vvivid.dev/**` and its own workflow file. It runs deployment tests and checks the complete Hugo/nginx image, including pinned Hugo, output exclusion, and HTTP guide blocking. Pull requests use `contents: read`. Matching pushes to `main` publish a GHCR image and deploy its digest through the protected `vvivid-live` environment and restricted Tailscale/SSH access. The [live runbook](vvivid.dev/deploy/live/README.md) describes separate activation and recovery; preview stays outside this workflow. Root-only Make changes require explicit local website checks.
 
