@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -236,11 +237,93 @@ func TestConfigRejectsAmbiguity(t *testing.T) {
 	f := newFixture(t)
 	for _, mutate := range []func(*Config){func(c *Config) { c.Routes[1].Path = c.Routes[0].Path }, func(c *Config) { c.Routes[0].RequiredScopes = nil }, func(c *Config) { c.Routes[0].Path = "/shopping/../ssh/mcp" }, func(c *Config) { c.Origin = "http://public.example" }, func(c *Config) { c.Routes[0].ClientIDs = nil }} {
 		c := f.config
-		c.Routes = append([]Route{}, c.Routes...)
+		c.Routes = slices.Clone(c.Routes)
 		mutate(&c)
 		if c.Validate() == nil {
 			t.Fatal("invalid config accepted")
 		}
+	}
+}
+
+func TestConfigRejectsRoutePatternsBeforeMuxRegistration(t *testing.T) {
+	f := newFixture(t)
+	for _, path := range []string{"/shopping/{id}/mcp", "/shopping/{/mcp", "/shopping/}/mcp", "/shopping/\x00/mcp"} {
+		t.Run(path, func(t *testing.T) {
+			c := f.config
+			c.Routes = slices.Clone(c.Routes)
+			c.Routes[0].Path = path
+			if c.Validate() == nil {
+				t.Fatal("route pattern accepted as a fixed path")
+			}
+			if _, err := New(c, &OIDCAuthenticator{}, slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil {
+				t.Fatal("invalid route configuration accepted")
+			}
+		})
+	}
+}
+
+func TestAccessProfilesRequireTheirClientClaim(t *testing.T) {
+	f := newFixture(t)
+	for _, profile := range []string{"keycloak", "rfc9068"} {
+		t.Run(profile, func(t *testing.T) {
+			token := f.token(t, profile, "/shopping/mcp", func(c map[string]any) {
+				if profile == "keycloak" {
+					delete(c, "azp")
+					c["client_id"] = "shopping-client"
+				} else {
+					delete(c, "client_id")
+					c["azp"] = "shopping-client"
+				}
+			})
+			if w := request(f.server, "/shopping/mcp", token, `{}`); w.Code != http.StatusUnauthorized {
+				t.Fatalf("incorrect profile accepted: %d", w.Code)
+			}
+		})
+	}
+	if f.calls.Load() != 0 {
+		t.Fatal("invalid profile reached backend")
+	}
+}
+
+func TestProxyStripsRequestAndResponseTrailers(t *testing.T) {
+	f := newFixture(t)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil || string(body) != `{}` {
+			t.Errorf("upstream body: %q, %v", body, err)
+		}
+		if len(r.Trailer) != 0 || r.Header.Get("Cookie") != "" || r.Header.Get("X-Forwarded-User") != "" {
+			t.Error("client identity data reached backend")
+		}
+		w.Header().Set("Trailer", "Set-Cookie, X-Forwarded-User")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{}`))
+		w.Header().Set("Set-Cookie", "private=backend")
+		w.Header().Set("X-Forwarded-User", "private-backend-user")
+	}))
+	defer upstream.Close()
+	f.config.Routes[0].Upstream = upstream.URL + "/mcp"
+	gateway := httptest.NewServer(f.build(t))
+	defer gateway.Close()
+	r, err := http.NewRequestWithContext(t.Context(), http.MethodPost, gateway.URL+"/shopping/mcp", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Host = "gateway.example"
+	r.ContentLength = -1
+	r.Header.Set("Authorization", "Bearer "+f.token(t, "rfc9068", "/shopping/mcp", nil))
+	r.Trailer = http.Header{"Cookie": {"private=client"}, "X-Forwarded-User": {"mallory"}}
+	resp, err := gateway.Client().Do(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil || resp.StatusCode != http.StatusOK || string(body) != `{}` {
+		t.Fatalf("gateway response: %d %q, %v", resp.StatusCode, body, err)
+	}
+	if len(resp.Trailer) != 0 || resp.Header.Get("Set-Cookie") != "" || resp.Header.Get("X-Forwarded-User") != "" {
+		t.Fatal("backend metadata reached client through trailers")
 	}
 }
 func TestCancellationReachesBackend(t *testing.T) {

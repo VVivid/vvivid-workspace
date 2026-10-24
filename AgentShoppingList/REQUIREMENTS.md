@@ -22,7 +22,7 @@ The app is mainly managed by an agent through MCP. The user opens a ready shoppi
 | R12 | Multi-user from the start: private data and authorization per account. | CP02, CP03, CP09 |
 | R13 | Reuse existing Keycloak with OAuth authorization code + PKCE and separate shopping clients/scopes/audiences. | CP03, CP06, CP10 |
 | R14 | Go + templates + SQLite; small JS only for useful interactions. | CP01, CP05 |
-| R15 | One Go service exposes web, API and MCP, sharing business services. No separate MCP gateway. | CP01, CP06, CP10 |
+| R15 | One Go service exposes web, API and MCP, sharing business services. The approved optional shared MCPGateway may front MCP access while Shopping retains its tools and authorization. | CP01, CP06, CP10 |
 | R16 | Deploy behind existing Traefik; keep shopping data and runtime secrets on the server, persist SQLite across restart, and preserve exact retries. Do not create backups, snapshots, off-server copies, backup schedules or Mac recovery keys. | CP09, CP10 |
 | R17 | Preserve progress in files and resumable checkpoints so a new chat can continue. | All checkpoints |
 | R18 | CP00 preserves docs and reference assets; development continues from the first incomplete checkpoint without recreating the project. | CP00, all resume work |

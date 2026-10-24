@@ -78,7 +78,22 @@ func (a *OIDCAuthenticator) Authenticate(ctx context.Context, raw, resource stri
 	now := time.Now().Unix()
 	// RFC 9068 access JWTs, or Keycloak's explicitly marked Bearer access JWTs.
 	// Ordinary OIDC ID tokens do not satisfy this access-token profile.
-	if typ == "JWT" && c.Type != "Bearer" || c.Issuer != a.issuer || c.Subject == "" || len(c.Subject) > 255 || strings.ContainsRune(c.Subject, 0) || c.Expiry == nil || int64(*c.Expiry) <= now || c.IssuedAt == nil || int64(*c.IssuedAt) > now+30 || *c.Expiry <= *c.IssuedAt || c.NotBefore != nil && int64(*c.NotBefore) > now || len(c.Audience) != 1 || c.Audience[0] != resource {
+	if typ == "JWT" && (c.Type != "Bearer" || c.AZP == "") {
+		return trust.Principal{}, invalid
+	}
+	if typ == "at+jwt" && c.ClientID == "" {
+		return trust.Principal{}, invalid
+	}
+	if c.Issuer != a.issuer || c.Subject == "" || len(c.Subject) > 255 || strings.ContainsRune(c.Subject, 0) {
+		return trust.Principal{}, invalid
+	}
+	if c.Expiry == nil || int64(*c.Expiry) <= now || c.IssuedAt == nil || int64(*c.IssuedAt) > now+30 || *c.Expiry <= *c.IssuedAt {
+		return trust.Principal{}, invalid
+	}
+	if c.NotBefore != nil && int64(*c.NotBefore) > now {
+		return trust.Principal{}, invalid
+	}
+	if len(c.Audience) != 1 || c.Audience[0] != resource {
 		return trust.Principal{}, invalid
 	}
 	if c.ClientID == "" {

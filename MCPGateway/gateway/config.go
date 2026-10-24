@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"unicode"
 )
 
 type Config struct {
@@ -80,7 +81,13 @@ func (c Config) Validate() error {
 	}
 	paths, names, audiences := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, r := range c.Routes {
-		if r.Name == "" || names[r.Name] || paths[r.Path] || audiences[r.Audience] || !strings.HasPrefix(r.Path, "/") || !strings.HasSuffix(r.Path, "/mcp") || path.Clean(r.Path) != r.Path || strings.ContainsAny(r.Path, "%?#\\ \t\r\n") || strings.HasPrefix(r.Path, "/.well-known/") || strings.HasPrefix(r.Path, "/health/") {
+		if r.Name == "" || names[r.Name] || paths[r.Path] || audiences[r.Audience] {
+			return errors.New("routes require distinct names, audiences and canonical /.../mcp paths")
+		}
+		// Paths are literal ServeMux routes, with discovery and health reserved.
+		if !strings.HasPrefix(r.Path, "/") || !strings.HasSuffix(r.Path, "/mcp") || path.Clean(r.Path) != r.Path ||
+			strings.ContainsAny(r.Path, "%?#\\ {}") || strings.ContainsFunc(r.Path, unicode.IsControl) ||
+			strings.HasPrefix(r.Path, "/.well-known/") || strings.HasPrefix(r.Path, "/health/") {
 			return errors.New("routes require distinct names, audiences and canonical /.../mcp paths")
 		}
 		if _, err := secureURL(r.Upstream, true); err != nil {
