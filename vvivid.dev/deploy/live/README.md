@@ -77,12 +77,27 @@ create a dedicated credential with these exact constraints:
 | Field | Value |
 | --- | --- |
 | Issuer | GitHub / `https://token.actions.githubusercontent.com` |
-| Subject | `repo:VVivid/vvivid-workspace:environment:vvivid-live` |
+| Subject | `repo:VVivid@60072429/vvivid-workspace@1414747215:environment:vvivid-live` |
 | Custom claim `repository` | `VVivid/vvivid-workspace` |
 | Custom claim `ref` | `refs/heads/main` |
 | Custom claim `workflow_ref` | `VVivid/vvivid-workspace/.github/workflows/website.yml@refs/heads/main` |
 | Scope | Writable `auth_keys` only |
 | Tag | `tag:vvivid-live-ci` |
+
+This repository uses GitHub's immutable OIDC subjects, which include the owner
+and repository IDs. Before creating or replacing a credential, verify the actual
+prefix:
+
+```sh
+gh api repos/VVivid/vvivid-workspace/actions/oidc/customization/sub --jq .sub_claim_prefix
+```
+
+The current prefix is `repo:VVivid@60072429/vvivid-workspace@1414747215`.
+Append `:environment:vvivid-live` for the live subject. The older name-only
+prefix does not match this repository's tokens and causes Tailscale token
+exchange to fail with HTTP 403. The additional `repository`, `ref`, and
+`workflow_ref` claims retain the name-based values in the table. See
+[GitHub's immutable subject documentation](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims).
 
 The environment changes GitHub's `sub` claim: use the environment subject above,
 not a `ref:refs/heads/main` subject. The additional claims constrain the branch
