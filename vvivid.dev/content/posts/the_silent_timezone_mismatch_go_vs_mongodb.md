@@ -1,6 +1,7 @@
 ---
 title: "The Silent Timezone Mismatch: Go vs MongoDB"
 date: 2026-01-16T18:33:20+01:00
+lastmod: 2026-10-25
 author: "Ou David"
 draft: false
 tags: ["golang", "debugging", "mongodb", "distributed-systems"]
@@ -10,9 +11,12 @@ toc: false
 math: false
 ---
 
+A BSON timestamp represents an instant, but formatting it as a calendar date requires a timezone. In the `primitive.DateTime.Time()` path described here, Go's local location moved the formatted date across midnight. Converting to the intended timezone before `Format(time.DateOnly)` fixed our UTC-date comparison.
+
+
 I recently encountered a subtle bug that cost more time than I'd like to admit. It’s a classic example of how implicit defaults in our tools can lead to unexpected behavior in distributed systems.
 
-### The Real Problem
+## A payment date comparison fails across midnight {#the-real-problem}
 
 I was implementing a validation function, `isValidCiaoPayment`. The logic was simple: check if a payment record from MongoDB matches a specific check date (e.g., "2026-01-15").
 
@@ -30,7 +34,7 @@ if paymentUpdatedAtDate != checkDate {
 
 The function kept returning `false` even when the data looked correct in the database.
 
-### The Wrong Assumption
+## A BSON instant does not choose a calendar timezone {#the-wrong-assumption}
 
 The wrong assumption was that calling `.Time().Format(time.DateOnly)` would preserve the same date boundary that we saw in MongoDB.
 
@@ -48,13 +52,13 @@ So:
 2.  **Go Conversion**: `.Time()` reads the epoch, creates a `time.Time`, and attaches your server's `Local` location.
 3.  **Result**: `2026-01-16 00:00:00 +0700 +07` (If you are in UTC+7).
 
-### The Failure Mode
+## Local time moves the formatted date to the next day {#the-failure-mode}
 
 Since 5:00 PM UTC became 12:00 AM the *next day* in local time, calling `.Format(time.DateOnly)` resulted in "2026-01-16", causing the mismatch against "2026-01-15".
 
 This bug is easy to miss because both values describe the same instant. The problem is not the timestamp. The problem is formatting that timestamp into a calendar date before deciding which timezone owns the date boundary.
 
-### The Debugging Path
+## Log the instant, location, and both calendar dates {#the-debugging-path}
 
 The useful debugging step was to print both the instant and the location attached to the `time.Time` value:
 
@@ -71,7 +75,7 @@ log.Printf(
 
 That made the mismatch visible. The UTC date was still `2026-01-15`, but the local formatted date had moved to `2026-01-16`.
 
-### Why Does the Driver Do This?
+## Why primitive.DateTime.Time() can return Local {#why-does-the-driver-do-this}
 
 It’s easy to blame the driver, but it is actually respecting Go's standard library design.
 
@@ -100,7 +104,7 @@ The driver team arguably had two choices for `primitive.DateTime.Time()`:
 
 They chose option #2 for this method. It wasn't an oversight; it follows Go's standard library behavior. If Go's own `time.Unix` constructor returns Local time, the method doing the same thing is consistent, even if it causes headaches for backend engineers expecting UTC by default.
 
-### The Fix
+## Choose UTC before formatting the payment date {#the-fix}
 
 In backend engineering, we care about absolute time. We shouldn't rely on implicit conversions that assume the server's local clock matters for data logic.
 
@@ -111,6 +115,10 @@ The fix is to explicitly force the Location back to UTC before formatting or com
 paymentUpdatedAtDate := payment.UpdatedAt.Time().UTC().Format(time.DateOnly)
 ```
 
-### Takeaway
+## Make the date boundary explicit {#takeaway}
 
 If you are working with `primitive.DateTime`, remember that it is just a timestamp. When it crosses the boundary into `time.Time`, ensure you control the Timezone context, or defaults might bite you.
+
+## Related articles
+
+For another mismatch between integration data models, see [fractional cents in a POS integration](/posts/handling_fractional_cents_integration/). Both examples are collected in the [integration debugging guide](/topics/integration-debugging/).

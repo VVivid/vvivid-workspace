@@ -5,11 +5,13 @@ from datetime import datetime
 import hashlib
 import http.client
 import json
+from pathlib import Path
 import re
 import sys
 import unittest
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
+import xml.etree.ElementTree as ET
 
 
 class StructuredData(HTMLParser):
@@ -18,11 +20,21 @@ class StructuredData(HTMLParser):
         self.in_schema = False
         self.documents = []
         self.links = []
+        self.meta = {}
+        self.h1_count = 0
+        self.byline = False
 
     def handle_starttag(self, tag, attrs):
         self.in_schema = tag == "script" and dict(attrs).get("type") == "application/ld+json"
         if tag == "link":
             self.links.append(dict(attrs))
+        fields = dict(attrs)
+        if tag == "meta":
+            self.meta[fields.get("name", fields.get("property"))] = fields.get("content")
+        if tag == "h1":
+            self.h1_count += 1
+        if tag == "a" and fields.get("rel") == "author":
+            self.byline = fields.get("href") == "/about/"
 
     def handle_endtag(self, tag):
         if tag == "script":
@@ -67,7 +79,7 @@ class ServingTests(unittest.TestCase):
             "/projects/go-lang-case-study/": "strings.Builder",
             "/posts/": "What Really Happens When You Run a Shell Command?",
             "/posts/process_api_behind_every_shell_command/": "fork()",
-            "/tags/": "Golang",
+            "/tags/": "Go backend engineering",
             "/tags/golang/": "Go Language Case Studies",
             "/categories/technical-deep-dives/": "HTTP Request Journey",
             "/api/": "GET /api/content.json",
@@ -307,7 +319,89 @@ class ServingTests(unittest.TestCase):
         self.assertIn("Allow: /", lines)
         self.assertIn("Content-Signal: search=yes, ai-input=yes, ai-train=yes", lines)
         self.assertEqual(len([line for line in lines if line.startswith("Content-Signal:")]), 1)
-        self.assertTrue(any(line.startswith("Sitemap: https://") for line in lines))
+        site = json.loads(self.request("/api/content.json")[2])["site"]["url"]
+        self.assertEqual(any(line.startswith("Sitemap:") for line in lines), site == "https://vvivid.dev/")
+
+    def test_runtime_preview_noindex_and_www_redirect(self):
+        for path in ("/", "/about/", "/about/index.md", "/robots.txt", "/api/content.json", "/missing/", "/images/site-cover.jpg"):
+            for host in ("preview.vvivid.dev", "preview.example", "unconfigured.example"):
+                with self.subTest(path=path, host=host):
+                    _, headers, _ = self.request(path, headers={"Host": host})
+                    self.assertEqual(headers["x-robots-tag"], "noindex, follow")
+            self.assertNotIn("x-robots-tag", self.request(path, headers={"Host": "vvivid.dev"})[1])
+        for path in ("/", "/posts/http_in_golang/?source=www&x=1", "/a%20b/?q=a%2Bb", "/about?source=www"):
+            for method in ("GET", "HEAD"):
+                with self.subTest(path=path, method=method):
+                    status, headers, _ = self.request(path, method=method, headers={"Host": "www.vvivid.dev"})
+                    self.assertEqual(status, 301)
+                    self.assertEqual(headers["location"], "https://vvivid.dev" + path)
+
+    def test_sitemap_and_page_indexability(self):
+        snapshot = json.loads(self.request("/api/content.json")[2])
+        production = snapshot["site"]["url"] == "https://vvivid.dev/"
+        status, headers, body = self.request("/sitemap.xml")
+        self.assertEqual(status, 200)
+        self.assertIn("application/xml", headers["content-type"])
+        urls = [node.text for node in ET.fromstring(body).findall("{*}url/{*}loc")]
+        self.assertEqual(len(urls), len(set(urls)))
+        self.assertEqual(bool(urls), production)
+        for url in urls:
+            with self.subTest(url=url):
+                self.assertEqual(urlsplit(url).netloc, "vvivid.dev")
+                status, _, html = self.request(urlsplit(url).path)
+                self.assertEqual(status, 200)
+                metadata = StructuredData()
+                metadata.feed(html.decode())
+                self.assertNotIn("noindex", metadata.meta.get("robots", ""))
+                self.assertEqual([link["href"] for link in metadata.links if link.get("rel") == "canonical"], [url])
+        for path in ("/tags/", "/categories/", "/tags/http/", "/topics/"):
+            metadata = StructuredData()
+            metadata.feed(self.request(path)[2].decode())
+            self.assertEqual(metadata.meta["robots"], "noindex, follow")
+            self.assertNotIn("https://vvivid.dev" + path, urls)
+        for path in ("/tags/golang/", "/tags/json-rpc/", "/tags/benchmarking/", "/categories/technical-deep-dives/"):
+            self.assertEqual("https://vvivid.dev" + path in urls, production)
+
+    def test_article_authorship_dates_math_and_social_assets(self):
+        snapshot = json.loads(self.request("/api/content.json")[2])
+        base = snapshot["site"]["url"]
+        profile = StructuredData()
+        profile.feed(self.request("/about/")[2].decode())
+        graph = next(document["@graph"] for document in profile.documents if "@graph" in document)
+        author = next(entity for entity in graph if entity["@type"] == "Person")
+        self.assertEqual(author["@id"], base + "about/#person")
+        self.assertTrue(any(entity["@type"] == "ProfilePage" and entity["mainEntity"]["@id"] == author["@id"] for entity in graph))
+        for item in snapshot["items"]:
+            if item["section"] != "posts":
+                continue
+            path = urlsplit(item["url"]).path
+            html = self.request(path)[2].decode()
+            page = StructuredData()
+            page.feed(html)
+            article = next(schema for schema in page.documents if schema.get("@type") == "Article")
+            self.assertEqual(article["author"], author)
+            self.assertEqual(article["publisher"], author)
+            self.assertEqual(article["datePublished"], item["published_at"])
+            self.assertEqual(article["dateModified"], item["modified_at"])
+            self.assertTrue(page.byline)
+            self.assertEqual(page.h1_count, 1)
+            self.assertEqual("katex@" in html, path == "/posts/handling_fractional_cents_integration/")
+            self.assertEqual("mermaid@" in html, path == "/posts/jsonrpc_example/")
+            self.assertEqual(self.request(urlsplit(article["image"]).path)[0], 200)
+            self.assertEqual("noindex" in page.meta.get("robots", ""), base != "https://vvivid.dev/")
+        homepage = StructuredData()
+        homepage.feed(self.request("/")[2].decode())
+        self.assertEqual(homepage.h1_count, 1)
+        self.assertEqual(homepage.meta["og:image"], base + "images/site-cover.jpg")
+        jpeg = self.request("/images/site-cover.jpg")
+        png = self.request("/images/site-cover.png")
+        self.assertEqual((jpeg[0], png[0]), (200, 200))
+        self.assertIn("image/jpeg", jpeg[1]["content-type"])
+        self.assertLess(len(jpeg[2]), len(png[2]) / 5)
+        key = json.loads((Path(__file__).resolve().parents[1] / "data/indexnow.json").read_text())["key"]
+        status, _, verification = self.request(f"/{key}.txt")
+        self.assertEqual(status, 200)
+        self.assertEqual(verification.decode().strip(), key)
 
     def test_errors_redirects_and_assets(self):
         for path in ("/missing/", "/missing/index.md", "/AGENTS.md", "/aGeNt.md", "/nested/AGENT.md", "/AGENTS.md/index.md", "/.well-known/agent-skills/AGENTS.md", "/api/missing.json", "/.well-known/agent-skills/missing/SKILL.md", "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration", "/openapi.json"):

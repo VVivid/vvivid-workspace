@@ -1,6 +1,7 @@
 ---
 title: "The HTTP Request Journey in Go: From Network to Handler"
 date: 2025-08-08T10:00:00Z
+lastmod: 2026-10-25
 author: "Ou David"
 draft: false
 tags: ["golang", "http"]
@@ -10,9 +11,12 @@ toc: true
 math: false
 ---
 
+For the HTTP/1.x server path shown here, Go accepts a connection, reads and parses the request, routes it through `ServeMux`, and calls your handler. Understanding those steps makes connection lifetimes, middleware, timeouts, and response-writing bugs easier to debug. HTTP/2 uses a different connection and stream model.
+
+
 As a backend guy, I've been tasked with building various APIs for different projects, and most of them I built using Go. For the majority of the time, what most people do is write a handler or middleware to process and respond to requests. Today, we're going to do something different. We'll go down a rabbit hole together into the abstractions that Go has taken away from us. We'll see all the interesting things that Go does before handing us the request and response objects in our handler. After this deep dive, we'll understand how to parse requests, how routing matching works, middleware execution, and finally the architecture that Go uses to handle each request.
 
-## The Simple Beginning: http.HandleFunc
+## Start with a handler registered through http.HandleFunc {#the-simple-beginning-httphandlefunc}
 
 Let's start with something we all know:
 
@@ -25,7 +29,7 @@ http.ListenAndServe(":8080", nil)
 
 Simple, right? I used to think this was just "magic" that somehow worked. But there's actually a whole orchestrated series of processes and steps that make this happen, and we don't seem to appreciate it.
 
-## The Complete Journey: What Really Happens
+## HTTP/1.x request flow from socket to handler {#the-complete-journey-what-really-happens}
 
 Here's a simplified version of Go's actual `net/http` source code when you call `ListenAndServe`:
 
@@ -585,7 +589,7 @@ Understanding this flow has helped me:
 
 The key insight for me was realizing that Go's HTTP package isn't just a simple wrapper. It's a sophisticated system designed for high-performance, concurrent web services.
 
-## Wrapping Up
+## What to inspect when a Go HTTP request fails {#wrapping-up}
 
 When I started this deep dive, I thought I was just going to figure out why my connections were hanging. Instead, I ended up with a much deeper appreciation for Go's HTTP implementation.
 
@@ -595,7 +599,7 @@ If you're working with HTTP in Go, I highly recommend diving into the `net/http`
 
 ---
 
-### More Deep Dives You Might Like
+## Related protocol and server articles {#more-deep-dives-you-might-like}
 
 **[Building a JSON-RPC Server in Go](/posts/jsonrpc_example/)** - See how Go handles a different protocol pattern. We build a complete JSON-RPC implementation using similar Go internals and reflection patterns.
 

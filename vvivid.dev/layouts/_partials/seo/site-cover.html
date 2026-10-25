@@ -1,0 +1,6 @@
+{{- /* Encode the existing artwork at build time. Publish the source too so
+      previously shared PNG URLs remain valid. */ -}}
+{{- $source := resources.Get "images/site-cover.png" -}}
+{{- $source.Publish -}}
+{{- $cover := $source.Resize "1200x jpg q85" | resources.Copy "images/site-cover.jpg" -}}
+{{- $cover.Publish -}}

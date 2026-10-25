@@ -7,6 +7,9 @@
     {{/* Canonical link, RSS */}}
 
     <link rel="canonical" href="{{ .Permalink }}">
+    {{- if not (partial "seo/indexable.html" .) }}
+    <meta name="robots" content="noindex, follow">
+    {{- end }}
     {{- with .OutputFormats.Get "Markdown" }}
     <link href="{{ .RelPermalink }}" rel="alternate" type="text/markdown" title="{{ $.Title }} (Markdown)">
     {{- end }}
@@ -55,7 +58,7 @@
 
     {{/* Katex support (enabled on specific pages). See 'helpers/katex.html' for more info. */}}
 
-    {{- if or .Params.math .Site.Params.math }}{{ partial "helpers/katex.html" . -}}{{- end -}}
+    {{- if .Params.math }}{{ partial "helpers/katex.html" . -}}{{- end -}}
 
     {{/* Umami analytics script. See hugo.toml to configure this. */}}
     {{- $umami := .Site.Params.umami -}}

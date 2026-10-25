@@ -1,6 +1,7 @@
 ---
 title: "String Concatenation vs strings.Builder in Go"
 date: 2026-06-13T10:34:19+07:00
+lastmod: 2026-10-25
 author: "Ou David"
 draft: false
 tags: ["golang", "performance", "benchmarking", "strings"]
@@ -10,6 +11,9 @@ toc: false
 math: false
 ---
 
+Repeated `+=` in a Go loop copies the accumulated string on each append. In this benchmark, `strings.Builder` reduces those copies and allocations; `Grow` reduces them further when the final size is cheap to calculate. For a few fixed values, ordinary concatenation is still fine.
+
+
 I often leave the same comment when I see string concatenation inside a loop:
 
 > If you build a string in a loop, use `strings.Builder`.
@@ -18,7 +22,7 @@ That comment sometimes gets pushback from the team: the two operations probably 
 
 The runnable code and raw benchmark output are available in the public repo: [gitlab.vvivid.dev/showcase/go-lang-case-study](https://gitlab.vvivid.dev/showcase/go-lang-case-study).
 
-### The Real Problem
+## Why repeated concatenation copies the whole string {#the-real-problem}
 
 Strings in Go are immutable. When we do this:
 
@@ -73,7 +77,7 @@ func ConcatWithBuilderGrow(parts []string) string {
 
 The third version is the same idea as `strings.Builder`, but it tells the builder the final size before writing. That lets it allocate the backing buffer once.
 
-### The Test Setup
+## Benchmark inputs and environment {#the-test-setup}
 
 The correctness test is simple: every strategy must produce the same string as `strings.Join(parts, "")`.
 
@@ -95,7 +99,7 @@ Environment:
 - OS/arch: `darwin/arm64`
 - CPU: `Apple M4 Pro`
 
-### The Result
+## Benchmark results: time, bytes, and allocations {#the-result}
 
 Average across five benchmark runs:
 
@@ -117,7 +121,7 @@ The shape is the point.
 
 For 4096 parts, the easy `+=` version allocated about 265 MB per operation. The pre-grown builder allocated about 120 KB and stayed at one allocation. That is about 2156x less memory per operation. That is the difference between repeatedly rebuilding the output string and writing into a buffer sized for the final result.
 
-### The Wrong Assumption
+## Why the compiler cannot remove these copies {#the-wrong-assumption}
 
 The wrong assumption is:
 
@@ -133,7 +137,7 @@ That is why the allocation count for `+=` follows the number of appended parts:
 
 Those allocations also copy increasingly larger strings. The later appends are not just appending the new part. They are copying almost the whole result again.
 
-### The Fix
+## Use strings.Builder and preallocate when useful {#the-fix}
 
 Use `strings.Builder` when building a string from repeated writes:
 
@@ -154,7 +158,7 @@ builder.Grow(totalLen)
 
 That is what moved the benchmark to one allocation across all input sizes.
 
-### Takeaway
+## Choose string construction for the workload {#takeaway}
 
 You do not have to turn this into a micro-optimization. If there are only two or three values, normal concatenation is readable and fine:
 
@@ -165,3 +169,7 @@ name := firstName + " " + lastName
 But once you are constructing a string in a loop, especially from dynamic input, `strings.Builder` should be the default. If you can calculate the final size cheaply, `Grow` is even better.
 
 The practical rule is simple: use `+=` for obvious small expressions, use `strings.Builder` for repeated construction.
+
+## Related articles
+
+[Follow an HTTP request through Go](/posts/http_in_golang/) for another look beneath the standard library, or run the [Go case studies](/projects/go-lang-case-study/) to measure the examples yourself.

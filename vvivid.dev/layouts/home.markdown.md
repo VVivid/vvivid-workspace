@@ -1,6 +1,4 @@
-# {{ .Site.Title }}
-
-{{ .Site.Params.author.description }}
+{{ .RawContent | strings.TrimSpace }}
 
 ## Explore
 

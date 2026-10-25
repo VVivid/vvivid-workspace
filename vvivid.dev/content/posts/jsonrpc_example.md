@@ -2,6 +2,7 @@
 ---
 title: "Building a JSON-RPC Server in Go: Complete Implementation Guide"
 date: 2025-08-30T10:00:00Z
+lastmod: 2026-10-25
 author: "Ou David"
 draft: false
 tags: ["golang", "json-rpc"]
@@ -12,9 +13,12 @@ math: false
 mermaid: true
 ---
 
+A small JSON-RPC 2.0 server needs to parse messages, validate their shape, route method calls, and return either a result or an error with the matching ID. This Go calculator example follows that path and handles notifications without sending a response. It demonstrates JSON-RPC, not the full MCP lifecycle.
+
+
 Last week, I posted about [JSON-RPC and the Model Context Protocol](/posts/json_rpc_the_protocol_behind_mcp/). Today, we're going to see an example of how we can create a simple application following the JSON-RPC standard. We'll build a simple JSON-RPC calculator together, and I hope you'll enjoy it.
 
-## Request Flow Overview
+## JSON-RPC server flow: parse, validate, dispatch, respond {#request-flow-overview}
 
 ```mermaid
 flowchart LR
@@ -329,7 +333,7 @@ func (s *JSONRPCServer) callCalculatorMethod(methodName string, params interface
 
 In this function, we rely heavily on reflection to execute methods from the reflect package. After method execution completes, we return the response back to the request.
 
-## Wrapping Up
+## Apply the JSON-RPC dispatch pattern {#wrapping-up}
 
 Building a JSON-RPC server in Go is surprisingly straightforward once you understand the message flow. The key is proper parsing, validation, and method routing. Go's reflection makes dynamic method dispatch clean, and the JSON-RPC spec handles the rest.
 
@@ -337,7 +341,7 @@ This pattern works great for microservices, tool integrations, or any situation 
 
 ---
 
-### More Deep Dives You Might Like
+## Related protocol and HTTP articles {#more-deep-dives-you-might-like}
 
 **[Understanding JSON-RPC: The Protocol Behind MCP](/posts/json_rpc_the_protocol_behind_mcp/)** - Get the conceptual foundation. This post explains why JSON-RPC was chosen for MCP and breaks down the protocol's design.
 

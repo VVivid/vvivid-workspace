@@ -1,11 +1,23 @@
-{{- $authorID := printf "%s#author" .Site.Home.Permalink -}}
-{{- $profiles := slice -}}
-{{- range .Site.Params.socialIcons -}}
-    {{- if and (in (slice "github" "linkedin") .name) (hasPrefix .url "https://") -}}
-        {{- $profiles = $profiles | append .url -}}
-    {{- end -}}
+{{- $author := partial "meta/author.html" .Site -}}
+{{- $website := dict
+    "@type" "WebSite"
+    "@id" (printf "%s#website" .Site.Home.Permalink)
+    "url" .Site.Home.Permalink
+    "name" .Site.Title
+    "description" .Site.Params.description
+    "author" (dict "@id" (index $author "@id"))
+    "inLanguage" .Site.Language.Locale
+-}}
+{{- $graph := slice $website $author -}}
+{{- if eq .RelPermalink "/about/" -}}
+    {{- $profile := dict
+        "@type" "ProfilePage"
+        "@id" .Permalink
+        "url" .Permalink
+        "name" .Title
+        "mainEntity" (dict "@id" (index $author "@id"))
+    -}}
+    {{- $graph = $graph | append $profile -}}
 {{- end -}}
-{{- $author := dict "@type" "Person" "@id" $authorID "name" .Site.Params.author.name "url" .Site.Home.Permalink "sameAs" $profiles -}}
-{{- $website := dict "@type" "WebSite" "url" .Site.Home.Permalink "name" .Site.Title "description" .Site.Params.description "author" (dict "@id" $authorID) "inLanguage" .Site.Language.Locale -}}
-{{- $schema := dict "@context" "https://schema.org" "@graph" (slice $website $author) -}}
+{{- $schema := dict "@context" "https://schema.org" "@graph" $graph -}}
 <script type="application/ld+json">{{ $schema | jsonify | safeJS }}</script>

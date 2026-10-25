@@ -1,4 +1,5 @@
 User-agent: *
 Content-Signal: search=yes, ai-input=yes, ai-train=yes
 Allow: /
-Sitemap: {{ "sitemap.xml" | absURL }}
+{{ if eq .Site.BaseURL "https://vvivid.dev/" }}Sitemap: {{ "sitemap.xml" | absURL }}
+{{ end }}
