@@ -17,6 +17,7 @@ Before Go edits, use [Modern Go Guidelines](.agents/skills/use-modern-go/SKILL.m
 | `AgentShoppingList` | Agent-managed mobile shopping app with built-in MCP | [Shopping README](AgentShoppingList/README.md) |
 | `WebhookControl` | Standalone JSON webhook router with durable delivery | [Webhook Control README](WebhookControl/README.md) |
 | `examples/xtrace-example` | A runnable distributed tracing demonstration | [XTrace README](examples/xtrace-example/README.md#run) |
+| `examples/go-lang-case-study` | Go case studies, tests, and benchmarks | [Go case studies README](examples/go-lang-case-study/README.md) |
 | `vvivid.dev` | Personal website built with Hugo Extended | [Website README](vvivid.dev/README.md) |
 
 Each project owns its dependencies, build configuration, and tests. The root Makefile delegates to project Makefiles, so projects can use different languages and tools without sharing a dependency manager. Git is managed at this repository's root.
@@ -36,6 +37,8 @@ make build        # Build all applications, the XTrace demo, and the website
 The application binary is written to `examples/xtrace-example/bin/xtrace-demo`, which Git ignores. Checks stop on the first failure and do not start the Compose stack.
 
 Use `make xtrace-check`, `make xtrace-test`, or `make xtrace-build` to select XTrace explicitly. These delegate to the same `check`, `test`, and `build` targets in its directory. As projects are added, give each its own Makefile and extend the root targets to delegate to them.
+
+Use `make go-case-study-check`, `make go-case-study-test`, or `make go-case-study-build` for the Go 1.25 case-study module in `examples/go-lang-case-study`.
 
 ## Pull request checks
 

@@ -166,7 +166,7 @@ The shell feels high-level, but its power comes from a small set of low-level op
 
 Reading: [*Operating Systems: Three Easy Pieces*, Chapter 5 — The Process API](https://pages.cs.wisc.edu/~remzi/OSTEP/cpu-api.pdf).
 
-For a runnable Go example, see [go/process-api-shell](https://gitlab.vvivid.dev/showcase/go-lang-case-study/-/tree/main/go/process-api-shell). It uses Go’s standard `os/exec` package to run commands, redirect output, build a simple pipeline, and wait for the processes to finish.
+For a runnable Go example, see [go/process-api-shell](https://github.com/VVivid/vvivid-workspace/tree/main/examples/go-lang-case-study/go/process-api-shell). It uses Go’s standard `os/exec` package to run commands, redirect output, build a simple pipeline, and wait for the processes to finish.
 
 ## Related articles
 
