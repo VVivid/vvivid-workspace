@@ -1,0 +1,165 @@
+name: vvivid.dev preview
+
+on:
+  pull_request:
+    paths:
+      - 'vvivid.dev/**'
+      - '.github/workflows/website.yml'
+      - '.github/workflows/website-preview.yml'
+  push:
+    # No paths filter: branch creation and workflow-only pushes must deploy.
+    branches: [release/vvivid-preview]
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: 'Existing GHCR sha256 digest to redeploy/roll back; leave empty to build release/vvivid-preview'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_REPOSITORY: ghcr.io/vvivid/vvivid-website
+
+jobs:
+  pull-request:
+    name: Preview check and build
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Check deployment behavior
+        run: |
+          make -C vvivid.dev deployment-test
+          python3 vvivid.dev/scripts/test-indexnow.py
+      - name: Build and check the complete serving image
+        run: |
+          docker build --platform linux/amd64 --tag vvivid-website:preview-check \
+            --build-arg HUGO_BASEURL=https://preview.vvivid.dev/ ./vvivid.dev
+          ./vvivid.dev/scripts/smoke-image.sh vvivid-website:preview-check https://preview.vvivid.dev/
+
+  build:
+    name: Publish checked preview image
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/release/vvivid-preview' && inputs.image_digest == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Check deployment behavior
+        run: |
+          make -C vvivid.dev deployment-test
+          python3 vvivid.dev/scripts/test-indexnow.py
+      - name: Build and check the complete serving image
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          image="$IMAGE_REPOSITORY:preview-sha-$SOURCE_SHA"
+          docker build --platform linux/amd64 --tag "$image" \
+            --build-arg HUGO_BASEURL=https://preview.vvivid.dev/ \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$SOURCE_SHA" ./vvivid.dev
+          ./vvivid.dev/scripts/smoke-image.sh "$image" https://preview.vvivid.dev/
+      - name: Publish immutable image digest
+        id: publish
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          image="$IMAGE_REPOSITORY:preview-sha-$SOURCE_SHA"
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          trap 'docker logout ghcr.io >/dev/null' EXIT
+          docker push "$image"
+          digest=$(docker image inspect --format '{{json .RepoDigests}}' "$image" \
+            | jq --raw-output --arg prefix "$IMAGE_REPOSITORY@" '.[] | select(startswith($prefix)) | split("@")[1]')
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+          printf 'Published `%s@%s`\n' "$IMAGE_REPOSITORY" "$digest" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy preview digest
+    needs: build
+    if: >-
+      always() && !cancelled() && github.event_name != 'pull_request' && github.ref == 'refs/heads/release/vvivid-preview' &&
+      (needs.build.result == 'success' || (needs.build.result == 'skipped' && inputs.image_digest != ''))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: vvivid-preview
+      url: https://preview.vvivid.dev/
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: vvivid-preview
+      cancel-in-progress: false
+    steps:
+      - name: Validate digest and skip superseded preview runs
+        id: candidate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_DIGEST: ${{ needs.build.outputs.digest }}
+          REQUESTED_DIGEST: ${{ inputs.image_digest }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          digest=${REQUESTED_DIGEST:-$BUILD_DIGEST}
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          current_preview=$(gh api "repos/$GITHUB_REPOSITORY/commits/release%2Fvvivid-preview" --jq .sha)
+          if [ "$SOURCE_SHA" != "$current_preview" ]; then
+            deployment_source() {
+              local tree workflow
+              tree=$(gh api "repos/$GITHUB_REPOSITORY/git/trees/$1" \
+                --jq '.tree[] | select(.path == "vvivid.dev") | .sha') || return
+              workflow=$(gh api "repos/$GITHUB_REPOSITORY/contents/.github/workflows/website-preview.yml?ref=$1" --jq .sha) || return
+              [[ "$tree" =~ ^[0-9a-f]{40}$ && "$workflow" =~ ^[0-9a-f]{40}$ ]] || return 1
+              printf '%s %s\n' "$tree" "$workflow"
+            }
+            source_inputs=$(deployment_source "$SOURCE_SHA")
+            preview_inputs=$(deployment_source "$current_preview")
+            if [ "$source_inputs" != "$preview_inputs" ]; then
+              printf 'Skipped: newer website or deployment workflow changes reached release/vvivid-preview.\n' >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          fi
+          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+      - name: Join Tailscale using GitHub OIDC
+        if: steps.candidate.outputs.digest != ''
+        uses: tailscale/github-action@99a8333667fff04fdd6cffb46dfd409f8329a7bf # v4
+        with:
+          oauth-client-id: ${{ vars.TS_CLIENT_ID }}
+          audience: ${{ vars.TS_AUDIENCE }}
+          tags: tag:vvivid-preview-ci
+      - name: Deploy through restricted SSH command
+        if: steps.candidate.outputs.digest != ''
+        env:
+          IMAGE_DIGEST: ${{ steps.candidate.outputs.digest }}
+          DEPLOY_HOST: ${{ vars.VVIVID_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.VVIVID_DEPLOY_PORT }}
+          DEPLOY_KEY: ${{ secrets.VVIVID_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VVIVID_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]]
+          (( 10#$DEPLOY_PORT > 0 && 10#$DEPLOY_PORT <= 65535 ))
+          tailscale ping --timeout=30s "$DEPLOY_HOST" >/dev/null
+          ssh_dir=$(mktemp -d "$RUNNER_TEMP/vvivid-ssh.XXXXXX")
+          trap 'rm -rf "$ssh_dir"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
+          ssh -F /dev/null -i "$ssh_dir/key" -p "$DEPLOY_PORT" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o "UserKnownHostsFile=$ssh_dir/known_hosts" -o ConnectTimeout=20 \
+            -o ForwardAgent=no -o RequestTTY=no -o ClearAllForwardings=yes \
+            "vvivid-preview-deploy@$DEPLOY_HOST" "deploy $IMAGE_DIGEST"
+          printf 'Preview image: `%s@%s`\n' "$IMAGE_REPOSITORY" "$IMAGE_DIGEST" >> "$GITHUB_STEP_SUMMARY"
