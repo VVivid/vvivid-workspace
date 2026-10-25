@@ -1,0 +1,33 @@
+name: Go language case studies
+
+on:
+  pull_request:
+    paths:
+      - 'examples/go-lang-case-study/**'
+      - '.github/workflows/go-lang-case-study.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'examples/go-lang-case-study/**'
+      - '.github/workflows/go-lang-case-study.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-lang-case-study-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: examples/go-lang-case-study/go.mod
+          cache: false
+      - name: Check, test and build
+        run: make -C examples/go-lang-case-study check test build

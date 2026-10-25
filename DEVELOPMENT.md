@@ -17,6 +17,7 @@ Before Go edits, use [Modern Go Guidelines](.agents/skills/use-modern-go/SKILL.m
 | `AgentShoppingList` | Agent-managed mobile shopping app with built-in MCP | [Shopping README](AgentShoppingList/README.md) |
 | `WebhookControl` | Standalone JSON webhook router with durable delivery | [Webhook Control README](WebhookControl/README.md) |
 | `examples/xtrace-example` | A runnable distributed tracing demonstration | [XTrace README](examples/xtrace-example/README.md#run) |
+| `examples/go-lang-case-study` | Go case studies, tests, and benchmarks | [Go case studies README](examples/go-lang-case-study/README.md) |
 | `vvivid.dev` | Personal website built with Hugo Extended | [Website README](vvivid.dev/README.md) |
 
 Each project owns its dependencies, build configuration, and tests. The root Makefile delegates to project Makefiles, so projects can use different languages and tools without sharing a dependency manager. Git is managed at this repository's root.
@@ -37,11 +38,15 @@ The application binary is written to `examples/xtrace-example/bin/xtrace-demo`, 
 
 Use `make xtrace-check`, `make xtrace-test`, or `make xtrace-build` to select XTrace explicitly. These delegate to the same `check`, `test`, and `build` targets in its directory. As projects are added, give each its own Makefile and extend the root targets to delegate to them.
 
+Use `make go-case-study-check`, `make go-case-study-test`, or `make go-case-study-build` for the Go 1.25 case-study module in `examples/go-lang-case-study`.
+
 ## Pull request checks
 
 The [XTrace workflow](.github/workflows/xtrace-example.yml) runs automatically only for pull requests that change `examples/xtrace-example/**` and for matching pushes to `main`. It runs `make -C examples/xtrace-example check` directly, independently of the root Makefile. Changes confined to root files or workflow configuration do not trigger it; it can still be started manually.
 
 SSHMCP, GoogleHealthMCP, AgentShoppingList, and WebhookControl each have a workflow filtered to their own directory. WebhookControl also watches its own workflow file. A change confined to another project does not trigger the XTrace workflow.
+
+The [Go case-study workflow](.github/workflows/go-lang-case-study.yml) watches `examples/go-lang-case-study/**` and its own workflow file, and runs formatting/vet checks, race-enabled tests, and a build.
 
 The [website workflow](.github/workflows/website.yml) watches `vvivid.dev/**` and its own workflow file. It runs deployment tests and checks the complete Hugo/nginx image, including pinned Hugo, output exclusion, and HTTP guide blocking. Pull requests use `contents: read`. Matching pushes to `main` publish a GHCR image and deploy its digest through the protected `vvivid-live` environment and restricted Tailscale/SSH access. The [live runbook](vvivid.dev/deploy/live/README.md) describes separate activation and recovery; preview stays outside this workflow. Root-only Make changes require explicit local website checks.
 

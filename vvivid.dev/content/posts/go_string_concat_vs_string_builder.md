@@ -20,7 +20,7 @@ I often leave the same comment when I see string concatenation inside a loop:
 
 That comment sometimes gets pushback from the team: the two operations probably will not matter much. Today, I want to show a simple benchmark to demonstrate why `strings.Builder` is superior to doing `+=` inside a loop.
 
-The runnable code and raw benchmark output are available in the public repo: [gitlab.vvivid.dev/showcase/go-lang-case-study](https://gitlab.vvivid.dev/showcase/go-lang-case-study).
+The runnable code and raw benchmark output are available in the public repo: [github.com/VVivid/vvivid-workspace/tree/main/examples/go-lang-case-study](https://github.com/VVivid/vvivid-workspace/tree/main/examples/go-lang-case-study).
 
 ## Why repeated concatenation copies the whole string {#the-real-problem}
 
