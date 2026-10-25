@@ -12,6 +12,12 @@
     {{- end }}
     <link href="{{ "llms.txt" | relURL }}" rel="describedby" type="text/plain" title="Published content index">
     <link href="{{ "auth.md" | relURL }}" rel="describedby" type="text/markdown" title="Public access information">
+    {{- if .IsHome }}
+    <link href="{{ ".well-known/api-catalog" | relURL }}" rel="api-catalog" type="application/linkset+json" title="Public API catalog">
+    <link href="{{ "api/openapi.json" | relURL }}" rel="service-desc" type="application/json" title="Content API description">
+    <link href="{{ "api/" | relURL }}" rel="service-doc" type="text/html" title="Content API documentation">
+    <link href="{{ ".well-known/agent-skills/index.json" | relURL }}" rel="describedby" type="application/json" title="Public article-reading skill">
+    {{- end }}
     {{- with .OutputFormats.Get "RSS" }}
     <link href="{{ .RelPermalink }}" rel="alternate" type="application/rss+xml" title="{{ $.Site.Title }}">
     <link href="{{ .RelPermalink }}" rel="feed" type="application/rss+xml" title="{{ $.Site.Title }}">

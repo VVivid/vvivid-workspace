@@ -64,8 +64,10 @@ automatically assigned loopback port, checks the nginx configuration, runs
 [scripts/test-serving.py](scripts/test-serving.py), and removes the container.
 The existing website CI calls this same entry point. It checks HTML/Markdown,
 Accept quality values and exclusions, HEAD, conditional requests, redirects,
-errors, discovery resources, structured data, static asset caching, and blocked
-agent-guide URLs. It does not contact the live website.
+errors, API/catalog/skill contracts and digests, discovery resources, structured
+data, Content Signals, static asset caching, and blocked agent-guide URLs. It does
+not contact the live website. Check and test also build temporary content fixtures
+to verify automatic publication and exclusion of drafts and future pages.
 
 ## Source and dependencies
 
@@ -102,16 +104,59 @@ files but does not perform nginx's HTTP negotiation.
 HTML/Markdown links. `/auth.md` explains anonymous public reading and the absence
 of registration or credentials. HTML `<link>` elements and HTTP `Link` headers
 point to the actual alternate representation, content index, access document,
-RSS, and sitemap. The homepage's JSON-LD describes the existing website and author
-using configured public profile links.
+RSS, and sitemap. The homepage also advertises the API catalog, API description,
+human API documentation, and public skill index. Its JSON-LD describes the
+existing website and author using configured public profile links.
 
-The API inventory is empty: this image serves static content and browser assets;
-it contains no application API handlers, MCP server, account system, or write
-endpoint. Articles and project links can discuss separately hosted APIs, and the
-optional analytics script uses another hostname. API catalog, OpenAPI,
-OAuth/OIDC discovery, and client registration are therefore not applicable.
-No synthetic catalog, authorization server, token, or registration endpoint is
-created or advertised. Revisit this inventory if an actual API is added.
+## Read-only content API and public skill
+
+`GET /api/content.json` returns a complete build-time JSON snapshot of published
+regular pages: titles, descriptions, canonical and Markdown URLs, sections,
+authors, tags, categories, dates when known, reading estimates, and optional
+project links. Filter locally; there is no query search, pagination, or dynamic
+application server. Drafts and future content follow Hugo's production selection
+and stay excluded. [API documentation](content/api/_index.md) is published at
+`/api/`; `/api/openapi.json` provides the OpenAPI 3.1 contract. Anonymous HEAD is
+also supported. Unknown paths and unsupported methods use nginx's HTML 404/405
+responses. The API and discovery resources retain `no-store` cache isolation.
+
+`/.well-known/api-catalog` serves an [RFC 9727](https://www.rfc-editor.org/rfc/rfc9727.html)
+linkset as `application/linkset+json` with the API's actual endpoint as its
+`anchor`, plus `service-desc` and `service-doc` links to the contract and docs.
+Hugo's extensionless output uses the matching `layouts/home.apicatalog` template.
+
+`/.well-known/agent-skills/index.json` implements the
+[Agent Skills Discovery draft v0.2.0](https://github.com/cloudflare/agent-skills-discovery-rfc).
+This draft is a discovery convention, not an established IETF well-known URI
+registration. The single `skill-md` artifact teaches finding, reading, and citing
+the site's articles. Metadata lives in [data/agent-skills.yaml](data/agent-skills.yaml);
+[the public skill template](assets/agent-skills/read-vvivid-articles.md) is rendered
+and published as `/.well-known/agent-skills/read-vvivid-articles/SKILL.md`. The index
+computes `sha256:` from that resource's exact raw bytes during the same build,
+rather than maintaining a separate checksum. Internal `AGENT.md` and `AGENTS.md`
+remain excluded and blocked.
+
+Generated `robots.txt` declares `Content-Signal: search=yes, ai-input=yes,
+ai-train=yes`: the author's chosen policy allows search, AI answers, and training.
+These [Content Signals](https://contentsignals.org/) express usage preferences;
+they are not authentication or technical access controls.
+
+The site hosts no MCP server, account system, write endpoint, OAuth authorization
+server, token endpoint, or client registration. Articles and project links can
+discuss separately hosted APIs; those services have their own access policies.
+
+## WebMCP evaluation
+
+The [current WebMCP draft](https://webmachinelearning.github.io/webmcp/) exposes
+`document.modelContext.registerTool` with an input schema, an asynchronous execute
+callback, and annotations such as `readOnlyHint`. It is experimental. A potential
+`search_articles` or `list_projects` browser tool could filter the generated
+content API, but native compatibility with this draft has not been verified in
+the available environment. No browser tool or Cloudflare WebMCP bridge is enabled.
+The supported interface remains the anonymous HTTP API. Re-evaluate against a
+native browser implementation before enabling browser tools, including feature
+detection, input validation, cancellation, and read-only execution tests. This
+evaluation does not change live Cloudflare settings or require a paid plan.
 
 ## Representation caching and deployment checks
 
@@ -128,7 +173,8 @@ Cloudflare does not include arbitrary `Vary` fields in its default cache key.
 The origin's `no-store` policy is the safe default for this feature without
 changing the Cloudflare plan or adding an account. Before an authorized
 deployment, confirm that no Cache Rule, Page Rule, Worker, or forced Edge TTL
-overrides origin cache control on pages, `.md`, `/llms.txt`, or error responses.
+overrides origin cache control on pages, `.md`, `/llms.txt`, `/api/`,
+`/.well-known/`, or error responses.
 Purge previously cached page responses when activating this configuration.
 `Vary: Accept` alone cannot repair an already cached response. A future explicit
 Free-plan Vary Cache Rule is a separate configuration choice; do not remove
