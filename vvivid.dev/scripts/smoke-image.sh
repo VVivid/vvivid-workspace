@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-if [ "$#" -ne 1 ]; then
-    printf 'Usage: %s <local-image>\n' "$0" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+    printf 'Usage: %s <local-image> [expected-base-url]\n' "$0" >&2
     exit 1
 fi
 
@@ -43,5 +43,9 @@ if [ -n "$leaked_guide" ]; then
     exit 1
 fi
 script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
-python3 "$script_dir/test-serving.py" "$origin"
+if [ "$#" -eq 2 ]; then
+    python3 "$script_dir/test-serving.py" "$origin" "$2"
+else
+    python3 "$script_dir/test-serving.py" "$origin"
+fi
 printf 'Serving image passed representation, discovery, cache, and agent-guide checks.\n'

@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Deploy one immutable website image to the existing live Compose service."""
+"""Deploy one immutable image, scoped by the root-owned installed executable."""
 
 import fcntl
 import json
@@ -19,10 +19,16 @@ IMAGE_REPOSITORY = "ghcr.io/vvivid/vvivid-website"
 COMPOSE_FILE = Path("/home/admin/infrastructure/compose.yml")
 ENV_FILE = COMPOSE_FILE.with_name(".env")
 COMPOSE_PROJECT = "private-edge"
-SERVICE = "vvivid-live"
-HEALTH_URL_FILE = Path("/etc/vvivid-live/health-url")
-LOCK_FILE = Path("/run/lock/vvivid-live.lock")
-IMAGE_SETTING = re.compile(r"^\s*(?:export\s+)?VVIVID_LIVE_IMAGE\s*=")
+# Install this same source under each fixed name. The SSH caller cannot select
+# a scope: each account's sudo rule allows only its root-owned executable.
+SCOPE = "preview" if Path(sys.argv[0]).name == "vvivid-preview-deploy" else "live"
+SERVICE = f"vvivid-{SCOPE}"
+IMAGE_KEY = f"VVIVID_{SCOPE.upper()}_IMAGE"
+HOSTNAME = "preview.vvivid.dev" if SCOPE == "preview" else "vvivid.dev"
+HEALTH_URL_FILE = Path(f"/etc/vvivid-{SCOPE}/health-url")
+# Both services atomically replace the same .env; separate locks lose updates.
+LOCK_FILE = Path("/run/lock/vvivid-deployment.lock")
+IMAGE_SETTING = re.compile(r"^\s*(?:export\s+)?" + IMAGE_KEY + r"\s*=")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 COMMAND_ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "DOCKER_CONFIG": "/root/.docker"}
 
@@ -34,7 +40,7 @@ class DeploymentError(Exception):
 def run(*args, image=None, timeout=90):
     environment = dict(COMMAND_ENV)
     if image is not None:
-        environment["VVIVID_LIVE_IMAGE"] = image
+        environment[IMAGE_KEY] = image
     try:
         result = subprocess.run(
             args, env=environment, capture_output=True, text=True, timeout=timeout
@@ -56,7 +62,7 @@ def compose(*args, image=None):
 
 
 def configured_image(image=None):
-    """Resolve the live image, optionally overriding only its dedicated setting."""
+    """Resolve this service's image, overriding only its dedicated setting."""
     configuration = json.loads(compose("config", "--format", "json", image=image))
     return configuration["services"][SERVICE]["image"]
 
@@ -65,13 +71,13 @@ def running_image():
     """Return both the configured reference and Docker's actual image ID."""
     container = compose("ps", "--quiet", "--status", "running", SERVICE)
     if not container or "\n" in container:
-        raise DeploymentError("Expected exactly one running live container")
+        raise DeploymentError(f"Expected exactly one running {SCOPE} container")
     values = run(
         "docker", "inspect", "--format", "{{.Config.Image}}\n{{.Image}}\n{{.State.Running}}",
         container,
     ).splitlines()
     if len(values) != 3 or values[2] != "true":
-        raise DeploymentError("Live container is not running")
+        raise DeploymentError(f"{SCOPE.capitalize()} container is not running")
     return values[0], values[1]
 
 
@@ -80,12 +86,12 @@ def image_setting():
     settings = [line for line in ENV_FILE.read_text().splitlines(keepends=True)
                 if IMAGE_SETTING.match(line)]
     if len(settings) > 1:
-        raise DeploymentError("Duplicate VVIVID_LIVE_IMAGE settings; resolve before deployment")
+        raise DeploymentError(f"Duplicate {IMAGE_KEY} settings; resolve before deployment")
     return settings[0] if settings else None
 
 
 def write_image_setting(setting):
-    """Replace only the live key, preserving shared preview values and file metadata."""
+    """Replace only this service's key, preserving other values and file metadata."""
     metadata = ENV_FILE.stat()
     lines = [line for line in ENV_FILE.read_text().splitlines(keepends=True)
              if not IMAGE_SETTING.match(line)]
@@ -124,7 +130,7 @@ def check_http(url, image):
     separator = "&" if "?" in url else "?"
     status = run(
         "curl", "--silent", "--show-error", "--max-time", "5", "--noproxy", "*",
-        "--header", "Host: vvivid.dev", "--header", "Cache-Control: no-cache",
+        "--header", f"Host: {HOSTNAME}", "--header", "Cache-Control: no-cache",
         "--output", "/dev/null", "--write-out", "%{http_code}",
         url + separator + "deployment=" + image.rsplit(":", 1)[-1], timeout=10,
     )
@@ -136,9 +142,9 @@ def wait_healthy(image, image_id, local_url):
     for attempt in range(12):
         try:
             if running_image() != (image, image_id):
-                raise DeploymentError("Running live image does not match the requested image")
+                raise DeploymentError(f"Running {SCOPE} image does not match the requested image")
             check_http(local_url, image)
-            check_http("https://vvivid.dev/", image)
+            check_http(f"https://{HOSTNAME}/", image)
             return
         except DeploymentError:
             if attempt == 11:
@@ -160,23 +166,23 @@ def deploy(digest):
         previous_setting_line = image_setting()
         previous_image, previous_image_id = running_image()
         if configured_image() != previous_image:
-            raise DeploymentError("Live Compose image differs from the running image; reconcile first")
+            raise DeploymentError(f"{SCOPE.capitalize()} Compose image differs from the running image; reconcile first")
         if configured_image(candidate) != candidate:
-            raise DeploymentError("Install the separate live-image Compose setting first")
+            raise DeploymentError(f"Install the separate {SCOPE}-image Compose setting first")
 
-        # Failed public GHCR access must leave the working live service and .env intact.
+        # Failed GHCR access must leave the working service and .env intact.
         run("docker", "pull", candidate, timeout=300)
         candidate_image_id = run("docker", "image", "inspect", "--format", "{{.Id}}", candidate)
         print(f"Deploying {candidate}", flush=True)
         try:
-            write_image_setting(f"VVIVID_LIVE_IMAGE={candidate}\n")
+            write_image_setting(f"{IMAGE_KEY}={candidate}\n")
             compose("up", "--detach", "--no-deps", "--pull", "never", SERVICE)
             wait_healthy(candidate, candidate_image_id, local_url)
         except BaseException as failure:
             # Ignore further termination while restoring the last known working service.
             for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
                 signal.signal(signum, signal.SIG_IGN)
-            print("Deployment failed; restoring previous live image", file=sys.stderr, flush=True)
+            print(f"Deployment failed; restoring previous {SCOPE} image", file=sys.stderr, flush=True)
             try:
                 write_image_setting(previous_setting_line)
                 compose("up", "--detach", "--no-deps", "--pull", "never", SERVICE,
@@ -184,8 +190,8 @@ def deploy(digest):
                 wait_healthy(previous_image, previous_image_id, local_url)
             except BaseException as rollback_failure:
                 raise DeploymentError("ROLLBACK FAILED; administrator intervention required") from rollback_failure
-            raise DeploymentError("Deployment failed; previous live image restored") from failure
-        print(f"Live image healthy: {candidate}", flush=True)
+            raise DeploymentError(f"Deployment failed; previous {SCOPE} image restored") from failure
+        print(f"{SCOPE.capitalize()} image healthy: {candidate}", flush=True)
 
 
 def main():
@@ -200,5 +206,5 @@ if __name__ == "__main__":
     try:
         main()
     except (DeploymentError, OSError, ValueError, KeyError) as error:
-        print(f"Live deployment failed: {error}", file=sys.stderr)
+        print(f"{SCOPE.capitalize()} deployment failed: {error}", file=sys.stderr)
         sys.exit(1)

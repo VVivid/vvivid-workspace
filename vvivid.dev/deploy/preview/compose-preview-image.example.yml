@@ -1,0 +1,8 @@
+# Apply only this image expression to the EXISTING vvivid-preview service.
+# This :preview fallback matches the archived image producer; preserve the
+# actual existing fallback if it differs. Validate identical config without
+# VVIVID_PREVIEW_IMAGE. Keep all labels, networks and the live image expression.
+# This is documentation, not an additional Compose deployment.
+services:
+  vvivid-preview:
+    image: ${VVIVID_PREVIEW_IMAGE:-${VVIVID_IMAGE}:preview}

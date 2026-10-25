@@ -47,6 +47,7 @@ class StructuredData(HTMLParser):
 
 class ServingTests(unittest.TestCase):
     origin = None
+    expected_base_url = None
 
     def request(self, path, accept=None, method="GET", headers=None):
         request_headers = dict(headers or {})
@@ -70,6 +71,24 @@ class ServingTests(unittest.TestCase):
         self.assertIn("no-store", headers.get("cache-control", ""))
         self.assertIn("accept", headers.get("vary", "").lower().split(", "))
         self.assertEqual(headers.get("x-content-type-options"), "nosniff")
+
+    def test_build_base_url_and_preview_indexing(self):
+        snapshot = json.loads(self.request("/api/content.json")[2])
+        base = snapshot["site"]["url"]
+        if self.expected_base_url is not None:
+            self.assertEqual(base, self.expected_base_url)
+        paths = {"/", "/about/", "/api/"} | {urlsplit(item["url"]).path for item in snapshot["items"]}
+        for path in paths:
+            with self.subTest(path=path):
+                status, headers, html = self.request(path, headers={"Host": urlsplit(base).hostname})
+                self.assertEqual(status, 200)
+                page = StructuredData()
+                page.feed(html.decode())
+                self.assertEqual([link["href"] for link in page.links if link.get("rel") == "canonical"],
+                                 [base.rstrip("/") + path])
+                if base != "https://vvivid.dev/":
+                    self.assertEqual(page.meta["robots"], "noindex, follow")
+                    self.assertEqual(headers["x-robots-tag"], "noindex, follow")
 
     def test_published_pages_and_explicit_markdown(self):
         pages = {
@@ -426,8 +445,10 @@ class ServingTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        sys.exit(f"Usage: {sys.argv[0]} http://127.0.0.1:PORT")
+    if len(sys.argv) not in (2, 3):
+        sys.exit(f"Usage: {sys.argv[0]} http://127.0.0.1:PORT [expected-base-url]")
+    if len(sys.argv) == 3:
+        ServingTests.expected_base_url = sys.argv.pop()
     ServingTests.origin = urlsplit(sys.argv.pop())
     if ServingTests.origin.scheme != "http" or ServingTests.origin.hostname != "127.0.0.1":
         sys.exit("Use the serving image's loopback-only HTTP origin.")
