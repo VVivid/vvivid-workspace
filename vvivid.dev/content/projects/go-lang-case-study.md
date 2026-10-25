@@ -1,5 +1,6 @@
 ---
 title: "Go Language Case Studies"
+weight: 40
 date: 2026-06-13
 draft: false
 description: "A public collection of focused Go case studies, tests, and benchmarks for practical backend engineering topics."
