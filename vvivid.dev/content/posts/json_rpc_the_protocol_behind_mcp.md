@@ -2,19 +2,23 @@
 ---
 title: "Understanding JSON-RPC: The Protocol Behind MCP"
 date: 2025-08-24
+lastmod: 2026-10-25
 author: "Ou David"
 description: "Breaking down JSON-RPC to understand how MCP (Model Context Protocol) works under the hood"
 tags: ["mcp", "json-rpc"]
 categories: ["Technical Deep Dives"]
 ---
 
+JSON-RPC 2.0 defines requests, notifications, responses, and errors as JSON messages. MCP uses that message format and adds its own lifecycle, capabilities, and methods. Start with the `method`, `params`, and `id` fields to understand what travels between an MCP client and server.
+
+
 I've been diving into the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) lately. Honestly, it's the most exciting thing happening in AI infrastructure right now. But here's the thing: to really understand MCP, you need to understand [JSON-RPC](https://www.jsonrpc.org/specification) first. That's what MCP is built on.
 
 So let me break down JSON-RPC for you. Once you get this, MCP will make way more sense.
 
-First, let's talk about how JSON-RPC is different from the REST APIs we're all used to. REST is stateless and unidirectional where each request is independent. Check this out:
+First, let's compare JSON-RPC with the REST APIs we're all used to. REST usually models resources through URLs and HTTP methods; JSON-RPC names the operation in the message body. Statelessness is a REST constraint, while the direction and transport of messages depend on the application. Check this out:
 
-## Example: REST API
+## Compare resource-oriented REST operations {#example-rest-api}
 
 ```text
 # Getting a user
@@ -53,7 +57,7 @@ In REST API, we control resources using multiple methods such as GET, PUT, POST,
 
 On the other hand, JSON-RPC has a very different approach. By design, it supports bidirectional communication and persistent connections. Here's an example:
 
-## Example: JSON-RPC
+## Call methods with JSON-RPC messages {#example-json-rpc}
 
 ```jsonc
 // Request 1: Get a user
@@ -113,7 +117,7 @@ See the difference? JSON-RPC uses a single endpoint with consistent request/resp
 
 What's really powerful is that JSON-RPC is transport-agnostic. It works over HTTP, WebSockets, TCP, or even stdin/stdout (which MCP uses). This flexibility is one of the reasons it's perfect for AI tool integration.
 
-## JSON-RPC Basics
+## JSON-RPC request, notification, and response rules {#json-rpc-basics}
 
 ### 1. Request Object
 
@@ -259,7 +263,7 @@ The bidirectional nature of JSON-RPC is perfect for MCP because:
 
 ---
 
-### More Deep Dives You Might Like
+## Related JSON-RPC implementation articles {#more-deep-dives-you-might-like}
 
 **[Building a JSON-RPC Server in Go](/posts/jsonrpc_example/)** - Ready to implement what we just learned? This guide walks through building a complete JSON-RPC calculator service in Go.
 

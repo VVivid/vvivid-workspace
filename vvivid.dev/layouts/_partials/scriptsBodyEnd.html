@@ -32,13 +32,13 @@
 {{ end }}
 {{ end }}
 
-{{ if .Params.mermaid }}
+{{ if .Store.Get "hasMermaid" }}
 <script type="module">
-    let mermaidLoaded = false;
-    const initMermaid = async () => {
-        if (mermaidLoaded) return;
-        mermaidLoaded = true;
-        try {
+    // Lazy display and PDF export share one render, including its failure handling.
+    let mermaidRenderPromise;
+    const renderMermaid = () => {
+        if (mermaidRenderPromise) return mermaidRenderPromise;
+        mermaidRenderPromise = (async () => {
             const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11.12.2/dist/mermaid.esm.min.mjs');
             const isDark = document.documentElement.classList.contains('dark');
             mermaid.initialize({
@@ -47,15 +47,18 @@
                 securityLevel: 'loose',
             });
             await mermaid.run();
-        } catch (e) {
+        })().catch((e) => {
             console.error('Mermaid failed to load:', e);
-        }
+        });
+        return mermaidRenderPromise;
     };
+    window.vvividRenderMermaid = renderMermaid;
+    window.addEventListener('beforeprint', renderMermaid);
 
     const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
-                initMermaid();
+                renderMermaid();
                 observer.disconnect();
             }
         });

@@ -1,7 +1,7 @@
-.PHONY: check test build deployment-test content-test
+.PHONY: check test build deployment-test content-test indexing-test
 
 # Rendering the production site also checks the Hugo version and guide exclusion.
-check test: deployment-test content-test build
+check test: deployment-test content-test indexing-test build
 
 build:
 	./scripts/build.sh
@@ -13,3 +13,6 @@ deployment-test:
 # Temporary source fixtures exercise the production content selection and digests.
 content-test:
 	python3 scripts/test-generated.py
+
+indexing-test:
+	python3 scripts/test-indexnow.py

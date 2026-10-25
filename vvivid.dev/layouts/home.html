@@ -1,0 +1,15 @@
+{{ define "main" }}
+<div class="wrapper home-page">
+    <main class="page-content" aria-label="Content">
+        {{ .Content }}
+        <section aria-labelledby="recent-posts">
+            <h2 id="recent-posts">Recent posts</h2>
+            {{ $posts := where .Site.RegularPages "Type" "in" .Site.Params.mainSections }}
+            {{ range first 5 $posts.ByDate.Reverse }}
+                {{ partial "postCard.html" . }}
+            {{ end }}
+            <p><a href="{{ "posts/" | relURL }}">All technical articles</a></p>
+        </section>
+    </main>
+</div>
+{{ end }}

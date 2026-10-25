@@ -123,7 +123,7 @@
       }
 
       button.dataset.exportPdfBound = "true";
-      button.addEventListener("click", function () {
+      button.addEventListener("click", async function () {
         var heading = document.querySelector("h1");
 
         trackEvent("PDF export", {
@@ -131,6 +131,9 @@
           title: cleanText(heading ? heading.textContent : document.title),
         });
 
+        if (typeof window.vvividRenderMermaid === "function") {
+          await window.vvividRenderMermaid();
+        }
         window.print();
       });
     });

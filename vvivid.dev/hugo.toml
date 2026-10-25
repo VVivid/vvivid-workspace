@@ -92,8 +92,7 @@ enableEmoji = true
   goToTop = true
   additionalScripts = ["js/post-pdf.js"]
   rssFeedDescription = "summary"
-  ogimage = "images/site-cover.png"
-  math = true
+  ogimage = "images/site-cover.jpg"
 
 [params.umami]
   enabled = true
