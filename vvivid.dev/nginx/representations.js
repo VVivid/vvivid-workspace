@@ -69,10 +69,16 @@ function index(r) {
 }
 
 function links(r) {
-    const discovery = '</llms.txt>; rel="describedby"; type="text/plain", '
+    let discovery = '</llms.txt>; rel="describedby"; type="text/plain", '
         + '</auth.md>; rel="describedby"; type="text/markdown", '
         + '</index.xml>; rel="alternate"; type="application/rss+xml", '
         + '</sitemap.xml>; rel="sitemap"; type="application/xml"';
+    if (r.variables.page_directory === '/' || r.uri === '/api/content.json') {
+        discovery += ', </.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json", '
+            + '</api/openapi.json>; rel="service-desc"; type="application/json", '
+            + '</api/>; rel="service-doc"; type="text/html", '
+            + '</.well-known/agent-skills/index.json>; rel="describedby"; type="application/json"';
+    }
     if (!hasPageRepresentations(r)) return discovery;
     const directory = r.variables.page_directory;
     const alternate = r.uri.endsWith('.md')
