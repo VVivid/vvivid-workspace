@@ -1,10 +1,19 @@
-.PHONY: check test build xtrace-check xtrace-test xtrace-build website-check website-test website-build
+.PHONY: check test build xtrace-check xtrace-test xtrace-build website-check website-test website-build go-case-study-check go-case-study-test go-case-study-build
 
-check: xtrace-check sshmcp-check google-health-check shopping-check website-check webhook-control-check
+check: xtrace-check sshmcp-check google-health-check shopping-check website-check webhook-control-check go-case-study-check
 
-test: xtrace-test sshmcp-test google-health-test shopping-test website-test webhook-control-test
+test: xtrace-test sshmcp-test google-health-test shopping-test website-test webhook-control-test go-case-study-test
 
-build: xtrace-build sshmcp-build google-health-build shopping-build website-build webhook-control-build
+build: xtrace-build sshmcp-build google-health-build shopping-build website-build webhook-control-build go-case-study-build
+
+go-case-study-check:
+	$(MAKE) -C examples/go-lang-case-study check
+
+go-case-study-test:
+	$(MAKE) -C examples/go-lang-case-study test
+
+go-case-study-build:
+	$(MAKE) -C examples/go-lang-case-study build
 
 website-check:
 	$(MAKE) -C vvivid.dev check
