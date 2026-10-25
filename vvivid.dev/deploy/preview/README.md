@@ -51,12 +51,19 @@ Create a **separate** Tailscale OIDC trust credential with these constraints:
 | Field | Value |
 | --- | --- |
 | Issuer | GitHub / `https://token.actions.githubusercontent.com` |
-| Subject | `repo:VVivid/vvivid-workspace:environment:vvivid-preview` |
+| Subject | `repo:VVivid@60072429/vvivid-workspace@1414747215:environment:vvivid-preview` |
 | Custom claim `repository` | `VVivid/vvivid-workspace` |
 | Custom claim `ref` | `refs/heads/release/vvivid-preview` |
 | Custom claim `workflow_ref` | `VVivid/vvivid-workspace/.github/workflows/website-preview.yml@refs/heads/release/vvivid-preview` |
 | Scope | Writable `auth_keys` only |
 | Tag | `tag:vvivid-preview-ci` |
+
+This repository uses GitHub's immutable subject prefix, including owner and
+repository IDs. Verify it using the command in the
+[live federation instructions](../live/README.md#tailscale-federation-and-policy),
+then append `:environment:vvivid-preview`. The older name-only subject fails
+Tailscale validation and token exchange. Keep the other custom claims as listed;
+the immutable prefix changes the `sub` value only.
 
 Save its generated client ID and audience in the preview environment. No
 reusable Tailscale secret or auth key is needed. Merge a narrow grant for
