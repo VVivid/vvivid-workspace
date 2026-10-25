@@ -1,0 +1,51 @@
+goos: darwin
+goarch: arm64
+pkg: gitlab.vvivid.dev/showcase/go-lang-case-study/go/string-concat-builder
+cpu: Apple M4 Pro
+BenchmarkStringConstruction/small_8_parts/plus-12         	 8948706	       133.0 ns/op	     544 B/op	       7 allocs/op
+BenchmarkStringConstruction/small_8_parts/plus-12         	 8992027	       134.0 ns/op	     544 B/op	       7 allocs/op
+BenchmarkStringConstruction/small_8_parts/plus-12         	 8790692	       134.2 ns/op	     544 B/op	       7 allocs/op
+BenchmarkStringConstruction/small_8_parts/plus-12         	 8470545	       135.3 ns/op	     544 B/op	       7 allocs/op
+BenchmarkStringConstruction/small_8_parts/plus-12         	 8945198	       135.3 ns/op	     544 B/op	       7 allocs/op
+BenchmarkStringConstruction/small_8_parts/builder-12      	16562889	        73.01 ns/op	     240 B/op	       4 allocs/op
+BenchmarkStringConstruction/small_8_parts/builder-12      	16435710	        72.67 ns/op	     240 B/op	       4 allocs/op
+BenchmarkStringConstruction/small_8_parts/builder-12      	16632468	        72.35 ns/op	     240 B/op	       4 allocs/op
+BenchmarkStringConstruction/small_8_parts/builder-12      	16759639	        73.12 ns/op	     240 B/op	       4 allocs/op
+BenchmarkStringConstruction/small_8_parts/builder-12      	16547472	        72.65 ns/op	     240 B/op	       4 allocs/op
+BenchmarkStringConstruction/small_8_parts/builder_grow-12 	28026741	        42.90 ns/op	     112 B/op	       1 allocs/op
+BenchmarkStringConstruction/small_8_parts/builder_grow-12 	28180010	        42.86 ns/op	     112 B/op	       1 allocs/op
+BenchmarkStringConstruction/small_8_parts/builder_grow-12 	28030478	        43.09 ns/op	     112 B/op	       1 allocs/op
+BenchmarkStringConstruction/small_8_parts/builder_grow-12 	27693238	        42.98 ns/op	     112 B/op	       1 allocs/op
+BenchmarkStringConstruction/small_8_parts/builder_grow-12 	27796142	        42.94 ns/op	     112 B/op	       1 allocs/op
+BenchmarkStringConstruction/medium_128_parts/plus-12      	   53324	     22242 ns/op	  194080 B/op	     127 allocs/op
+BenchmarkStringConstruction/medium_128_parts/plus-12      	   52376	     22876 ns/op	  194080 B/op	     127 allocs/op
+BenchmarkStringConstruction/medium_128_parts/plus-12      	   54748	     22151 ns/op	  194080 B/op	     127 allocs/op
+BenchmarkStringConstruction/medium_128_parts/plus-12      	   55890	     23724 ns/op	  194080 B/op	     127 allocs/op
+BenchmarkStringConstruction/medium_128_parts/plus-12      	   53034	     22429 ns/op	  194080 B/op	     127 allocs/op
+BenchmarkStringConstruction/medium_128_parts/builder-12   	  749217	      1526 ns/op	   11176 B/op	      10 allocs/op
+BenchmarkStringConstruction/medium_128_parts/builder-12   	  802321	      1557 ns/op	   11176 B/op	      10 allocs/op
+BenchmarkStringConstruction/medium_128_parts/builder-12   	  832947	      1645 ns/op	   11176 B/op	      10 allocs/op
+BenchmarkStringConstruction/medium_128_parts/builder-12   	  610448	      1680 ns/op	   11176 B/op	      10 allocs/op
+BenchmarkStringConstruction/medium_128_parts/builder-12   	  722911	      1671 ns/op	   11176 B/op	      10 allocs/op
+BenchmarkStringConstruction/medium_128_parts/builder_grow-12         	 1935981	       609.8 ns/op	    3072 B/op	       1 allocs/op
+BenchmarkStringConstruction/medium_128_parts/builder_grow-12         	 1978155	       609.7 ns/op	    3072 B/op	       1 allocs/op
+BenchmarkStringConstruction/medium_128_parts/builder_grow-12         	 1944290	       605.4 ns/op	    3072 B/op	       1 allocs/op
+BenchmarkStringConstruction/medium_128_parts/builder_grow-12         	 1989859	       614.2 ns/op	    3072 B/op	       1 allocs/op
+BenchmarkStringConstruction/medium_128_parts/builder_grow-12         	 1956098	       611.8 ns/op	    3072 B/op	       1 allocs/op
+BenchmarkStringConstruction/large_4096_parts/plus-12                 	      70	  18055606 ns/op	264987792 B/op	    4101 allocs/op
+BenchmarkStringConstruction/large_4096_parts/plus-12                 	      67	  18139271 ns/op	264987881 B/op	    4102 allocs/op
+BenchmarkStringConstruction/large_4096_parts/plus-12                 	      63	  17674172 ns/op	264987869 B/op	    4102 allocs/op
+BenchmarkStringConstruction/large_4096_parts/plus-12                 	      68	  18073733 ns/op	264987775 B/op	    4101 allocs/op
+BenchmarkStringConstruction/large_4096_parts/plus-12                 	      66	  17848068 ns/op	264987879 B/op	    4102 allocs/op
+BenchmarkStringConstruction/large_4096_parts/builder-12              	   22950	     52888 ns/op	  514785 B/op	      22 allocs/op
+BenchmarkStringConstruction/large_4096_parts/builder-12              	   22599	     54197 ns/op	  514785 B/op	      22 allocs/op
+BenchmarkStringConstruction/large_4096_parts/builder-12              	   21896	     54291 ns/op	  514785 B/op	      22 allocs/op
+BenchmarkStringConstruction/large_4096_parts/builder-12              	   22617	     53119 ns/op	  514785 B/op	      22 allocs/op
+BenchmarkStringConstruction/large_4096_parts/builder-12              	   23059	     53528 ns/op	  514785 B/op	      22 allocs/op
+BenchmarkStringConstruction/large_4096_parts/builder_grow-12         	   60686	     19954 ns/op	  122880 B/op	       1 allocs/op
+BenchmarkStringConstruction/large_4096_parts/builder_grow-12         	   60104	     20050 ns/op	  122880 B/op	       1 allocs/op
+BenchmarkStringConstruction/large_4096_parts/builder_grow-12         	   60140	     19855 ns/op	  122880 B/op	       1 allocs/op
+BenchmarkStringConstruction/large_4096_parts/builder_grow-12         	   57250	     20032 ns/op	  122880 B/op	       1 allocs/op
+BenchmarkStringConstruction/large_4096_parts/builder_grow-12         	   59556	     20011 ns/op	  122880 B/op	       1 allocs/op
+PASS
+ok  	gitlab.vvivid.dev/showcase/go-lang-case-study/go/string-concat-builder	63.616s
