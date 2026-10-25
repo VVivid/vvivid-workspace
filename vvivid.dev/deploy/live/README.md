@@ -14,7 +14,9 @@ one command to a restricted SSH account. The root-owned helper fixes the image
 repository, Compose project `private-edge`, existing infrastructure path, and
 service `vvivid-live`. It never starts dependencies. The existing
 `vvivid-preview` service, its image expression, shared `VVIVID_IMAGE`, and its
-GitLab preview pipeline stay unchanged.
+GitLab preview pipeline stay unchanged by a live deployment. The separate
+[preview workflow and runbook](../preview/README.md) own migration of preview
+from `release/vvivid-preview`.
 
 Search-related host routing and preview noindex activation are separate from this
 live-image update. See the [search operations runbook](../seo/README.md); deploying
@@ -75,12 +77,27 @@ create a dedicated credential with these exact constraints:
 | Field | Value |
 | --- | --- |
 | Issuer | GitHub / `https://token.actions.githubusercontent.com` |
-| Subject | `repo:VVivid/vvivid-workspace:environment:vvivid-live` |
+| Subject | `repo:VVivid@60072429/vvivid-workspace@1414747215:environment:vvivid-live` |
 | Custom claim `repository` | `VVivid/vvivid-workspace` |
 | Custom claim `ref` | `refs/heads/main` |
 | Custom claim `workflow_ref` | `VVivid/vvivid-workspace/.github/workflows/website.yml@refs/heads/main` |
 | Scope | Writable `auth_keys` only |
 | Tag | `tag:vvivid-live-ci` |
+
+This repository uses GitHub's immutable OIDC subjects, which include the owner
+and repository IDs. Before creating or replacing a credential, verify the actual
+prefix:
+
+```sh
+gh api repos/VVivid/vvivid-workspace/actions/oidc/customization/sub --jq .sub_claim_prefix
+```
+
+The current prefix is `repo:VVivid@60072429/vvivid-workspace@1414747215`.
+Append `:environment:vvivid-live` for the live subject. The older name-only
+prefix does not match this repository's tokens and causes Tailscale token
+exchange to fail with HTTP 403. The additional `repository`, `ref`, and
+`workflow_ref` claims retain the name-based values in the table. See
+[GitHub's immutable subject documentation](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims).
 
 The environment changes GitHub's `sub` claim: use the environment subject above,
 not a `ref:refs/heads/main` subject. The additional claims constrain the branch
@@ -175,6 +192,14 @@ server-local Traefik HTTP origin, such as `http://<server-tailnet-address>/`.
 Use the existing Traefik bind address, not an assumed loopback listener. The
 helper sends `Host: vvivid.dev` and also checks public `https://vvivid.dev/`.
 
+The helper is shared with preview; its root-owned installed basename fixes its
+scope. Keep this exact live installation name. Both updated helpers lock
+`/run/lock/vvivid-deployment.lock` for their entire transaction because `.env` is
+shared. Before enabling preview, hold both deployment environments, drain all
+active/queued deployments, and update this installed live helper first. Old live
+versions use a different lock and cannot safely overlap preview. Follow the
+[shared-lock migration](../preview/README.md#server-installation-and-shared-lock-migration).
+
 ### Existing Compose configuration and cutover
 
 Record the current live container image/image ID and the current live settings
@@ -234,7 +259,8 @@ do not run legacy cleanup scripts or registry cleanup during cutover.
 ## Deployment and recovery
 
 GitHub serializes live jobs with `cancel-in-progress: false`; a server `flock`
-also serializes authorized helper invocations. A waiting run is skipped if the
+also serializes live and preview helper invocations through the shared
+`/run/lock/vvivid-deployment.lock`. A waiting run is skipped if the
 website tree or deployment workflow has changed on `main`. An unrelated monorepo
 commit does not discard a valid website deployment. GitHub may replace an older
 pending job with a newer one; an already running deployment is not cancelled by
@@ -285,7 +311,8 @@ docker build --platform linux/amd64 --tag vvivid-website:check ./vvivid.dev
 The Python standard-library tests replace all Docker/HTTP commands. They cover
 ordering, registry denial, partial recreation, local/public health failures,
 incorrect running images despite HTTP 200, interruption, previous-state recovery,
-preview-setting preservation, SSH command rejection, and actual interprocess
-lock serialization. The smoke check runs only a temporary local container,
+both fixed scopes, other-service setting preservation, SSH command rejection,
+exact branch routing/build URLs, stale-run gates, and actual interprocess lock
+serialization across live and preview updates/rollback. The smoke check runs only a temporary local container,
 validates nginx and HTTP, checks guide files are absent, and checks case variants
 and nested guide URLs return 404. It removes its temporary container on exit.
