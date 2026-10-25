@@ -1,6 +1,7 @@
 ---
 title: "What Really Happens When You Run a Shell Command?"
 date: 2026-06-15T13:31:48+07:00
+lastmod: 2026-10-25
 author: "Ou David"
 draft: false
 tags: ["operating-systems", "unix", "processes", "systems-programming"]
@@ -10,6 +11,9 @@ image: "images/thumbnails/process-api-shell.png"
 toc: false
 math: false
 ---
+
+In the traditional UNIX shell model, `fork()` creates a child, `exec()` replaces its program, and `wait()` coordinates completion. The shell configures file descriptors between fork and exec to build redirection and pipelines. Here is how those pieces turn a command line into cooperating processes.
+
 
 Every time I run a command like this:
 
@@ -31,7 +35,7 @@ I recently read Chapter 5, The Process API, in Operating Systems: Three Easy Pie
 
 The interesting part isn’t just what each operation does. It’s why UNIX keeps them separate. This post follows the traditional fork-and-exec model for external commands. Shell builtins and alternative launch mechanisms can take different paths.
 
-### First, `fork()` creates another process
+## fork() creates a child with inherited file descriptors {#first-fork-creates-another-process}
 
 Suppose a shell needs to run `wc`. It could use a single operation that creates and launches the new program. In the traditional fork-and-exec model, the shell first creates a child process.
 
@@ -43,7 +47,7 @@ The child also inherits the parent’s open file descriptors. Those descriptors 
 
 That inheritance turns out to be essential.
 
-### Then, `exec()` turns it into another program
+## exec() replaces the program inside the child {#then-exec-turns-it-into-another-program}
 
 A forked child is initially running the same program as its parent. A shell normally wants something else: `grep`, `wc`, `ls`, or whatever command I typed.
 
@@ -70,7 +74,7 @@ This gives the shell a useful sequence:
 
 And here is the clever part: the shell gets a window to configure the child before the new program begins.
 
-### That small window gives the shell a convenient place to set up redirection.
+## Set up output redirection before exec() {#that-small-window-gives-the-shell-a-convenient-place-to-set-up-redirection}
 
 Consider:
 
@@ -104,7 +108,7 @@ _exit(127);
 
 The shell sets up the environment; the program just does its job.
 
-### What about `wait()`?
+## waitpid() coordinates completion and reaps the child {#what-about-wait}
 
 Creating a process doesn’t guarantee which one runs first. Without explicit coordination, the parent and child might print in either order.
 
@@ -126,7 +130,7 @@ Here, the parent waits for the specific child before printing parent, assuming `
 
 That’s a useful lesson beyond operating systems: concurrent execution doesn’t imply an order. If the order matters, synchronization must be explicit.
 
-### Pipes use exactly the same building blocks
+## Connect processes with a pipe {#pipes-use-exactly-the-same-building-blocks}
 
 Now back to the original command:
 
@@ -144,7 +148,7 @@ The shell also closes unused pipe ends so readers can detect end-of-file correct
 
 Neither command needs special knowledge of the other. `grep` writes bytes; `wc` reads bytes. The operating system provides the mechanism, and the shell assembles the pieces.
 
-### Why this design stayed with me
+## Compose programs through small process primitives {#why-this-design-stayed-with-me}
 
 Before reading this chapter, I thought of `fork()`, `exec()`, and `wait()` as separate low-level APIs to memorize. Now I see them as a design for composing programs without coupling them together.
 
@@ -163,3 +167,7 @@ The shell feels high-level, but its power comes from a small set of low-level op
 Reading: [*Operating Systems: Three Easy Pieces*, Chapter 5 — The Process API](https://pages.cs.wisc.edu/~remzi/OSTEP/cpu-api.pdf).
 
 For a runnable Go example, see [go/process-api-shell](https://gitlab.vvivid.dev/showcase/go-lang-case-study/-/tree/main/go/process-api-shell). It uses Go’s standard `os/exec` package to run commands, redirect output, build a simple pipeline, and wait for the processes to finish.
+
+## Related articles
+
+For the network side of the same idea, [trace an HTTP request through Go](/posts/http_in_golang/). The [Go case study project](/projects/go-lang-case-study/) collects the runnable examples.

@@ -1,0 +1,9 @@
+{{- /* Preview builds must never advertise production URLs for indexing. Keep
+      thin archives usable, while indexing explicitly curated multi-page hubs. */ -}}
+{{- $indexable := and (eq .Site.BaseURL "https://vvivid.dev/") (ne .Kind "404") (not .Params.noindex) -}}
+{{- if eq .Kind "taxonomy" -}}
+    {{- $indexable = false -}}
+{{- else if eq .Kind "term" -}}
+    {{- $indexable = and $indexable (eq .Params.index true) (ge (len .RegularPages) 2) (ne .Content "") -}}
+{{- end -}}
+{{- return $indexable -}}

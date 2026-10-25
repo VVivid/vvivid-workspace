@@ -21,7 +21,7 @@
 {{/* Description Logic */}}
 {{- $description := "" -}}
 {{- if .IsHome -}}
-{{- $description = .Site.Params.description -}}
+{{- $description = .Description | default .Site.Params.description -}}
 {{- else if .Params.description -}}
 {{- $description = .Params.description -}}
 {{- else if .Summary -}}
@@ -42,6 +42,7 @@
 {{ end }}
 
 {{/* Image Logic */}}
+{{- partialCached "seo/site-cover.html" .Site -}}
 {{- $image := "" -}}
 {{- if .Params.image -}}
 {{- $image = .Params.image -}}

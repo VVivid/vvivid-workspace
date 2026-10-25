@@ -1,9 +1,8 @@
 ---
-title: "About Me"
+title: "Ou David"
 description: "Backend and platform engineer focused on reliable production systems."
 ---
 
-# Ou David
 **Software Engineer - Backend & Platform**  
 Phnom Penh, Cambodia | Email: [oudavid@vvivid.dev](mailto:oudavid@vvivid.dev) | LinkedIn: [Ou David](https://www.linkedin.com/in/oudavid-vvivid/) | GitHub: [VVivid](https://github.com/VVivid)
 
