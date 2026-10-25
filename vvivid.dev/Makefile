@@ -6,7 +6,8 @@ check test: deployment-test content-test indexing-test build
 build:
 	./scripts/build.sh
 
-# Uses fake Docker and HTTP commands; never connects to a deployment server.
+# Exercises live and preview scopes using fake commands, including shared .env locking.
+# Never connects to a deployment server.
 deployment-test:
 	python3 -m unittest discover -s deploy/live -p 'test_*.py' -v
 
