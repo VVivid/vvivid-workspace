@@ -16,8 +16,12 @@
 | `SSHMCP/` | Authenticated MCP gateway and persistent SSH execution runner | [README](SSHMCP/README.md) |
 | `WebhookControl/` | Standalone JSON webhook router with durable delivery | [README](WebhookControl/README.md), [architecture](WebhookControl/ARCHITECTURE.md) |
 | `examples/xtrace-example/` | Distributed tracing demonstration | [README](examples/xtrace-example/README.md) |
-| `vvivid.dev/` | Personal website built with Hugo Extended and a vendored theme | [README](vvivid.dev/README.md), [local instructions](vvivid.dev/AGENTS.md) |
+| `vvivid.dev/` | Personal website built with Hugo Extended and a vendored theme | [README](vvivid.dev/README.md), [local instructions](vvivid.dev/AGENTS.md), [preview requests](vvivid.dev/AGENTS.md#preview-requests) |
 | Repository root | Shared build delegation, CI, documentation, and agent skills | [Development guide](DEVELOPMENT.md) |
+
+## Website preview requests
+
+For a `vvivid.dev` preview, follow the [website preview instructions](vvivid.dev/AGENTS.md#preview-requests) and [preview deployment runbook](vvivid.dev/deploy/preview/README.md). The exact deployment branch is `release/vvivid-preview`, serving `https://preview.vvivid.dev/`; `main` serves live at `https://vvivid.dev/`.
 
 ## Shared rules
 

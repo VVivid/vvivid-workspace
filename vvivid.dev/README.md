@@ -44,7 +44,13 @@ docker run --rm --publish 127.0.0.1:8080:80 vvivid-website:local
 
 Open [localhost:8080](http://localhost:8080/). The [Dockerfile](Dockerfile) builds with a Hugo image pinned by version and digest, runs the same production build script, and serves the generated site with nginx. Omit `--build-arg HUGO_BASEURL=...` to build with the production URL. This local command uses Docker's default network and requires no external Traefik network. The nginx configuration blocks agent-guide filenames at every URL depth.
 
-The [GitHub workflow](../.github/workflows/website.yml) builds and smoke-checks the complete Docker image on site or workflow changes. Pull requests have read-only repository permissions. Matching pushes to `main` publish an immutable image to GHCR and deploy only live through restricted SSH over Tailscale after the [one-time setup](deploy/live/README.md). The deployment job uses the `vvivid-live` GitHub environment, serializes updates, verifies the exact running image and local/public HTTP health, and restores the previous live image on failure.
+The [live GitHub workflow](../.github/workflows/website.yml) builds and smoke-checks the complete Docker image on site or workflow changes. Pull requests have read-only repository permissions. Matching pushes to `main` publish an immutable image to GHCR and deploy only live through restricted SSH over Tailscale after the [one-time setup](deploy/live/README.md). The deployment job uses the `vvivid-live` GitHub environment, serializes updates, verifies the exact running image and local/public HTTP health, and restores the previous live image on failure. The separate
+[preview workflow](../.github/workflows/website-preview.yml) checks the preview
+image on pull requests and deploys only exact `release/vvivid-preview` pushes to
+`preview.vvivid.dev`, using its own URL, `preview-sha-<commit>` image tags,
+`vvivid-preview` environment, and restricted identity. Both helpers serialize
+shared `.env` writes; see the [preview runbook](deploy/preview/README.md) for
+installation and migration of the existing service.
 
 The official `nginx:alpine` image includes the njs module used by
 [nginx/representations.js](nginx/representations.js) to parse HTTP `Accept`
@@ -62,7 +68,9 @@ After building the image, run the real HTTP checks locally:
 This needs Docker, curl, and Python 3. It starts a temporary container on an
 automatically assigned loopback port, checks the nginx configuration, runs
 [scripts/test-serving.py](scripts/test-serving.py), and removes the container.
-The existing website CI calls this same entry point. It checks HTML/Markdown,
+Both website workflows call this same entry point. An optional second argument
+asserts the build base URL; each workflow passes its own public URL. It checks
+HTML/Markdown,
 Accept quality values and exclusions, HEAD, conditional requests, redirects,
 errors, API/catalog/skill contracts and digests, discovery resources, structured
 data, Content Signals, static asset caching, and blocked agent-guide URLs. It does
@@ -152,8 +160,9 @@ empty sitemap. nginx adds a noindex header on every nonproduction host.
 
 The [search operations runbook](deploy/seo/README.md) provides narrow, reviewable
 Cloudflare rules for the already running preview and `www`, plus router/TLS and
-robots-cache checks. These require separate activation. The live-only GitHub
-workflow does not rebuild or change the legacy preview service.
+robots-cache checks. These require separate activation. The live GitHub workflow
+changes only live; preview images are rebuilt by the separate exact-branch
+workflow after its own activation.
 
 The site hosts no MCP server, account system, write endpoint, OAuth authorization
 server, token endpoint, or client registration. Articles and project links can
@@ -203,7 +212,10 @@ they do not establish the live CDN configuration or activate these resources.
 
 ## Deployment
 
-The [live deployment runbook](deploy/live/README.md) owns GitHub/Tailscale setup, restricted server installation, the live-only Compose change, cutover, and rollback. Deployment activation is a separate operational step; local builds do not change external services. The existing preview deployment remains outside this GitHub workflow.
+The [live deployment runbook](deploy/live/README.md) owns GitHub/Tailscale setup, restricted server installation, the live-only Compose change, cutover, and rollback. Deployment activation is a separate operational step; local builds do not change external services. The [preview deployment runbook](deploy/preview/README.md) owns separate
+`release/vvivid-preview` activation and shared-lock migration; `main` remains
+live. Preview branch creation/publication and service cutover are separate
+operational actions.
 
 The archived GitLab pipeline is retained under [deploy/legacy/](deploy/legacy/README.md), outside the active CI filename. Its registry, external `/infra/compose.yml`, preview/live services, Traefik configuration, and credentials were not migrated.
 

@@ -2,13 +2,15 @@
 
 These are reviewable operations for the existing public hosts. This repository
 change does not apply Cloudflare rules, modify routers, purge caches, submit
-URLs, or rebuild the legacy preview service. The GitHub live workflow updates
-only `vvivid-live`; its next successful deployment cannot fix the already running
+URLs, or activate a preview rebuild. The
+[preview deployment runbook](../preview/README.md) owns the separate release-branch
+rebuild and cutover. The GitHub live workflow updates only `vvivid-live`; its next successful deployment cannot fix the already running
 `vvivid-preview` image by itself.
 
 ## Keep the existing preview out of indexes
 
-The source has two defenses for future preview images:
+The source has two defenses for preview images. The preview workflow applies
+them during its own separately authorized activation:
 
 - Build with `HUGO_BASEURL=https://preview.vvivid.dev/`. All HTML gets
   `noindex, follow`, self-canonicals use that preview URL, the sitemap is empty,
