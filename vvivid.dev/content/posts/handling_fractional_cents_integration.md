@@ -1,6 +1,7 @@
 ---
 title: "Handling Fractional Cents in Integrations"
 date: 2026-01-21T08:48:01+01:00
+lastmod: 2026-10-25
 author: "Ou David"
 draft: false
 tags: ["system-design", "money", "integration", "software-architecture"]
@@ -10,9 +11,12 @@ toc: false
 math: true
 ---
 
+Whole-cent integers do not guarantee that an order total divides into equal unit prices. In our POS integration, splitting a 2,625-cent total across two items required keeping the one-cent remainder explicit so the product total still matched the payment.
+
+
 I'm back with another story about a "silent error" in our systems. In my [previous post](/posts/the_silent_timezone_mismatch_go_vs_mongodb), I talked about how implicit timezone conversions can bite you. Today, let's talk about a different type of error: a design flaw when dealing with money.
 
-### The Real Problem
+## The POS contract expects whole-cent unit prices {#the-real-problem}
 
 We are building a Central Reservation System (CRS) for a tourist park. One of our golden rules when dealing with money is simple: **always use integers**. We convert everything to cents before pushing it to our cash-register API.
 
@@ -41,7 +45,7 @@ For example, if a customer buys a buffet for 26.25 €, we treat it as 2625 cent
 
 Everything was fine until we had to integrate with a new Point of Sale (POS) system for room service.
 
-### The Wrong Assumption
+## A total divided by quantity can contain fractional cents {#the-wrong-assumption}
 
 The new POS system didn't speak our "integer-only" language in the way we expected. Instead of sending us a clean unit price, they sent us the **Total Included Tax** (`TotalInc`) and the **Quantity** (`Qty`). They left it up to us to figure out the unit price.
 
@@ -65,9 +69,9 @@ $$
 26.25 / 2 = 13.125
 $$
 
-**13.125 cents?** That doesn't exist. We can't represent half a cent in our integer-based system.
+**13.125 € per item?** That doesn't exist. We can't represent half a cent in our integer-based system.
 
-### The Failure Mode
+## Rounding each unit changes the payment total {#the-failure-mode}
 
 If we try to round it standardly:
 *   **Round Down**: 13.12 € -> 1312 cents.
@@ -77,7 +81,7 @@ If we try to round it standardly:
     *   `1313 * 2 = 2626` cents.
     *   **Result**: We are over by 1 cent (0.01 €).
 
-### The Debugging Path
+## Trace the rejected payment to the line-item sum {#the-debugging-path}
 
 When we sent these rounded values to our cash-register API, it immediately rejected the transaction. It performed a simple validation check:
 
@@ -89,7 +93,7 @@ if sum(product.UnitPrice * product.Quantity) != payment.Amount {
 
 Because 26.24 != 26.25 (or 26.26 != 26.25), the payment failed. A simple 0.01 € discrepancy caused the entire transaction to be lost.
 
-### Who is at Fault?
+## Where the two pricing models disagree {#who-is-at-fault}
 
 Is this a system design error? Absolutely. But whose?
 *   **The POS System?** Maybe. Sending aggregate totals without precise unit prices assumes infinite precision or non-integer currency handling on the receiving end.
@@ -97,7 +101,7 @@ Is this a system design error? Absolutely. But whose?
 
 This "split check" problem is common. Imagine 3 people splitting a 10 € bill. 3.33 + 3.33 + 3.33 = 9.99. Who pays the extra cent?
 
-### The Fix: The "Remainder" Item
+## Preserve the total with a remainder line item {#the-fix-the-remainder-item}
 
 We can't change the POS system, and we can't change the laws of math. So, we changed how we represent the order.
 
@@ -129,8 +133,12 @@ So our request to the cash register became:
 Total: `1312 + 1313 = 2625`. 
 It matches exactly. Validated. Paid.
 
-### Takeaway
+## Design the data model for the remainder {#takeaway}
 
-Dealing with money is never just about `float` vs `int` (though please, always use `int` or `decimal`). It's about how your data structure represents reality. In reality, you can't pay 13.125 cents. You have to pay 13 cents or 14 cents.
+Dealing with money is never just about `float` vs `int` (though please, always use `int` or `decimal`). It's about how your data structure represents reality. In this example, 13.125 € is 1,312.5 cents. The unit prices must be 1,312 and 1,313 cents to preserve the 2,625-cent total.
 
 When integrating systems, never assume that `Total / Qty` yields a clean number. Always design for the remainder.
+
+## Related articles
+
+The same boundary problem appears in [Go and MongoDB timezone conversions](/posts/the_silent_timezone_mismatch_go_vs_mongodb/). For another payment failure mode, see [why retry logic needs judgment about idempotency](/posts/the_trap_of_vibe_coding_for_juniors/).

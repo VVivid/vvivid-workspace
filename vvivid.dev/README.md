@@ -141,6 +141,20 @@ ai-train=yes`: the author's chosen policy allows search, AI answers, and trainin
 These [Content Signals](https://contentsignals.org/) express usage preferences;
 they are not authentication or technical access controls.
 
+## Search and answer-engine maintenance
+
+[SEO.md](SEO.md) covers the curated archive policy, author and article metadata,
+conditional math/diagram assets, the measured source baseline, and the account-free
+IndexNow helper. The helper defaults to a local JSON dry run and never submits
+URLs during a build or deployment. Native check/test also exercise its safeguards.
+Build previews with their own `HUGO_BASEURL`; they receive noindex metadata and an
+empty sitemap. nginx adds a noindex header on every nonproduction host.
+
+The [search operations runbook](deploy/seo/README.md) provides narrow, reviewable
+Cloudflare rules for the already running preview and `www`, plus router/TLS and
+robots-cache checks. These require separate activation. The live-only GitHub
+workflow does not rebuild or change the legacy preview service.
+
 The site hosts no MCP server, account system, write endpoint, OAuth authorization
 server, token endpoint, or client registration. Articles and project links can
 discuss separately hosted APIs; those services have their own access policies.

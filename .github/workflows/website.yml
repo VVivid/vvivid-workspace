@@ -34,7 +34,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Check deployment behavior
-        run: python3 -m unittest discover -s vvivid.dev/deploy/live -p 'test_*.py' -v
+        run: |
+          python3 -m unittest discover -s vvivid.dev/deploy/live -p 'test_*.py' -v
+          python3 vvivid.dev/scripts/test-indexnow.py
       - name: Build and check the complete serving image
         run: |
           docker build --platform linux/amd64 --tag vvivid-website:check ./vvivid.dev
@@ -55,7 +57,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Check deployment behavior
-        run: python3 -m unittest discover -s vvivid.dev/deploy/live -p 'test_*.py' -v
+        run: |
+          python3 -m unittest discover -s vvivid.dev/deploy/live -p 'test_*.py' -v
+          python3 vvivid.dev/scripts/test-indexnow.py
       - name: Build and check the complete serving image
         env:
           SOURCE_SHA: ${{ github.sha }}

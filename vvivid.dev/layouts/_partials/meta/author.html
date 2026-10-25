@@ -1,0 +1,14 @@
+{{- $about := .GetPage "/about" -}}
+{{- $profiles := slice -}}
+{{- range .Params.socialIcons -}}
+    {{- if and (in (slice "github" "linkedin") .name) (hasPrefix .url "https://") -}}
+        {{- $profiles = $profiles | append .url -}}
+    {{- end -}}
+{{- end -}}
+{{- return (dict
+    "@type" "Person"
+    "@id" (printf "%s#person" $about.Permalink)
+    "name" .Params.author.name
+    "url" $about.Permalink
+    "sameAs" $profiles
+) -}}

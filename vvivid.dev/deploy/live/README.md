@@ -16,6 +16,10 @@ service `vvivid-live`. It never starts dependencies. The existing
 `vvivid-preview` service, its image expression, shared `VVIVID_IMAGE`, and its
 GitLab preview pipeline stay unchanged.
 
+Search-related host routing and preview noindex activation are separate from this
+live-image update. See the [search operations runbook](../seo/README.md); deploying
+this live image alone cannot update the existing preview's responses.
+
 These files prepare the deployment. They do not install access, alter the server,
 or establish that this workflow has deployed successfully. Source publication,
 one-time setup, and live activation require their corresponding authorization.

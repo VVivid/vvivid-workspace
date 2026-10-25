@@ -1,6 +1,7 @@
 ---
 title: "The Trap of Vibe Coding for Juniors"
 date: 2026-01-27T12:00:00+07:00
+lastmod: 2026-10-25
 author: "Ou David"
 draft: false
 tags: ["vibe-coding", "career", "growth", "ai"]
@@ -10,13 +11,16 @@ toc: false
 math: false
 ---
 
+AI-generated code is risky when the developer accepting it cannot explain its failure modes. A payment retry loop can compile and still charge a customer twice. I use that example here to show why juniors need to judge idempotency, state, and recovery before treating a generated feature as finished.
+
+
 Today I want to write about something different: **vibe coding**.
 
 My honest opinion is that vibe coding is risky for junior developers. Not because AI is bad at writing code. The real problem is that juniors often do not have enough experience yet to judge whether the generated solution is correct, maintainable, or safe under production pressure.
 
 That is where the trap starts. The code works once, the demo looks good, and the feature feels finished. But working code is not always good code.
 
-### The Real Problem
+## Generated retry code can hide payment side effects {#the-real-problem}
 
 The biggest issue is not the code itself. It is the missing judgment around the code.
 
@@ -42,7 +46,7 @@ But in a real payment system, timeout does not always mean failure. The external
 
 This is the kind of thing AI will not automatically protect you from unless you know enough to ask for it.
 
-### The Wrong Assumption
+## Passing tests does not establish safe retry behavior {#the-wrong-assumption}
 
 The wrong assumption is:
 
@@ -61,7 +65,7 @@ AI is good at solving the local problem you describe. It is weaker at protecting
 
 These are not small details. In backend engineering, they are often the difference between a feature that works in a demo and a feature that survives production.
 
-### The Failure Mode
+## Hidden design decisions become technical debt {#the-failure-mode}
 
 This is why vibe coding often creates hidden technical debt.
 
@@ -79,7 +83,7 @@ The pull request becomes hard to review. The junior did not write most of the co
 
 That is how bad code enters a system quietly.
 
-### The Debugging Path
+## Trace a duplicate charge through retry attempts {#the-debugging-path}
 
 When this kind of code fails, the debugging is painful.
 
@@ -97,7 +101,7 @@ The bug was not a syntax problem. It was a mental model problem.
 
 This is why juniors need to be careful. If you do not understand the failure mode, AI can help you write the wrong thing faster.
 
-### The Fix: Use AI To Think Through The Problem
+## Use AI to examine idempotency and recovery {#the-fix-use-ai-to-think-through-the-problem}
 
 I do not think juniors should avoid AI. I think they should use it differently.
 
@@ -128,10 +132,14 @@ Now the retry is not just "try again." It is tied to a stable operation identity
 
 That is the thinking part.
 
-### Takeaway
+## Build judgment while using generated code {#takeaway}
 
 The trap of vibe coding is not that AI writes imperfect code. Humans write imperfect code too.
 
 The trap is letting AI replace your judgment before you have built enough judgment of your own.
 
 If you are a junior developer, use AI to expose failure modes, ask better questions, write tests, and compare design options. Do not use it to skip understanding. In this market, the valuable skill is not typing code quickly. The valuable skill is knowing whether the code should exist, how it can fail, and how to make it safe.
+
+## Related articles
+
+Two concrete examples of assumptions at system boundaries: [fractional cents in integrations](/posts/handling_fractional_cents_integration/) and [Go versus MongoDB timezone conversion](/posts/the_silent_timezone_mismatch_go_vs_mongodb/).

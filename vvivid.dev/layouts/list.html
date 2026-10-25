@@ -1,0 +1,19 @@
+{{ define "main" }}
+<div class="wrapper list-page">
+    <header class="header">
+        <h1 class="header-title">{{ .Title }}</h1>
+    </header>
+    <main class="page-content" aria-label="Content">
+        {{ .Content }}
+        {{- if eq .Kind "taxonomy" }}
+        <p>Browse the topics used on this site. For a starting point, see the <a href="{{ "categories/technical-deep-dives/" | relURL }}">technical deep dives</a>.</p>
+        {{- else if and (eq .Kind "term") (not .Content) }}
+        <p>Articles and projects filed under {{ .Title }}.</p>
+        {{- end }}
+        {{ range .Pages.GroupByDate "2006" }}
+            <h2 class="post-year">{{ .Key }}</h2>
+            {{ range .Pages }}{{ partial "postCard.html" . }}{{ end }}
+        {{ end }}
+    </main>
+</div>
+{{ end }}
