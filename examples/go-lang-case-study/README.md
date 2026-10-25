@@ -23,9 +23,7 @@ go test ./... -bench=BenchmarkStringConstruction -benchmem -count=5
 
 `make check`, `make test`, and `make build` provide formatting/vet checks, race-enabled tests, and a build, respectively.
 
-## CI
-
-GitHub Actions runs formatting checks, `go vet`, race-enabled tests, and a build through the [case-study workflow](../../.github/workflows/go-lang-case-study.yml). Benchmarks are intentionally run locally when generating evidence for a case study, because benchmark timings are noisy across shared CI runners.
+Benchmarks are run locally when generating evidence for a case study, because benchmark timings vary across machines.
 
 ## Source
 
