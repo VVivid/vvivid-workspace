@@ -48,6 +48,52 @@ class Metadata(HTMLParser):
             self.schemas.append(json.loads(data))
 
 
+class PostListing(HTMLParser):
+    """Read archive groups, card links, and dates from generated HTML."""
+
+    def __init__(self, html):
+        super().__init__()
+        self.groups = []
+        self.cards = []
+        self.group = None
+        self.card = None
+        self.date = None
+        self.in_group = False
+        self.feed(html)
+
+    def handle_starttag(self, tag, attrs):
+        fields = dict(attrs)
+        if tag == "h2" and fields.get("class") == "post-year":
+            self.group = ""
+            self.in_group = True
+        if tag == "article" and fields.get("class") == "post-item":
+            self.card = {"group": self.group, "url": None, "dates": [], "starred": False}
+            self.cards.append(self.card)
+        if self.card is not None:
+            if tag == "a":
+                self.card["url"] = fields.get("href")
+            if tag == "time":
+                self.date = {"datetime": fields.get("datetime"), "text": ""}
+                self.card["dates"].append(self.date)
+            if tag == "svg" and fields.get("class") == "icon-star":
+                self.card["starred"] = True
+
+    def handle_endtag(self, tag):
+        if tag == "h2" and self.in_group:
+            self.groups.append(self.group)
+            self.in_group = False
+        if tag == "article":
+            self.card = None
+        if tag == "time":
+            self.date = None
+
+    def handle_data(self, data):
+        if self.in_group:
+            self.group += data
+        if self.date is not None:
+            self.date["text"] += data
+
+
 class GeneratedContentTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -73,6 +119,20 @@ class GeneratedContentTests(unittest.TestCase):
         term = cls.site / "content/tags/fixture"
         term.mkdir()
         (term / "_index.md").write_text('---\ntitle: Fixture\nindex: true\n---\nA curated but single-item archive.\n')
+        listing_fixtures = {
+            "posts/fixture-latest": "date: 2002-01-01",
+            "posts/fixture-newer": "date: 2001-06-01",
+            "posts/fixture-older": "date: 2001-01-01",
+            "projects/fixture-dated": "date: 2000-01-01",
+            "projects/fixture-undated": "isStarred: true",
+        }
+        for path, metadata in listing_fixtures.items():
+            tags = '["fixture-mixed", "fixture-project-only"]' if path.endswith("undated") else '["fixture-mixed"]'
+            (cls.site / "content" / f"{path}.md").write_text(
+                f'---\ntitle: "{path.rsplit("/", 1)[1]}"\n{metadata}\n'
+                f'tags: {tags}\ncategories: ["Fixture mixed"]\n'
+                'link: "https://example.com/fixture"\nthumbnail: false\n---\n\n'
+                'A listing fixture.\n', encoding="utf-8")
         cls.outputs = {}
         for name, base in (("production", "https://vvivid.dev/"), ("preview", "https://preview.vvivid.dev/")):
             output = Path(cls.temporary.name) / name
@@ -184,6 +244,70 @@ class GeneratedContentTests(unittest.TestCase):
         schema = next(schema for schema in fixture.schemas if schema.get("@type") == "Article")
         self.assertEqual(schema["datePublished"], "2002-01-01T00:00:00Z")
         self.assertEqual(schema["dateModified"], "2003-01-01T00:00:00Z")
+
+    def test_mixed_archives_preserve_known_dates_and_group_undated_projects(self):
+        expected_cards = [
+            ("/posts/fixture-latest/", "2002", "2002-01-01T00:00:00Z", "1 Jan 2002"),
+            ("/posts/fixture-newer/", "2001", "2001-06-01T00:00:00Z", "1 Jun 2001"),
+            ("/posts/fixture-older/", "2001", "2001-01-01T00:00:00Z", "1 Jan 2001"),
+            ("/projects/fixture-dated/", "2000", "2000-01-01T00:00:00Z", "1 Jan 2000"),
+            ("/projects/fixture-undated/", "Projects", None, None),
+        ]
+        for build in self.outputs:
+            for path in ("tags/fixture-mixed/index.html", "categories/fixture-mixed/index.html"):
+                with self.subTest(build=build, path=path):
+                    listing = PostListing(self.read(path, build))
+                    self.assertEqual(listing.groups, ["2002", "2001", "2000", "Projects"])
+                    self.assertEqual(len(listing.cards), len(expected_cards))
+                    for card, (url, group, timestamp, display_date) in zip(listing.cards, expected_cards):
+                        self.assertEqual(card["url"], url)
+                        self.assertEqual(card["group"], group)
+                        expected_dates = [{"datetime": timestamp, "text": display_date}] if timestamp else []
+                        actual_dates = [
+                            {"datetime": date["datetime"], "text": date["text"].strip()}
+                            for date in card["dates"]
+                        ]
+                        self.assertEqual(actual_dates, expected_dates)
+                    self.assertTrue(listing.cards[-1]["starred"])
+            project_only = PostListing(self.read("tags/fixture-project-only/index.html", build))
+            self.assertEqual(project_only.groups, ["Projects"])
+            self.assertEqual([card["url"] for card in project_only.cards], ["/projects/fixture-undated/"])
+            for path in ("tags/index.html", "categories/index.html", "posts/index.html", "topics/index.html"):
+                self.assertNotIn("0001", PostListing(self.read(path, build)).groups)
+            tags = PostListing(self.read("tags/index.html", build))
+            undated_term = next(card for card in tags.cards if card["url"] == "/tags/fixture-project-only/")
+            self.assertEqual(undated_term["group"], "Undated")
+            self.assertEqual(undated_term["dates"], [])
+            topics = PostListing(self.read("topics/index.html", build))
+            self.assertEqual([card["url"] for card in topics.cards], ["/topics/integration-debugging/"])
+            self.assertEqual(topics.groups, ["Undated"])
+
+    def test_project_dates_are_unknown_or_authored_across_representations(self):
+        undated = ("fixture-undated", "sshmcp", "mcp-gateway", "shopping-list-mcp")
+        for build in self.outputs:
+            snapshot = json.loads(self.read("api/content.json", build))
+            items = {urlsplit(item["url"]).path: item for item in snapshot["items"]}
+            for name in undated:
+                path = f"projects/{name}/"
+                self.assertNotIn("published_at", items["/" + path])
+                self.assertNotIn("modified_at", items["/" + path])
+                html = self.read(path + "index.html", build)
+                self.assertNotIn("0001", html)
+                self.assertNotIn("Published:", self.read(path + "index.md", build))
+            self.assertEqual(items["/projects/fixture-dated/"]["published_at"], "2000-01-01T00:00:00Z")
+            self.assertEqual(items["/projects/go-lang-case-study/"]["published_at"], "2026-06-13T00:00:00Z")
+            for resource in ("projects/index.md", "tags/fixture-mixed/index.md", "llms.txt", "sitemap.xml", "api/content.json"):
+                self.assertNotIn("0001", self.read(resource, build), resource)
+            for resource in ("index.xml", "projects/index.xml", "tags/fixture-mixed/index.xml",
+                             "tags/fixture-project-only/index.xml", "categories/fixture-mixed/index.xml"):
+                feed = ET.fromstring(self.read(resource, build))
+                entries = {urlsplit(item.findtext("link")).path: item for item in feed.findall("channel/item")}
+                self.assertIn("/projects/fixture-undated/", entries, resource)
+                self.assertIsNone(entries["/projects/fixture-undated/"].find("pubDate"), resource)
+                if "/projects/fixture-dated/" in entries:
+                    self.assertEqual(entries["/projects/fixture-dated/"].findtext("pubDate"), "Sat, 01 Jan 2000 00:00:00 +0000")
+                if "/posts/fixture-newer/" in entries:
+                    self.assertEqual(entries["/posts/fixture-newer/"].findtext("pubDate"), "Fri, 01 Jun 2001 00:00:00 +0000")
 
     def test_math_diagrams_and_social_encoding_are_page_specific(self):
         output = self.outputs["production"]

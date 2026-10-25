@@ -10,9 +10,19 @@
         {{- else if and (eq .Kind "term") (not .Content) }}
         <p>Articles and projects filed under {{ .Title }}.</p>
         {{- end }}
-        {{ range .Pages.GroupByDate "2006" }}
+        {{ $datedPages := where .Pages "Date.IsZero" false }}
+        {{ range $datedPages.GroupByDate "2006" }}
             <h2 class="post-year">{{ .Key }}</h2>
             {{ range .Pages }}{{ partial "postCard.html" . }}{{ end }}
+        {{ end }}
+        {{ $undatedPages := where .Pages "Date.IsZero" true }}
+        {{ with where $undatedPages "Section" "projects" }}
+            <h2 class="post-year">Projects</h2>
+            {{ range . }}{{ partial "postCard.html" . }}{{ end }}
+        {{ end }}
+        {{ with where $undatedPages "Section" "ne" "projects" }}
+            <h2 class="post-year">Undated</h2>
+            {{ range . }}{{ partial "postCard.html" . }}{{ end }}
         {{ end }}
     </main>
 </div>
