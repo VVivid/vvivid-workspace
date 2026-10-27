@@ -1,0 +1,37 @@
+name: AgentNewsfeed
+
+on:
+  pull_request:
+    paths:
+      - 'AgentNewsfeed/**'
+      - '.github/workflows/newsfeed.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'AgentNewsfeed/**'
+      - '.github/workflows/newsfeed.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: newsfeed-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: AgentNewsfeed/go.mod
+          cache-dependency-path: AgentNewsfeed/go.sum
+      - name: Check, test races and build
+        working-directory: AgentNewsfeed
+        run: make check race build
+      - name: Validate local packaging with synthetic fixtures
+        working-directory: AgentNewsfeed
+        run: make compose-check container-build container-test

@@ -1,0 +1,93 @@
+{{define "index"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Newsfeed</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <a class="skip" href="#feed">Skip to articles</a>
+  <div class="app">
+    <header>
+      <a href="/" class="brand"><span aria-hidden="true" class="brand-mark">N</span>Newsfeed<span class="private">Private</span></a>
+      {{if .Authenticated}}
+        <form method="post" action="/auth/logout">
+          <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+          <button class="signout" type="submit">Sign out</button>
+        </form>
+      {{end}}
+    </header>
+
+    <main id="feed">
+      {{if not .Configured}}
+        <section class="gate">
+          <div class="eyebrow">YOUR READING SPACE</div>
+          <h1>Newsfeed is getting ready.</h1>
+          <p>Identity must be configured before your private feed is available.</p>
+        </section>
+      {{else if not .Authenticated}}
+        <section class="gate">
+          <div class="eyebrow">YOUR READING SPACE</div>
+          <h1>A little perspective.<br>All in one place.</h1>
+          <p>Sign in to read the articles saved to your private feed.</p>
+          <a class="button" href="/auth/login">Sign in</a>
+        </section>
+      {{else}}
+        <div class="feed-heading">
+          <div>
+            <div class="eyebrow">YOUR READING SPACE</div>
+            <h1>Worth a read.</h1>
+          </div>
+          <p>Saved for you</p>
+        </div>
+
+        {{if .Page.Articles}}
+          <div class="articles">
+            {{range .Page.Articles}}
+              <article>
+                <div class="thumbnail" aria-hidden="true">
+                  {{if .ThumbnailURL}}
+                    <img
+                      src="/thumbnails/{{.ID}}?v={{.Revision}}"
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      referrerpolicy="no-referrer">
+                  {{end}}
+                  <svg viewBox="0 0 80 80" focusable="false">
+                    <path d="M20 18h40v44H20zM28 28h24M28 36h24M28 44h16M28 52h20"/>
+                  </svg>
+                </div>
+                <div class="article-copy">
+                  <div class="source">{{host .URL}}<span aria-hidden="true">·</span><span>Saved {{savedDate .CreatedAt}}</span></div>
+                  <h2><a href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.Title}}<span class="sr-only"> (opens source in a new tab)</span></a></h2>
+                  <p>{{.Summary}}</p>
+                  <a class="read-source" href="{{.URL}}" target="_blank" rel="noopener noreferrer">Read article <span aria-hidden="true">↗</span></a>
+                </div>
+              </article>
+            {{end}}
+          </div>
+
+          {{if .Page.NextCursor}}
+            <nav class="pagination" aria-label="Feed pages">
+              <a class="button secondary" href="/?cursor={{.Page.NextCursor}}">Older articles <span aria-hidden="true">↓</span></a>
+            </nav>
+          {{end}}
+        {{else}}
+          <section class="empty">
+            <span aria-hidden="true">☷</span>
+            <h2>Your next good read starts here.</h2>
+            <p>Ask your agent to save an article. Its title and a short introduction will appear here.</p>
+          </section>
+        {{end}}
+      {{end}}
+    </main>
+
+    <footer>Your articles. Your space.</footer>
+  </div>
+</body>
+</html>
+{{end}}
