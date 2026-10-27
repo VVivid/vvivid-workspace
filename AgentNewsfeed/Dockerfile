@@ -12,7 +12,7 @@ COPY cmd ./cmd
 COPY internal ./internal
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -buildvcs=false -ldflags="-s -w -X main.version=$VERSION" -o /out/newsfeed ./cmd/newsfeed \
     && GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/newsfeed-admin ./cmd/newsfeed-admin \
-    && mkdir -m 0700 /out/data
+    && mkdir -p -m 0700 /out/runtime/data
 
 FROM gcr.io/distroless/static-debian13:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3
 ARG VERSION=dev
@@ -22,9 +22,10 @@ LABEL org.opencontainers.image.title="AgentNewsfeed" \
       org.opencontainers.image.revision=$COMMIT
 COPY --from=build /out/newsfeed /newsfeed
 COPY --from=build /out/newsfeed-admin /newsfeed-admin
-COPY --from=build --chown=65532:65532 --chmod=0700 /out/data /data
-USER 65532:65532
 WORKDIR /data
+# Copy /data as a child directory so its private mode is applied to the directory itself.
+COPY --from=build --chown=65532:65532 /out/runtime/ /
+USER 65532:65532
 ENV NEWSFEED_HTTP_ADDR=:8091 NEWSFEED_DB_PATH=/data/newsfeed.sqlite
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 CMD ["/newsfeed", "healthcheck", "ready"]
