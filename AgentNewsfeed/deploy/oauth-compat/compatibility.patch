@@ -1,0 +1,76 @@
+--- a/internal/gateway/authproxy.go
++++ b/internal/gateway/authproxy.go
+@@ -98,7 +98,7 @@
+ }
+ 
+ func guardResource(next http.Handler, config Config) http.Handler {
+-	// Empty shopping bindings reserve those client IDs but disable them until
++	// Empty service bindings reserve those client IDs but disable them until
+ 	// their canonical origin is configured. Keycloak still owns registration.
+ 	resourcesByClient := map[string]string{
+ 		"sshmcp-codex":     config.Resource,
+@@ -106,11 +106,17 @@
+ 		"shopping-web":     "",
+ 		"shopping-codex":   "",
+ 		"shopping-chatgpt": "",
++		"newsfeed-web":     "",
++		"newsfeed-chatgpt": "",
+ 	}
+ 	if config.ShoppingOrigin != "" {
+ 		resourcesByClient["shopping-web"] = config.ShoppingOrigin + "/api/v1"
+ 		resourcesByClient["shopping-codex"] = config.ShoppingOrigin + "/mcp"
+ 		resourcesByClient["shopping-chatgpt"] = config.ShoppingOrigin + "/mcp"
++	}
++	if config.NewsfeedOrigin != "" {
++		resourcesByClient["newsfeed-web"] = config.NewsfeedOrigin + "/api/v1"
++		resourcesByClient["newsfeed-chatgpt"] = config.NewsfeedOrigin + "/mcp"
+ 	}
+ 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+ 		if !isCanonicalAuthorizationPath(r.URL) {
+@@ -190,12 +196,16 @@
+ 		}
+ 		permittedResource, hasClientBinding := resourcesByClient[clientID]
+ 		if hasClientBinding && permittedResource == "" {
+-			authorizationError(w, "invalid_client", "Shopping authorization is not configured", http.StatusBadRequest)
++			description := "Shopping authorization is not configured"
++			if clientID == "newsfeed-web" || clientID == "newsfeed-chatgpt" {
++				description = "Newsfeed authorization is not configured"
++			}
++			authorizationError(w, "invalid_client", description, http.StatusBadRequest)
+ 			return
+ 		}
+ 		if !hasClientBinding {
+ 			// Preserve existing realm clients (for example account-console). They
+-			// may omit resource or request the legacy SSH target, never shopping.
++			// may omit resource or request the legacy SSH target, never another service.
+ 			permittedResource = config.Resource
+ 		}
+ 		requestedResources := values["resource"]
+--- a/internal/gateway/config.go
++++ b/internal/gateway/config.go
+@@ -16,6 +16,7 @@
+ 	Issuer              string    `json:"issuer"`
+ 	Resource            string    `json:"resource"`
+ 	ShoppingOrigin      string    `json:"shopping_origin,omitempty"`
++	NewsfeedOrigin      string    `json:"newsfeed_origin,omitempty"`
+ 	HostAlias           string    `json:"host_alias,omitempty"`
+ 	SSH                 SSHConfig `json:"ssh"`
+ }
+@@ -63,6 +64,17 @@
+ 			return errors.New("shopping_origin must use a separate hostname from the SSH resource and issuer")
+ 		}
+ 	}
++	if c.NewsfeedOrigin != "" {
++		newsfeed, err := canonicalURL(c.NewsfeedOrigin, "")
++		if err != nil || newsfeed.Scheme != "https" || issuer.Scheme != "https" {
++			return errors.New("newsfeed_origin requires a canonical HTTPS origin without a trailing slash and an HTTPS issuer")
++		}
++		shopping, _ := url.Parse(c.ShoppingOrigin)
++		if strings.EqualFold(newsfeed.Hostname(), resource.Hostname()) || strings.EqualFold(newsfeed.Hostname(), issuer.Hostname()) ||
++			(shopping != nil && strings.EqualFold(newsfeed.Hostname(), shopping.Hostname())) {
++			return errors.New("newsfeed_origin must use a separate hostname from the SSH resource, issuer and shopping origin")
++		}
++	}
+ 	if len(c.HostAlias) > 64 {
+ 		return errors.New("host_alias must be 1..64 ASCII letters, digits, hyphens or underscores")
+ 	}
