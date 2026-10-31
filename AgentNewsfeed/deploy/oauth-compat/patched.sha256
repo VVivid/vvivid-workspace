@@ -1,0 +1,3 @@
+ec17178bc6676975215aa6e513c1d42c42dec4d10577febd45586ff07ebd2e05  internal/gateway/authproxy.go
+e781328ee9fa185f7e1ee918db9759ed261b3087298c83e8263777e78bb4c1a3  internal/gateway/config.go
+99f7a864b850fd396029adad08c0b49b5acc1aaa5d85bac21ccbebe0e96f7dbb  internal/gateway/newsfeed_compat_test.go

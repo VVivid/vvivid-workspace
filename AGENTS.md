@@ -12,6 +12,7 @@
 | Area | Purpose | Start here |
 | --- | --- | --- |
 | `AgentShoppingList/` | Agent-managed mobile shopping app with built-in MCP | [README](AgentShoppingList/README.md), [local instructions](AgentShoppingList/AGENTS.md) |
+| `AgentNewsfeed/` | Private responsive reading feed with direct Keycloak and built-in MCP | [README](AgentNewsfeed/README.md) |
 | `GoogleHealthMCP/` | Google Health / Fitbit importer with SQLite persistence | [README](GoogleHealthMCP/README.md) |
 | `SSHMCP/` | Authenticated MCP gateway and persistent SSH execution runner | [README](SSHMCP/README.md) |
 | `WebhookControl/` | Standalone JSON webhook router with durable delivery | [README](WebhookControl/README.md), [architecture](WebhookControl/ARCHITECTURE.md) |

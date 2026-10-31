@@ -1,0 +1,62 @@
+# Prepared configuration only. No host port is published; one replica owns SQLite.
+services:
+  newsfeed:
+    image: ${NEWSFEED_IMAGE:?Set the immutable newsfeed image reference with digest}
+    restart: unless-stopped
+    user: "65532:65532"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    stop_grace_period: 20s
+    environment:
+      NEWSFEED_HTTP_ADDR: ":8091"
+      NEWSFEED_DB_PATH: /data/newsfeed.sqlite
+      NEWSFEED_THUMBNAIL_HOSTS: ${NEWSFEED_THUMBNAIL_HOSTS:-}
+      NEWSFEED_ORIGIN: ${NEWSFEED_ORIGIN:?Set the exact approved HTTPS origin}
+      NEWSFEED_OIDC_ISSUER: ${NEWSFEED_OIDC_ISSUER:?Set the verified existing Keycloak issuer}
+      NEWSFEED_WEB_CLIENT_ID: ${NEWSFEED_WEB_CLIENT_ID:?Set the dedicated registered newsfeed browser client}
+      NEWSFEED_WEB_CLIENT_SECRET_FILE: /run/secrets/web-client
+      NEWSFEED_SESSION_KEYS_FILE: /run/secrets/session-keys
+      NEWSFEED_API_AUDIENCE: ${NEWSFEED_API_AUDIENCE:?Set exact origin plus /api/v1}
+      NEWSFEED_MCP_AUDIENCE: ${NEWSFEED_MCP_AUDIENCE:?Set exact origin plus /mcp}
+      NEWSFEED_MCP_CLIENT_IDS: ${NEWSFEED_MCP_CLIENT_IDS:?Set the dedicated registered MCP clients}
+    volumes:
+      - newsfeed-data:/data
+    secrets:
+      - source: web-client
+        target: web-client
+      - source: session-keys
+        target: session-keys
+    networks: [traefik]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${NEWSFEED_TRAEFIK_NETWORK:?Set the existing Traefik network}
+      traefik.http.routers.newsfeed.rule: Host(`${NEWSFEED_HOST:?Set hostname matching NEWSFEED_ORIGIN}`)
+      traefik.http.routers.newsfeed.entrypoints: ${NEWSFEED_TRAEFIK_HTTPS_ENTRYPOINT:?Set the existing HTTPS entrypoint}
+      traefik.http.routers.newsfeed.tls: "true"
+      traefik.http.routers.newsfeed.tls.certresolver: ${NEWSFEED_TRAEFIK_CERTRESOLVER:?Set the existing certificate resolver}
+      traefik.http.services.newsfeed.loadbalancer.server.port: "8091"
+    healthcheck:
+      test: [CMD, /newsfeed, healthcheck, ready]
+      interval: 30s
+      timeout: 3s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  newsfeed-data:
+    name: ${NEWSFEED_DATA_VOLUME:?Set the dedicated persistent newsfeed volume name}
+
+networks:
+  traefik:
+    external: true
+    name: ${NEWSFEED_TRAEFIK_NETWORK:?Set the existing Traefik network}
+
+# Local Compose bind-mounts these files; source ownership/modes must allow UID
+# 65532 to read them with exactly mode 0400 or 0600. No secret value is interpolated.
+secrets:
+  web-client:
+    file: ${NEWSFEED_WEB_CLIENT_SECRET_HOST_FILE:?Set the absolute private web client secret file path}
+  session-keys:
+    file: ${NEWSFEED_SESSION_KEYS_HOST_FILE:?Set the absolute private session keyring file path}

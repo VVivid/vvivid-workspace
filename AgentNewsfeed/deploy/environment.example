@@ -1,0 +1,16 @@
+# Non-secret placeholders only. This file is for Compose --env-file, not the Go app.
+NEWSFEED_IMAGE=registry.example.com/agent-newsfeed@sha256:REPLACE_WITH_VERIFIED_RELEASE_DIGEST
+NEWSFEED_HOST=newsfeed.example.com
+NEWSFEED_ORIGIN=https://newsfeed.example.com
+NEWSFEED_OIDC_ISSUER=https://identity.example.com/realms/personal
+NEWSFEED_WEB_CLIENT_ID=newsfeed-web
+NEWSFEED_API_AUDIENCE=https://newsfeed.example.com/api/v1
+NEWSFEED_MCP_AUDIENCE=https://newsfeed.example.com/mcp
+NEWSFEED_MCP_CLIENT_IDS=newsfeed-chatgpt
+NEWSFEED_THUMBNAIL_HOSTS=
+NEWSFEED_WEB_CLIENT_SECRET_HOST_FILE=/operator/private/newsfeed/web-client
+NEWSFEED_SESSION_KEYS_HOST_FILE=/operator/private/newsfeed/session-keys
+NEWSFEED_DATA_VOLUME=REPLACE_WITH_DEDICATED_NEWSFEED_VOLUME
+NEWSFEED_TRAEFIK_NETWORK=REPLACE_WITH_EXISTING_TRAEFIK_NETWORK
+NEWSFEED_TRAEFIK_HTTPS_ENTRYPOINT=REPLACE_WITH_EXISTING_HTTPS_ENTRYPOINT
+NEWSFEED_TRAEFIK_CERTRESOLVER=REPLACE_WITH_EXISTING_CERTIFICATE_RESOLVER

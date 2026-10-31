@@ -1,0 +1,238 @@
+package gateway
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"reflect"
+	"strings"
+	"sync/atomic"
+	"testing"
+)
+
+const newsfeedOrigin = "https://newsfeed.vvivid.dev"
+
+func newsfeedConfig() Config {
+	c := compatibilityConfig()
+	c.NewsfeedOrigin = newsfeedOrigin
+	return c
+}
+
+func TestNewsfeedAndExistingResourceBindings(t *testing.T) {
+	bindings := map[string]string{
+		"sshmcp-codex": compatSSHResource, "sshmcp-chatgpt": compatSSHResource,
+		"shopping-web": compatShoppingOrigin + "/api/v1", "shopping-codex": compatShoppingOrigin + "/mcp", "shopping-chatgpt": compatShoppingOrigin + "/mcp",
+		"newsfeed-web": newsfeedOrigin + "/api/v1", "newsfeed-chatgpt": newsfeedOrigin + "/mcp",
+	}
+	for client, target := range bindings {
+		for _, flow := range []struct {
+			name, endpoint, method, grant string
+			basic                         bool
+		}{
+			{"authorization-get", "auth", "GET", "", false},
+			{"authorization-post", "auth", "POST", "", false},
+			{"code", "token", "POST", "authorization_code", false},
+			{"code-basic", "token", "POST", "authorization_code", true},
+			{"refresh", "token", "POST", "refresh_token", false},
+			{"refresh-basic", "token", "POST", "refresh_token", true},
+		} {
+			for _, requested := range [][]string{
+				{target}, nil, {""}, {compatSSHResource}, {compatShoppingOrigin + "/api/v1"}, {compatShoppingOrigin + "/mcp"},
+				{newsfeedOrigin + "/api/v1"}, {newsfeedOrigin + "/mcp"}, {target, target}, {target + "/"}, {target + "?x=1"}, {target + "#x"},
+			} {
+				t.Run(client+"/"+flow.name+"/"+strings.Join(requested, ","), func(t *testing.T) {
+					values := url.Values{"resource": requested, "client_id": {client}}
+					if flow.grant != "" {
+						values.Set("grant_type", flow.grant)
+					}
+					endpoint := newsfeedConfig().Issuer + "/protocol/openid-connect/" + flow.endpoint
+					body := values.Encode()
+					if flow.method == "GET" {
+						endpoint += "?" + body
+						body = ""
+					}
+					r := httptest.NewRequest(flow.method, endpoint, strings.NewReader(body))
+					r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+					if flow.basic {
+						r.SetBasicAuth(client, "synthetic-secret")
+					}
+					calls := 0
+					h := guardResource(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { calls++; w.WriteHeader(204) }), newsfeedConfig())
+					w := httptest.NewRecorder()
+					h.ServeHTTP(w, r)
+					allowed := len(requested) == 1 && requested[0] == target || len(requested) == 0 && flow.grant == "refresh_token"
+					if (w.Code == 204) != allowed || calls != map[bool]int{true: 1, false: 0}[allowed] {
+						t.Fatalf("status=%d calls=%d allowed=%v body=%s", w.Code, calls, allowed, w.Body)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestNewsfeedDisabledClientsAndNoUnrelatedResourceSelection(t *testing.T) {
+	for _, client := range []string{"newsfeed-web", "newsfeed-chatgpt"} {
+		for _, grant := range []string{"authorization_code", "refresh_token"} {
+			for _, resource := range [][]string{nil, {""}, {newsfeedOrigin + "/mcp"}, {compatSSHResource}} {
+				r := httptest.NewRequest("POST", compatibilityConfig().Issuer+"/protocol/openid-connect/token", strings.NewReader(url.Values{"grant_type": {grant}, "resource": resource}.Encode()))
+				r.SetBasicAuth(client, "synthetic-secret")
+				r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				w := httptest.NewRecorder()
+				guardResource(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("disabled newsfeed reached upstream") }), compatibilityConfig()).ServeHTTP(w, r)
+				var failure struct{ Error string }
+				if w.Code != 400 || json.Unmarshal(w.Body.Bytes(), &failure) != nil || failure.Error != "invalid_client" {
+					t.Fatalf("disabled client %s: %d %s", client, w.Code, w.Body)
+				}
+			}
+		}
+	}
+	// No newsfeed-codex binding is introduced. Unknown realm clients retain the
+	// legacy SSH/omission routing, but Keycloak still owns their authentication.
+	for _, client := range []string{"", "account-console", "unknown-client", "newsfeed-codex", "newsfeed%2Dchatgpt"} {
+		for _, resource := range []string{"", compatSSHResource, newsfeedOrigin + "/api/v1", newsfeedOrigin + "/mcp"} {
+			values := url.Values{"client_id": {client}, "grant_type": {"refresh_token"}}
+			if resource != "" {
+				values.Set("resource", resource)
+			}
+			r := httptest.NewRequest("POST", newsfeedConfig().Issuer+"/protocol/openid-connect/token", strings.NewReader(values.Encode()))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			w := httptest.NewRecorder()
+			calls := 0
+			guardResource(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { calls++; w.WriteHeader(204) }), newsfeedConfig()).ServeHTTP(w, r)
+			allowed := resource == "" || resource == compatSSHResource
+			if (w.Code == 204) != allowed || (calls == 1) != allowed {
+				t.Fatalf("unrelated client %q resource %q: %d calls=%d", client, resource, w.Code, calls)
+			}
+		}
+	}
+}
+
+func TestNewsfeedRejectsAmbiguousAndEncodedClientParameters(t *testing.T) {
+	resource := url.QueryEscape(newsfeedOrigin + "/mcp")
+	for _, tc := range []struct{ name, suffix, body, basic string }{
+		{"basic-body-conflict", "token", "client_id=newsfeed-web&grant_type=refresh_token&resource=" + resource, "newsfeed-chatgpt"},
+		{"duplicate-client", "token", "client_id=newsfeed-chatgpt&client_id=newsfeed-chatgpt&grant_type=refresh_token&resource=" + resource, ""},
+		{"duplicate-resource", "token", "client_id=newsfeed-chatgpt&grant_type=refresh_token&resource=" + resource + "&res%6furce=" + resource, ""},
+		{"duplicate-grant", "token", "client_id=newsfeed-chatgpt&grant_type=refresh_token&grant_type=authorization_code&resource=" + resource, ""},
+		{"token-query", "token?client_id=newsfeed-chatgpt", "client_id=newsfeed-chatgpt&grant_type=refresh_token&resource=" + resource, ""},
+		{"auth-query-body", "auth?client_id=newsfeed-chatgpt&resource=" + resource, "client_id=newsfeed-chatgpt&resource=" + resource, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest("POST", newsfeedConfig().Issuer+"/protocol/openid-connect/"+tc.suffix, strings.NewReader(tc.body))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			if tc.basic != "" {
+				r.SetBasicAuth(tc.basic, "synthetic-secret")
+			}
+			w := httptest.NewRecorder()
+			guardResource(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("ambiguous request reached upstream") }), newsfeedConfig()).ServeHTTP(w, r)
+			var failure struct{ Error string }
+			if w.Code != 400 || json.Unmarshal(w.Body.Bytes(), &failure) != nil || failure.Error != "invalid_request" {
+				t.Fatalf("ambiguous request: %d %s", w.Code, w.Body)
+			}
+		})
+	}
+	for _, tc := range []struct {
+		basic, resource string
+		allowed         bool
+	}{
+		{"newsfeed%2Dchatgpt", newsfeedOrigin + "/mcp", true},
+		{"newsfeed%2Dweb", newsfeedOrigin + "/api/v1", true},
+		{"newsfeed%2Dchatgpt", compatSSHResource, false},
+		{"newsfeed%252Dchatgpt", newsfeedOrigin + "/mcp", false},
+	} {
+		r := httptest.NewRequest("POST", newsfeedConfig().Issuer+"/protocol/openid-connect/token", strings.NewReader(url.Values{"grant_type": {"refresh_token"}, "resource": {tc.resource}}.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.SetBasicAuth(tc.basic, "synthetic%2Bsecret")
+		originalHeader := r.Header.Get("Authorization")
+		calls := 0
+		w := httptest.NewRecorder()
+		guardResource(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			if r.Header.Get("Authorization") != originalHeader {
+				t.Error("Basic credentials rewritten")
+			}
+			w.WriteHeader(204)
+		}), newsfeedConfig()).ServeHTTP(w, r)
+		if (w.Code == 204) != tc.allowed || (calls == 1) != tc.allowed {
+			t.Fatalf("encoded client %s: %d calls=%d", tc.basic, w.Code, calls)
+		}
+	}
+}
+
+func TestNewsfeedProxyPreservesPKCEGrantAndUpstreamDecisions(t *testing.T) {
+	config := newsfeedConfig()
+	issuer, _ := url.Parse(config.Issuer)
+	for _, tc := range []struct {
+		client, grant, resource string
+		status                  int
+	}{
+		{"newsfeed-web", "authorization_code", newsfeedOrigin + "/api/v1", 400},
+		{"newsfeed-chatgpt", "authorization_code", newsfeedOrigin + "/mcp", 400},
+		{"newsfeed-chatgpt", "refresh_token", newsfeedOrigin + "/mcp", 401},
+		{"newsfeed-chatgpt", "refresh_token", "", 401},
+	} {
+		t.Run(tc.client+"/"+tc.grant+"/"+tc.resource, func(t *testing.T) {
+			values := url.Values{"grant_type": {tc.grant}, "scope": {"openid newsfeed:read"}, "code": {"synthetic-code"}, "code_verifier": {"synthetic-verifier"}, "code_challenge": {"synthetic-challenge"}, "code_challenge_method": {"S256"}, "redirect_uri": {newsfeedOrigin + "/auth/callback"}, "state": {"synthetic-state"}, "nonce": {"synthetic-nonce"}, "refresh_token": {"synthetic-refresh"}}
+			if tc.resource != "" {
+				values.Set("resource", tc.resource)
+			}
+			var calls atomic.Int64
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				if r.ParseForm() != nil || !reflect.DeepEqual(r.PostForm, values) {
+					t.Error("upstream grant/PKCE parameters changed")
+				}
+				client, secret, ok := r.BasicAuth()
+				if !ok || client != tc.client || secret != "synthetic-secret" {
+					t.Error("upstream client credentials changed")
+				}
+				w.Header().Set("Location", config.Issuer+"/login-actions/authenticate")
+				w.WriteHeader(tc.status)
+				io.WriteString(w, "synthetic-keycloak-decision")
+			}))
+			defer upstream.Close()
+			target, _ := url.Parse(upstream.URL)
+			r := httptest.NewRequest("POST", config.Issuer+"/protocol/openid-connect/token", strings.NewReader(values.Encode()))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			r.SetBasicAuth(tc.client, "synthetic-secret")
+			w := httptest.NewRecorder()
+			authorizationProxy(config, issuer, target).ServeHTTP(w, r)
+			if w.Code != tc.status || calls.Load() != 1 || w.Body.String() != "synthetic-keycloak-decision" || w.Header().Get("Location") != config.Issuer+"/login-actions/authenticate" {
+				t.Fatalf("upstream decision changed: %d calls=%d body=%s", w.Code, calls.Load(), w.Body)
+			}
+		})
+	}
+}
+
+func TestNewsfeedOriginConfiguration(t *testing.T) {
+	config := newsfeedConfig()
+	if err := config.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, origin := range []string{
+		"http://newsfeed.vvivid.dev", newsfeedOrigin + "/", newsfeedOrigin + "/mcp", newsfeedOrigin + "?", newsfeedOrigin + "#", "https://user@newsfeed.vvivid.dev", newsfeedOrigin + "/%2f", newsfeedOrigin + ":",
+		"https://ssh-mcp.vvivid.dev", "https://SSH-MCP.vvivid.dev:443", "https://shopping.vvivid.dev", "https://SHOPPING.vvivid.dev:443",
+	} {
+		invalid := config
+		invalid.NewsfeedOrigin = origin
+		if err := invalid.Validate(); err == nil {
+			t.Fatalf("ambiguous/overlapping newsfeed origin accepted: %s", origin)
+		}
+	}
+	config.Resource = "https://separate-ssh.example.com/mcp"
+	config.NewsfeedOrigin = "https://separate-ssh.example.com"
+	if err := config.Validate(); err == nil {
+		t.Fatal("newsfeed accepted distinct SSH-resource hostname overlap")
+	}
+	config = newsfeedConfig()
+	config.NewsfeedOrigin = ""
+	if err := config.Validate(); err != nil {
+		t.Fatal("optional absent newsfeed configuration changed old behavior")
+	}
+	config = Config{Listen: "127.0.0.1:18080", Resource: "http://127.0.0.1:18080/mcp", Issuer: "http://127.0.0.1:18081/realms/sshmcp", NewsfeedOrigin: newsfeedOrigin}
+	if err := config.Validate(); err == nil {
+		t.Fatal("newsfeed accepted an HTTP lab issuer")
+	}
+}
