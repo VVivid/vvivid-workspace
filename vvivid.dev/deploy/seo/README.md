@@ -90,6 +90,26 @@ A response-header transform runs after cache evaluation and does not repair the
 underlying cache policy. The live runbook's HTML/Markdown cache isolation still
 applies.
 
+## Keep discovery fetches reachable
+
+Before the separately authorized activation on 2026-10-25, discovery requests
+using Python's default User-Agent received 403 responses. Cloudflare security
+events identified Browser Integrity Check (`bic`) as the source. The activated
+exception matches only the production host, GET/HEAD, and three exact paths:
+
+```text
+(http.host eq "vvivid.dev" and
+ http.request.method in {"GET" "HEAD"} and
+ http.request.uri.path in {"/robots.txt" "/sitemap.xml" "/llms.txt"})
+```
+
+Its action skips only `bic`, with logging enabled. All other protections remain
+in effect. After activation, Python-default GET and HEAD requests to all three
+paths returned HTTP 200. The homepage, preview host, and POST control requests
+remain outside this exception and still returned 403 during that verification.
+Keep this scope when maintaining the rule and repeat both the allowed requests
+and those controls after any change.
+
 ## Verify after an authorized activation
 
 ```sh
