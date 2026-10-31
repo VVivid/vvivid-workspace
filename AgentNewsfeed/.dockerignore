@@ -6,3 +6,12 @@
 !cmd/**
 !internal/
 !internal/**
+!package.json
+!package-lock.json
+!tsconfig.json
+!web/
+!web/vite.config.ts
+!web/SHADCN-LICENSE.md
+!web/src/
+!web/src/**
+internal/web/static/assets/

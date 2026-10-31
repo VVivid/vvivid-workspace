@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -35,6 +36,16 @@ func (m *Manager) RestrictOrigin(next http.Handler) http.Handler {
 }
 
 func (m *Manager) BrowserMiddleware(scopes []string, next http.Handler) http.Handler {
+	return m.browserMiddleware(scopes, false, next)
+}
+
+// BrowserFormMiddleware accepts bounded HTML forms using the same session,
+// exact Origin, CSRF hash and explicit permission checks as browser API calls.
+func (m *Manager) BrowserFormMiddleware(scopes []string, next http.Handler) http.Handler {
+	return m.browserMiddleware(scopes, true, next)
+}
+
+func (m *Manager) browserMiddleware(scopes []string, form bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		session, _, principal, err := m.browserSession(r)
 		if err != nil {
@@ -46,9 +57,21 @@ func (m *Manager) BrowserMiddleware(scopes []string, next http.Handler) http.Han
 			http.Error(w, "Permission denied.", http.StatusForbidden)
 			return
 		}
-		if r.Method != http.MethodGet && r.Method != http.MethodHead && !m.validCSRF(r, session, r.Header.Get("X-CSRF-Token")) {
-			http.Error(w, "The request could not be verified.", http.StatusForbidden)
-			return
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			token := r.Header.Get("X-CSRF-Token")
+			if form {
+				r.Body = http.MaxBytesReader(w, r.Body, 4096)
+				mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+				if err != nil || mediaType != "application/x-www-form-urlencoded" || r.ParseForm() != nil || len(r.PostForm["csrf_token"]) != 1 {
+					http.Error(w, "The request could not be verified.", http.StatusForbidden)
+					return
+				}
+				token = r.PostForm.Get("csrf_token")
+			}
+			if !m.validCSRF(r, session, token) {
+				http.Error(w, "The request could not be verified.", http.StatusForbidden)
+				return
+			}
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey{}, principal)))
 	})
@@ -117,7 +140,7 @@ func (m *Manager) resourceMetadata(resource string) http.HandlerFunc {
 
 func resourceScopes(resource, api string) []string {
 	if resource == api {
-		return []string{Read}
+		return []string{Read, ArticlesWrite}
 	}
 	return []string{Read, ArticlesWrite}
 }

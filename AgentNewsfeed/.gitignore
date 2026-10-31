@@ -3,3 +3,6 @@ data/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+node_modules/
+internal/web/static/assets/
+web/coverage/
