@@ -21,6 +21,11 @@ import (
 const database = "/data/newsfeed.sqlite"
 const expectedFile = "/data/container-expected.json"
 
+type persistenceExpected struct {
+	Retry   sqlite.MutationResult `json:"retry"`
+	Current sqlite.Article        `json:"current"`
+}
+
 var syntheticIdentity = sqlite.ExternalIdentity{Issuer: "https://issuer.example.com/realms/container-test", Subject: "synthetic-container-owner"}
 
 func TestContainerProcessAndPrivatePersistence(t *testing.T) {
@@ -45,7 +50,7 @@ func TestContainerProcessAndPrivatePersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	article := sqlite.Article{URL: "https://example.com/container-story", Title: "Synthetic container article", Summary: "Only local acceptance fixture data."}
+	article := sqlite.Article{URL: "https://example.com/container-story", Title: "Synthetic container article", Summary: "Only local acceptance fixture data.", ContentMarkdown: "## Synthetic original\n\nPersisted source Markdown."}
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +59,7 @@ func TestContainerProcessAndPrivatePersistence(t *testing.T) {
 	if err := os.WriteFile(subjectFile, []byte(syntheticIdentity.Subject), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	inputs, _ := json.Marshal([]feed.AddInput{{IdempotencyKey: "container-write", Article: feed.Content{URL: article.URL, Title: article.Title, Summary: article.Summary}}})
+	inputs, _ := json.Marshal([]feed.AddInput{{IdempotencyKey: "container-write", Article: feed.Content{URL: article.URL, Title: article.Title, Summary: article.Summary, ContentMarkdown: article.ContentMarkdown}}})
 	if err := os.WriteFile(seedFile, inputs, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -76,10 +81,14 @@ func TestContainerProcessAndPrivatePersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	archived, err := store.SetArchived(t.Context(), owner, expected.Article.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
-	raw, _ := json.Marshal(expected)
+	raw, _ := json.Marshal(persistenceExpected{Retry: expected, Current: archived})
 	if err := os.WriteFile(expectedFile, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +183,7 @@ func assertFailClosed(t *testing.T) {
 	}
 	client := &http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{Proxy: nil}}
 	defer client.CloseIdleConnections()
-	for _, path := range []string{"/", "/health/ready", "/api/v1/articles", "/mcp"} {
+	for _, path := range []string{"/", "/archive", "/articles/synthetic", "/health/ready", "/api/v1/articles", "/api/v1/articles/synthetic", "/mcp"} {
 		request, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1:8091"+path, nil)
 		response, err := client.Do(request)
 		if err != nil {
@@ -185,6 +194,17 @@ func assertFailClosed(t *testing.T) {
 			t.Fatalf("unconfigured %s returned %d", path, response.StatusCode)
 		}
 	}
+	for _, path := range []string{"/static/assets/app.js", "/static/assets/app.css"} {
+		request, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1:8091"+path, nil)
+		response, err := client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusOK || response.ContentLength < 100 {
+			t.Fatalf("production frontend asset missing: %s", path)
+		}
+	}
 }
 
 func verifyPersistence(t *testing.T) {
@@ -193,7 +213,7 @@ func verifyPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var expected sqlite.MutationResult
+	var expected persistenceExpected
 	if err := json.Unmarshal(raw, &expected); err != nil {
 		t.Fatal(err)
 	}
@@ -206,14 +226,24 @@ func verifyPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	articles, err := store.ListArticles(t.Context(), owner, sqlite.Cursor{}, 10)
-	if err != nil || len(articles) != 1 || articles[0] != expected.Article {
+	active, err := store.ListArticles(t.Context(), owner, sqlite.Cursor{}, 10)
+	if err != nil || len(active) != 0 {
+		t.Fatal("archived fixture reappeared in active feed")
+	}
+	articles, err := store.ListArticles(t.Context(), owner, sqlite.Cursor{Archived: true}, 10)
+	summary := expected.Current
+	summary.ContentMarkdown = ""
+	if err != nil || len(articles) != 1 || articles[0] != summary {
 		t.Fatalf("durable article changed: %#v %v", articles, err)
 	}
-	article := sqlite.Article{URL: "https://example.com/container-story", Title: "Synthetic container article", Summary: "Only local acceptance fixture data."}
+	current, err := store.Article(t.Context(), owner, expected.Current.ID)
+	if err != nil || current != expected.Current || current.ContentMarkdown == "" || current.ArchivedAt == 0 {
+		t.Fatal("archived original did not persist")
+	}
+	article := sqlite.Article{URL: "https://example.com/container-story", Title: "Synthetic container article", Summary: "Only local acceptance fixture data.", ContentMarkdown: "## Synthetic original\n\nPersisted source Markdown."}
 	payload, _ := json.Marshal(article)
 	replay, err := store.MutateArticle(t.Context(), owner, "container-write", "add_article", payload, article, 0)
-	if err != nil || replay != expected {
+	if err != nil || replay != expected.Retry {
 		t.Fatalf("durable retry result changed: %#v %v", replay, err)
 	}
 }

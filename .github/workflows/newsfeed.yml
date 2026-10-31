@@ -29,6 +29,11 @@ jobs:
         with:
           go-version-file: AgentNewsfeed/go.mod
           cache-dependency-path: AgentNewsfeed/go.sum
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: AgentNewsfeed/package-lock.json
       - name: Check, test races and build
         working-directory: AgentNewsfeed
         run: make check race build

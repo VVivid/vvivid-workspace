@@ -78,7 +78,7 @@ func (f *testIssuer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(jose.JSONWebKeySet{Keys: keys})
 	case "/authorize":
 		query := r.URL.Query()
-		if query.Get("client_id") != "newsfeed-web" || query.Get("redirect_uri") != "https://newsfeed.example/auth/callback" || query.Get("response_type") != "code" || query.Get("resource") != "https://newsfeed.example/api/v1" || query.Get("code_challenge_method") != "S256" || query.Get("code_challenge") == "" || query.Get("state") == "" || query.Get("nonce") == "" || query.Get("scope") != "openid newsfeed:read" {
+		if query.Get("client_id") != "newsfeed-web" || query.Get("redirect_uri") != "https://newsfeed.example/auth/callback" || query.Get("response_type") != "code" || query.Get("resource") != "https://newsfeed.example/api/v1" || query.Get("code_challenge_method") != "S256" || query.Get("code_challenge") == "" || query.Get("state") == "" || query.Get("nonce") == "" || query.Get("scope") != "openid newsfeed:read newsfeed:articles:write" {
 			http.Error(w, "invalid authorization request", http.StatusBadRequest)
 			return
 		}
