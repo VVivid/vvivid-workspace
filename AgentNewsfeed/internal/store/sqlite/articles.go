@@ -23,6 +23,10 @@ type Article struct {
 	Revision     int64  `json:"revision"`
 	CreatedAt    int64  `json:"created_at"`
 	UpdatedAt    int64  `json:"updated_at"`
+	// Optional fields must stay omitted when empty: old idempotency hashes use
+	// the JSON encoding of Article, including its original field order.
+	ContentMarkdown string `json:"content_markdown,omitempty"`
+	ArchivedAt      int64  `json:"archived_at,omitzero"`
 }
 
 type MutationResult struct {
@@ -31,17 +35,22 @@ type MutationResult struct {
 }
 
 type Cursor struct {
-	CreatedAt int64  `json:"created_at"`
+	Timestamp int64  `json:"timestamp"`
 	ID        string `json:"id"`
+	Owner     string `json:"owner"`
+	Archived  bool   `json:"archived,omitzero"`
 }
 
-const articleColumns = "id, canonical_url, title, summary, thumbnail_url, revision, created_at, updated_at"
+const articleSummaryColumns = "id, canonical_url, title, summary, thumbnail_url, revision, created_at, updated_at, archived_at"
+const articleColumns = articleSummaryColumns + ", content_markdown"
 
 type scanner interface{ Scan(...any) error }
 
 func scanArticle(row scanner) (Article, error) {
 	var a Article
-	err := row.Scan(&a.ID, &a.URL, &a.Title, &a.Summary, &a.ThumbnailURL, &a.Revision, &a.CreatedAt, &a.UpdatedAt)
+	var archived sql.NullInt64
+	err := row.Scan(&a.ID, &a.URL, &a.Title, &a.Summary, &a.ThumbnailURL, &a.Revision, &a.CreatedAt, &a.UpdatedAt, &archived, &a.ContentMarkdown)
+	a.ArchivedAt = archived.Int64
 	if errors.Is(err, sql.ErrNoRows) {
 		return Article{}, ErrNotFound
 	}
@@ -63,10 +72,16 @@ func (s *Store) ListArticles(ctx context.Context, owner Owner, after Cursor, lim
 	if limit < 1 || limit > 51 {
 		return nil, ErrLimit
 	}
-	rows, err := s.read.QueryContext(ctx, "SELECT "+articleColumns+` FROM articles
-  WHERE owner_id = ? AND owner_id IN (SELECT id FROM accounts WHERE disabled_at IS NULL)
-  AND (? = 0 OR created_at < ? OR (created_at = ? AND id < ?))
-  ORDER BY created_at DESC, id DESC LIMIT ?`, owner.id, after.CreatedAt, after.CreatedAt, after.CreatedAt, after.ID, limit)
+	// Select a constant in place of Markdown so neither SQLite nor JSON loads
+	// large article bodies for a list page. Timestamp uses the selected order.
+	filter, order := "archived_at IS NULL", "created_at"
+	if after.Archived {
+		filter, order = "archived_at IS NOT NULL", "archived_at"
+	}
+	rows, err := s.read.QueryContext(ctx, "SELECT "+articleSummaryColumns+", '' FROM articles "+
+		"WHERE owner_id = ? AND owner_id IN (SELECT id FROM accounts WHERE disabled_at IS NULL) AND "+filter+
+		" AND (? = 0 OR "+order+" < ? OR ("+order+" = ? AND id < ?)) ORDER BY "+order+" DESC, id DESC LIMIT ?",
+		owner.id, after.Timestamp, after.Timestamp, after.Timestamp, after.ID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -127,8 +142,8 @@ func (s *Store) MutateArticle(ctx context.Context, owner Owner, key, operation s
 			a = existing
 		} else if errors.Is(err, ErrNotFound) {
 			a.ID, a.Revision, a.CreatedAt, a.UpdatedAt = rand.Text(), 1, now, now
-			if _, err := tx.ExecContext(ctx, `INSERT INTO articles(owner_id,id,canonical_url,title,summary,thumbnail_url,revision,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?)`, owner.id, a.ID, a.URL, a.Title, a.Summary, a.ThumbnailURL, a.Revision, a.CreatedAt, a.UpdatedAt); err != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO articles(owner_id,id,canonical_url,title,summary,thumbnail_url,revision,created_at,updated_at,content_markdown)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`, owner.id, a.ID, a.URL, a.Title, a.Summary, a.ThumbnailURL, a.Revision, a.CreatedAt, a.UpdatedAt, a.ContentMarkdown); err != nil {
 				return MutationResult{}, err
 			}
 			created = true
@@ -151,9 +166,9 @@ func (s *Store) MutateArticle(ctx context.Context, owner Owner, key, operation s
 		if duplicate {
 			return MutationResult{}, ErrConflict
 		}
-		a.Revision, a.CreatedAt, a.UpdatedAt = current.Revision+1, current.CreatedAt, now
-		if _, err := tx.ExecContext(ctx, `UPDATE articles SET canonical_url=?,title=?,summary=?,thumbnail_url=?,revision=?,updated_at=?
-   WHERE owner_id=? AND id=? AND revision=?`, a.URL, a.Title, a.Summary, a.ThumbnailURL, a.Revision, a.UpdatedAt, owner.id, a.ID, expected); err != nil {
+		a.Revision, a.CreatedAt, a.UpdatedAt, a.ArchivedAt = current.Revision+1, current.CreatedAt, now, current.ArchivedAt
+		if _, err := tx.ExecContext(ctx, `UPDATE articles SET canonical_url=?,title=?,summary=?,thumbnail_url=?,revision=?,updated_at=?,content_markdown=?
+   WHERE owner_id=? AND id=? AND revision=?`, a.URL, a.Title, a.Summary, a.ThumbnailURL, a.Revision, a.UpdatedAt, a.ContentMarkdown, owner.id, a.ID, expected); err != nil {
 			return MutationResult{}, err
 		}
 	default:
@@ -172,4 +187,41 @@ func (s *Store) MutateArticle(ctx context.Context, owner Owner, key, operation s
 		return MutationResult{}, err
 	}
 	return out, nil
+}
+
+// SetArchived changes only reading state. Repeated requests for the current
+// state leave the revision and archive ordering unchanged.
+func (s *Store) SetArchived(ctx context.Context, owner Owner, id string, archived bool) (Article, error) {
+	if owner.id == "" {
+		return Article{}, ErrOwnerRequired
+	}
+	tx, err := s.write.BeginTx(ctx, nil)
+	if err != nil {
+		return Article{}, err
+	}
+	defer tx.Rollback()
+	a, err := scanArticle(tx.QueryRowContext(ctx, "SELECT "+articleColumns+` FROM articles
+		WHERE owner_id=? AND id=? AND owner_id IN (SELECT id FROM accounts WHERE disabled_at IS NULL)`, owner.id, id))
+	if err != nil {
+		return Article{}, err
+	}
+	if (a.ArchivedAt != 0) == archived {
+		return a, nil
+	}
+	a.UpdatedAt = time.Now().UnixMilli()
+	a.Revision++
+	var archivedValue any
+	if archived {
+		a.ArchivedAt = a.UpdatedAt
+		archivedValue = a.ArchivedAt
+	} else {
+		a.ArchivedAt = 0
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE articles SET archived_at=?, revision=?, updated_at=? WHERE owner_id=? AND id=?`, archivedValue, a.Revision, a.UpdatedAt, owner.id, id); err != nil {
+		return Article{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Article{}, err
+	}
+	return a, nil
 }

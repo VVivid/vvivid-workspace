@@ -118,7 +118,7 @@ func New(ctx context.Context, cfg Config, store *sqlite.Store) (*Manager, error)
 		ClientSecret: cfg.WebClientSecret,
 		Endpoint:     endpoint,
 		RedirectURL:  cfg.Origin + "/auth/callback",
-		Scopes:       []string{"openid", Read},
+		Scopes:       []string{"openid", Read, ArticlesWrite},
 	}
 	m.keys = oidc.NewRemoteKeySet(oidc.ClientContext(context.Background(), client), metadata.JWKS)
 	m.idVerifier = oidc.NewVerifier(cfg.Issuer, m.keys, &oidc.Config{ClientID: cfg.WebClientID, SupportedSigningAlgs: []string{oidc.RS256}, Now: func() time.Time { return m.now() }})
@@ -178,7 +178,7 @@ func (m *Manager) verifyAccess(ctx context.Context, raw, audience string) (acces
 		if scope == "openid" || scope == "profile" || scope == "email" {
 			continue
 		}
-		if !slices.Contains(newsfeedScopes, scope) || (audience == m.cfg.APIAudience && scope != Read) {
+		if !slices.Contains(newsfeedScopes, scope) {
 			return accessClaims{}, ErrForbidden
 		}
 	}

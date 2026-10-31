@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -137,7 +138,7 @@ func TestOfficialMCPAddListUpdateAndBrowserSharePrivateRecords(t *testing.T) {
 	}
 	cookie := f.Cookie(t, "alice")
 	html := request(h, "GET", "/", cookie, "")
-	if html.Code != 200 || bytes.Contains(html.Body.Bytes(), []byte(`<img src=x`)) || !bytes.Contains(html.Body.Bytes(), []byte(`&lt;img src=x`)) {
+	if html.Code != 200 || bytes.Contains(html.Body.Bytes(), []byte(`<img src=x`)) || !bytes.Contains(html.Body.Bytes(), []byte(`\u003cimg src=x`)) {
 		t.Fatalf("HTML escape failed %d %s", html.Code, html.Body)
 	}
 	for _, header := range []string{"Content-Security-Policy", "X-Content-Type-Options", "Referrer-Policy"} {
@@ -168,7 +169,7 @@ func TestOfficialMCPAddListUpdateAndBrowserSharePrivateRecords(t *testing.T) {
 	if !call(t, writeOnly, "list_articles", feed.ListInput{}).IsError {
 		t.Fatal("write implied read")
 	}
-	if got := request(h, "GET", "/", f.Cookie(t, "bob"), ""); bytes.Contains(got.Body.Bytes(), []byte(`&lt;img src=x`)) {
+	if got := request(h, "GET", "/", f.Cookie(t, "bob"), ""); bytes.Contains(got.Body.Bytes(), []byte(`\u003cimg src=x`)) {
 		t.Fatal("browser feed leaked another owner")
 	}
 	if _, err := s.GetArticle(t.Context(), f.Principal(t, "alice", allScopes), first.Article.ID); err != nil {
@@ -269,7 +270,7 @@ func TestUnconfiguredShellFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/", "/health/ready", "/mcp", "/api/v1/articles", "/auth/login", "/thumbnails/anything"} {
+	for _, path := range []string{"/", "/archive", "/articles/anything", "/health/ready", "/mcp", "/api/v1/articles", "/auth/login", "/thumbnails/anything"} {
 		if out := request(h, "GET", path, nil, ""); out.Code != 503 {
 			t.Fatalf("unconfigured %s returned %d", path, out.Code)
 		}
@@ -279,5 +280,177 @@ func TestUnconfiguredShellFailsClosed(t *testing.T) {
 	}
 	if out := request(h, "GET", "/", nil, ""); out.Header().Get("Content-Type") != "text/html; charset=utf-8" {
 		t.Fatal("unconfigured shell content type lost")
+	}
+}
+
+func postArticleForm(h http.Handler, path string, cookie *http.Cookie, token, origin string) *httptest.ResponseRecorder {
+	r := httptest.NewRequest("POST", testfixture.Origin+path, strings.NewReader(url.Values{"csrf_token": {token}}.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if origin != "" {
+		r.Header.Set("Origin", origin)
+	}
+	if cookie != nil {
+		r.AddCookie(cookie)
+	}
+	out := httptest.NewRecorder()
+	h.ServeHTTP(out, r)
+	return out
+}
+
+func TestReaderDetailArchiveFormsRequireOwnerScopesAndCSRF(t *testing.T) {
+	f, s, h := app(t)
+	p := f.Principal(t, "alice", allScopes)
+	c := feed.Content{URL: "https://example.com/original", Title: "Original title", Summary: "Original introduction", ContentMarkdown: "# Original article\n\nSaved source text.\n\n![disabled](https://images.example.com/inline.png)\n\n<script>alert(1)</script>"}
+	out, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: "reader", Article: c})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := out.Article.ID
+	cookie := f.CookieWithScopes(t, "alice", allScopes)
+	_, csrf := f.BrowserPrincipal(t, cookie)
+	legacy := f.Cookie(t, "alice")
+	_, legacyCSRF := f.BrowserPrincipal(t, legacy)
+	bob := f.CookieWithScopes(t, "bob", allScopes)
+	_, bobCSRF := f.BrowserPrincipal(t, bob)
+	path := "/api/v1/articles/" + id
+	for _, route := range []string{"/articles/" + id, "/articles/" + id + "?from=archive", path} {
+		if response := request(h, "GET", route, cookie, ""); response.Code != 200 || strings.Contains(response.Body.String(), "<script>alert(1)</script>") {
+			t.Fatalf("unsafe or failed reader %s: %d", route, response.Code)
+		}
+	}
+	var detail sqlite.Article
+	response := request(h, "GET", path, cookie, "")
+	if json.Unmarshal(response.Body.Bytes(), &detail) != nil || detail != out.Article {
+		t.Fatal("detail omitted or changed source content")
+	}
+	if response := request(h, "GET", "/api/v1/articles", cookie, ""); strings.Contains(response.Body.String(), "content_markdown") {
+		t.Fatal("list serialized article body")
+	}
+	for _, tc := range []struct {
+		cookie       *http.Cookie
+		csrf, origin string
+		status       int
+	}{
+		{nil, csrf, testfixture.Origin, 401},
+		{legacy, legacyCSRF, testfixture.Origin, 403},
+		{cookie, "", testfixture.Origin, 403},
+		{cookie, strings.Repeat("a", 26), testfixture.Origin, 403},
+		{cookie, csrf, "", 403},
+		{cookie, csrf, "null", 403},
+		{cookie, csrf, "https://evil.example", 403},
+		{bob, bobCSRF, testfixture.Origin, 404},
+		{cookie, strings.Repeat("a", 5000), testfixture.Origin, 403},
+	} {
+		if response := postArticleForm(h, path+"/archive", tc.cookie, tc.csrf, tc.origin); response.Code != tc.status {
+			t.Fatalf("archive boundary status %d wanted %d", response.Code, tc.status)
+		}
+	}
+	if current, err := s.GetArticle(t.Context(), p, id); err != nil || current != out.Article {
+		t.Fatal("reader or failed forms changed source/state")
+	}
+	if response := request(h, "GET", path+"/archive", cookie, ""); response.Code != 405 {
+		t.Fatal("GET changed archive state")
+	}
+	if response := request(h, "GET", path, bob, ""); response.Code != 404 {
+		t.Fatal("detail disclosed foreign record")
+	}
+	if response := request(h, "GET", "/articles/"+id, bob, ""); response.Code != 404 {
+		t.Fatal("reader disclosed foreign record")
+	}
+	if response := postArticleForm(h, path+"/archive", cookie, csrf, testfixture.Origin); response.Code != 303 || response.Header().Get("Location") != "/articles/"+id+"?from=archive" {
+		t.Fatal("archive form failed or returned to wrong view")
+	}
+	var archive feed.Page
+	response = request(h, "GET", "/api/v1/articles?archived=true", cookie, "")
+	if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &archive) != nil || len(archive.Articles) != 1 || archive.Articles[0].ArchivedAt == 0 {
+		t.Fatal("archive filter did not include article")
+	}
+	var active feed.Page
+	response = request(h, "GET", "/api/v1/articles", cookie, "")
+	if json.Unmarshal(response.Body.Bytes(), &active) != nil || len(active.Articles) != 0 {
+		t.Fatal("archive stayed in active feed")
+	}
+	if response := request(h, "GET", "/archive", cookie, ""); response.Code != 200 {
+		t.Fatal("archive refresh failed")
+	}
+	if response := request(h, "GET", "/api/v1/articles?archived=invalid", cookie, ""); response.Code != 400 {
+		t.Fatal("invalid archive filter accepted")
+	}
+	if response := postArticleForm(h, path+"/restore", bob, bobCSRF, testfixture.Origin); response.Code != 404 {
+		t.Fatal("foreign restore accepted")
+	}
+	if response := postArticleForm(h, path+"/restore", legacy, legacyCSRF, testfixture.Origin); response.Code != 403 {
+		t.Fatal("read-only restore accepted")
+	}
+	if response := postArticleForm(h, path+"/restore", cookie, csrf, testfixture.Origin); response.Code != 303 || response.Header().Get("Location") != "/articles/"+id+"?from=feed" {
+		t.Fatal("restore form failed or returned to wrong view")
+	}
+	current, err := s.GetArticle(t.Context(), p, id)
+	if err != nil || current.ContentMarkdown != c.ContentMarkdown || current.ArchivedAt != 0 || current.Revision != 3 {
+		t.Fatal("archive/restore damaged content or revision")
+	}
+	if err := f.Store.DisableAccount(t.Context(), p.Identity()); err != nil {
+		t.Fatal(err)
+	}
+	if response := postArticleForm(h, path+"/archive", cookie, csrf, testfixture.Origin); response.Code != 401 {
+		t.Fatal("disabled session archived")
+	}
+}
+
+func TestMCPAcceptsFullSourceBeyondOldRequestLimitAndListsSummaries(t *testing.T) {
+	f, s, h := app(t)
+	server := httptest.NewServer(h)
+	defer server.Close()
+	c := client(t, server.URL, f.Bearer("alice", "newsfeed-chatgpt", f.Manager.MCPAudience(), allScopes))
+	in := feed.AddInput{IdempotencyKey: "long-original", Article: feed.Content{URL: "https://example.com/long", Title: "Source title", Summary: "Source introduction.", ContentMarkdown: "# Source\n\n" + strings.Repeat("Original source paragraph.\n\n", 3000)}}
+	out := decode[sqlite.MutationResult](t, call(t, c, "add_article", in))
+	if out.Article.ContentMarkdown != in.Article.ContentMarkdown {
+		t.Fatal("MCP truncated original Markdown")
+	}
+	page := decode[feed.Page](t, call(t, c, "list_articles", feed.ListInput{}))
+	if len(page.Articles) != 1 || page.Articles[0].ContentMarkdown != "" {
+		t.Fatal("MCP list included full body")
+	}
+	p := f.Principal(t, "alice", allScopes)
+	if _, err := s.SetArchived(t.Context(), p, out.Article.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if page := decode[feed.Page](t, call(t, c, "list_articles", feed.ListInput{})); len(page.Articles) != 0 {
+		t.Fatal("MCP default includes archived")
+	}
+	if page := decode[feed.Page](t, call(t, c, "list_articles", feed.ListInput{Archived: true})); len(page.Articles) != 1 || page.Articles[0].ContentMarkdown != "" {
+		t.Fatal("MCP archive filter failed")
+	}
+	in.IdempotencyKey = "body-too-big"
+	in.Article.ContentMarkdown = strings.Repeat("a", feed.MaxContentBytes+1)
+	if !call(t, c, "add_article", in).IsError {
+		t.Fatal("MCP accepted oversized content")
+	}
+}
+
+func TestEmbeddedAssetsAndPrivateShellCSP(t *testing.T) {
+	f, _, h := app(t)
+	for _, asset := range []struct{ path, contentType string }{{"/static/assets/app.js", "javascript"}, {"/static/assets/app.css", "text/css"}} {
+		response := request(h, "GET", asset.path, nil, "")
+		if response.Code != 200 || !strings.Contains(response.Header().Get("Content-Type"), asset.contentType) || response.Body.Len() < 100 {
+			t.Fatalf("missing embedded build asset %s", asset.path)
+		}
+	}
+	for _, route := range []string{"/", "/archive", "/articles/private?from=archive"} {
+		response := request(h, "GET", route, nil, "")
+		if response.Code != 200 || strings.Contains(response.Body.String(), "content_markdown") {
+			t.Fatal("anonymous deep link leaked content or failed gate")
+		}
+		if response.Header().Get("Referrer-Policy") != "same-origin" {
+			t.Fatal("native form navigations require same-origin referrer policy to retain their Origin")
+		}
+		csp := response.Header().Get("Content-Security-Policy")
+		if !strings.Contains(csp, "script-src 'self';") || !strings.Contains(csp, "connect-src 'self';") || strings.Contains(csp, "unsafe-inline") || strings.Contains(csp, "unsafe-eval") {
+			t.Fatal("SPA CSP is not restricted to self")
+		}
+	}
+	response := request(h, "GET", "/", f.Cookie(t, "alice"), "")
+	if !strings.Contains(response.Body.String(), `&#34;can_write&#34;:false`) {
+		t.Fatal("legacy grant is not advertised read-only to UI")
 	}
 }

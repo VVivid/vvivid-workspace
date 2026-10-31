@@ -19,6 +19,8 @@ import (
 
 var ErrInvalid = errors.New("invalid article request")
 
+const MaxContentBytes = 256 << 10
+
 type Service struct {
 	store      *sqlite.Store
 	thumbnails thumbnail.Policy
@@ -30,10 +32,11 @@ func New(store *sqlite.Store, policy thumbnail.Policy) *Service {
 func (s *Service) Ready(ctx context.Context) error { return s.store.Ready(ctx) }
 
 type Content struct {
-	URL          string `json:"url"`
-	Title        string `json:"title"`
-	Summary      string `json:"summary"`
-	ThumbnailURL string `json:"thumbnail_url,omitempty"`
+	URL             string `json:"url"`
+	Title           string `json:"title"`
+	Summary         string `json:"summary"`
+	ThumbnailURL    string `json:"thumbnail_url,omitempty"`
+	ContentMarkdown string `json:"content_markdown,omitempty"`
 }
 type AddInput struct {
 	IdempotencyKey string  `json:"idempotency_key"`
@@ -46,8 +49,9 @@ type UpdateInput struct {
 	Article          Content `json:"article"`
 }
 type ListInput struct {
-	Limit  int    `json:"limit,omitzero"`
-	Cursor string `json:"cursor,omitempty"`
+	Limit    int    `json:"limit,omitzero"`
+	Cursor   string `json:"cursor,omitempty"`
+	Archived bool   `json:"archived,omitzero"`
 }
 type Page struct {
 	Articles   []sqlite.Article `json:"articles"`
@@ -72,10 +76,19 @@ func (s *Service) authorize(ctx context.Context, p identity.Principal, scope str
 
 func normalizeContent(c Content, thumbnails thumbnail.Policy) (sqlite.Article, error) {
 	canonical, err := urls.Canonical(c.URL)
-	if err != nil || !boundedText(c.Title, 300) || !boundedText(c.Summary, 1200) || thumbnails.Validate(c.ThumbnailURL) != nil {
+	if err != nil || !boundedText(c.Title, 300) || !boundedText(c.Summary, 1200) || thumbnails.Validate(c.ThumbnailURL) != nil || !validMarkdown(c.ContentMarkdown) {
 		return sqlite.Article{}, ErrInvalid
 	}
-	return sqlite.Article{URL: canonical, Title: c.Title, Summary: c.Summary, ThumbnailURL: c.ThumbnailURL}, nil
+	return sqlite.Article{URL: canonical, Title: c.Title, Summary: c.Summary, ThumbnailURL: c.ThumbnailURL, ContentMarkdown: c.ContentMarkdown}, nil
+}
+
+// Markdown preserves the source's whitespace. Line breaks and tabs are text;
+// other controls and malformed UTF-8 are never valid article content.
+func validMarkdown(value string) bool {
+	return len(value) <= MaxContentBytes && utf8.ValidString(value) &&
+		!strings.ContainsFunc(value, func(r rune) bool {
+			return unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t'
+		})
 }
 
 // NormalizeAddInput shares pure input validation with the offline seed command.
@@ -131,10 +144,11 @@ func (s *Service) ListArticles(ctx context.Context, p identity.Principal, in Lis
 	var cursor sqlite.Cursor
 	if in.Cursor != "" {
 		raw, err := base64.RawURLEncoding.DecodeString(in.Cursor)
-		if err != nil || json.Unmarshal(raw, &cursor) != nil || cursor.CreatedAt < 1 || !boundedText(cursor.ID, 64) {
+		if err != nil || json.Unmarshal(raw, &cursor) != nil || cursor.Timestamp < 1 || !boundedText(cursor.ID, 64) || cursor.Owner != p.Owner().ID() || cursor.Archived != in.Archived {
 			return Page{}, ErrInvalid
 		}
 	}
+	cursor.Archived = in.Archived
 	articles, err := s.store.ListArticles(ctx, p.Owner(), cursor, in.Limit+1)
 	if err != nil {
 		return Page{}, err
@@ -143,7 +157,11 @@ func (s *Service) ListArticles(ctx context.Context, p identity.Principal, in Lis
 	if len(articles) > in.Limit {
 		page.Articles = articles[:in.Limit]
 		last := page.Articles[len(page.Articles)-1]
-		raw, _ := json.Marshal(sqlite.Cursor{CreatedAt: last.CreatedAt, ID: last.ID})
+		timestamp := last.CreatedAt
+		if in.Archived {
+			timestamp = last.ArchivedAt
+		}
+		raw, _ := json.Marshal(sqlite.Cursor{Timestamp: timestamp, ID: last.ID, Owner: p.Owner().ID(), Archived: in.Archived})
 		page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
 	}
 	return page, nil
@@ -159,10 +177,20 @@ func (s *Service) GetArticle(ctx context.Context, p identity.Principal, id strin
 	return s.store.Article(ctx, p.Owner(), id)
 }
 
+func (s *Service) SetArchived(ctx context.Context, p identity.Principal, id string, archived bool) (sqlite.Article, error) {
+	if err := s.authorize(ctx, p, identity.ArticlesWrite); err != nil {
+		return sqlite.Article{}, err
+	}
+	if !boundedText(id, 64) {
+		return sqlite.Article{}, ErrInvalid
+	}
+	return s.store.SetArchived(ctx, p.Owner(), id, archived)
+}
+
 func SafeError(err error) string {
 	switch {
 	case errors.Is(err, ErrInvalid):
-		return "Invalid article request. Use a public HTTPS source URL, title (1–300 bytes), short introduction (1–1200 bytes), and a permitted thumbnail or omit it."
+		return "Invalid article request. Use a public HTTPS source URL, title (1–300 bytes), short introduction (1–1200 bytes), optional original-source Markdown (up to 256 KiB), and a permitted thumbnail or omit it."
 	case errors.Is(err, identity.ErrUnauthenticated):
 		return "Authentication required."
 	case errors.Is(err, identity.ErrForbidden), errors.Is(err, sqlite.ErrOwnerRequired):

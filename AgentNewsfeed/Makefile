@@ -1,29 +1,45 @@
-.PHONY: check test race build fmt run container-build container-test compose-check
+.PHONY: check test race build fmt run frontend-check frontend-test frontend-build container-build container-test compose-check
+
+.DEFAULT_GOAL := check
 
 VERSION ?= dev
 COMMIT ?= unknown
 TEST_IMAGE ?= agentnewsfeed:local
 BUILD_CA_FILE ?=
+# node_modules can contain third-party Go examples; only application packages are checks.
+GO_PACKAGES := ./cmd/... ./internal/...
 
-check:
+node_modules/.package-lock.json: package.json package-lock.json
+	npm ci --ignore-scripts
+
+frontend-check: node_modules/.package-lock.json
+	npm run check
+
+frontend-test: node_modules/.package-lock.json
+	npm test
+
+frontend-build: node_modules/.package-lock.json
+	npm run build
+
+check: frontend-check frontend-test frontend-build
 	@test -z "$$(gofmt -l cmd internal)" || (gofmt -l cmd internal; exit 1)
-	go vet ./...
-	go test ./...
+	go vet $(GO_PACKAGES)
+	go test $(GO_PACKAGES)
 
-test:
-	go test ./...
+test: frontend-test frontend-build
+	go test $(GO_PACKAGES)
 
-race:
-	go test -race ./...
+race: frontend-build
+	go test -race $(GO_PACKAGES)
 
-build:
+build: frontend-build
 	go build -trimpath -buildvcs=false -ldflags="-X main.version=$(VERSION)" -o bin/newsfeed ./cmd/newsfeed
 	go build -trimpath -buildvcs=false -o bin/newsfeed-admin ./cmd/newsfeed-admin
 
 fmt:
 	gofmt -w cmd internal
 
-run:
+run: frontend-build
 	go run ./cmd/newsfeed
 
 container-build:
