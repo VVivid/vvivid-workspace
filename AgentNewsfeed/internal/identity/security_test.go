@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestBrowserClientCannotAcquireAgentPermissions(t *testing.T) {
+func TestBrowserClientRequiresExplicitNewsfeedPermissions(t *testing.T) {
 	m, issuer, _, _ := testManager(t)
 	enroll(t, m, "alice")
 	for _, tc := range []struct {
@@ -15,7 +15,7 @@ func TestBrowserClientCannotAcquireAgentPermissions(t *testing.T) {
 		allowed                 bool
 	}{
 		{Read, m.APIAudience(), "newsfeed-web", true},
-		{Read + " " + ArticlesWrite, m.APIAudience(), "newsfeed-web", false},
+		{Read + " " + ArticlesWrite, m.APIAudience(), "newsfeed-web", true},
 		{Read + " sshmcp:admin", m.APIAudience(), "newsfeed-web", false},
 		{Read, m.APIAudience(), "newsfeed-codex", false},
 		{Read, m.MCPAudience(), "newsfeed-web", false},
@@ -25,8 +25,8 @@ func TestBrowserClientCannotAcquireAgentPermissions(t *testing.T) {
 		if (err == nil) != tc.allowed {
 			t.Fatalf("browser grant %s accepted=%v", tc.scope, err == nil)
 		}
-		if err == nil && principal.Allows(ArticlesWrite) {
-			t.Fatal("browser acquired management permission")
+		if err == nil && principal.Allows(ArticlesWrite) != (tc.scope == Read+" "+ArticlesWrite) {
+			t.Fatal("browser write permission did not match its explicit grant")
 		}
 	}
 	writeOnly := issuer.bearer("alice", "newsfeed-codex", m.MCPAudience(), ArticlesWrite, nil)
@@ -85,5 +85,18 @@ func TestLogoutFailureStillRevokesLocalSession(t *testing.T) {
 	}
 	if _, _, err := m.BrowserSession(sessionRequest(m, cookie)); err == nil {
 		t.Fatal("provider failure kept local session active")
+	}
+}
+
+func TestLoginReturnPathsStayLocal(t *testing.T) {
+	for _, raw := range []string{"https://evil.example/", "//evil.example/", "/\\evil.example/", "/%5cevil.example", "/%2f%2fevil.example", "/\nmalformed"} {
+		if got := localReturnPath(raw); got != "/" {
+			t.Fatalf("unsafe return path %q accepted as %q", raw, got)
+		}
+	}
+	for _, raw := range []string{"/archive", "/articles/owned?from=archive", "/?cursor=opaque"} {
+		if got := localReturnPath(raw); got != raw {
+			t.Fatalf("local return path lost %q", got)
+		}
 	}
 }

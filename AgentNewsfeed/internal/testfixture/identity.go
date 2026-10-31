@@ -27,7 +27,7 @@ import (
 
 const Origin = "https://newsfeed.example"
 
-type grant struct{ subject, nonce, challenge string }
+type grant struct{ subject, nonce, challenge, scopes string }
 
 type Identity struct {
 	Manager     *identity.Manager
@@ -174,7 +174,7 @@ func (f *Identity) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		code := rand.Text()
-		f.codes[code] = grant{subject: q.Get("test_subject"), nonce: q.Get("nonce"), challenge: q.Get("code_challenge")}
+		f.codes[code] = grant{subject: q.Get("test_subject"), nonce: q.Get("nonce"), challenge: q.Get("code_challenge"), scopes: q.Get("test_scopes")}
 		callback, _ := url.Parse(Origin + "/auth/callback")
 		callback.RawQuery = url.Values{"code": {code}, "state": {q.Get("state")}, "iss": {f.server.URL}}.Encode()
 		http.Redirect(w, r, callback.String(), 302)
@@ -211,13 +211,18 @@ func (f *Identity) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		f.refresh[refresh] = g
 		now := time.Now()
 		id := f.sign(map[string]any{"iss": f.server.URL, "sub": g.subject, "aud": "newsfeed-web", "azp": "newsfeed-web", "iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(), "nonce": g.nonce, "typ": "ID"})
-		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": f.Bearer(g.subject, "newsfeed-web", Origin+"/api/v1", identity.Read), "refresh_token": refresh, "id_token": id, "token_type": "Bearer", "expires_in": 300})
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": f.Bearer(g.subject, "newsfeed-web", Origin+"/api/v1", g.scopes), "refresh_token": refresh, "id_token": id, "token_type": "Bearer", "expires_in": 300})
 	default:
 		http.NotFound(w, r)
 	}
 }
 
+// Cookie deliberately models a legacy read-only browser grant.
 func (f *Identity) Cookie(t *testing.T, subject string) *http.Cookie {
+	return f.CookieWithScopes(t, subject, identity.Read)
+}
+
+func (f *Identity) CookieWithScopes(t *testing.T, subject, scopes string) *http.Cookie {
 	t.Helper()
 	mux := http.NewServeMux()
 	f.Manager.Register(mux)
@@ -230,6 +235,7 @@ func (f *Identity) Cookie(t *testing.T, subject string) *http.Cookie {
 	authorize, _ := url.Parse(start.Header().Get("Location"))
 	q := authorize.Query()
 	q.Set("test_subject", subject)
+	q.Set("test_scopes", scopes)
 	authorize.RawQuery = q.Encode()
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	response, err := client.Get(authorize.String())

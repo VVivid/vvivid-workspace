@@ -1,3 +1,12 @@
+FROM --platform=$BUILDPLATFORM node:24-bookworm-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c AS frontend
+WORKDIR /src
+COPY package.json package-lock.json ./
+RUN --mount=type=secret,id=build-ca,target=/run/secrets/build-ca \
+    if [ -f /run/secrets/build-ca ]; then NODE_EXTRA_CA_CERTS=/run/secrets/build-ca npm ci --ignore-scripts; else npm ci --ignore-scripts; fi
+COPY tsconfig.json ./
+COPY web ./web
+RUN npm run build
+
 FROM --platform=$BUILDPLATFORM golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c AS build
 ARG TARGETOS
 ARG TARGETARCH
@@ -10,6 +19,7 @@ RUN --mount=type=secret,id=build-ca,target=/run/secrets/build-ca \
     && go mod verify
 COPY cmd ./cmd
 COPY internal ./internal
+COPY --from=frontend /src/internal/web/static/assets ./internal/web/static/assets
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -buildvcs=false -ldflags="-s -w -X main.version=$VERSION" -o /out/newsfeed ./cmd/newsfeed \
     && GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -buildvcs=false -ldflags="-s -w" -o /out/newsfeed-admin ./cmd/newsfeed-admin \
     && mkdir -p -m 0700 /out/runtime/data
@@ -20,6 +30,7 @@ ARG COMMIT=unknown
 LABEL org.opencontainers.image.title="AgentNewsfeed" \
       org.opencontainers.image.version=$VERSION \
       org.opencontainers.image.revision=$COMMIT
+COPY --from=frontend /src/web/SHADCN-LICENSE.md /licenses/shadcn-ui.txt
 COPY --from=build /out/newsfeed /newsfeed
 COPY --from=build /out/newsfeed-admin /newsfeed-admin
 WORKDIR /data

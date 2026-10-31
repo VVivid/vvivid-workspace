@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"agentnewsfeed/internal/store/sqlite"
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -29,6 +30,7 @@ type loginAttempt struct {
 	State    string `json:"state"`
 	Nonce    string `json:"nonce"`
 	Verifier string `json:"verifier"`
+	ReturnTo string `json:"return_to,omitempty"`
 }
 
 type sessionState struct {
@@ -52,7 +54,7 @@ func (m *Manager) Register(mux *http.ServeMux) {
 
 func (m *Manager) login(w http.ResponseWriter, r *http.Request) {
 	cookie := rand.Text()
-	attempt := loginAttempt{State: rand.Text(), Nonce: rand.Text(), Verifier: oauth2.GenerateVerifier()}
+	attempt := loginAttempt{State: rand.Text(), Nonce: rand.Text(), Verifier: oauth2.GenerateVerifier(), ReturnTo: localReturnPath(r.URL.Query().Get("return_to"))}
 	hash := sha256.Sum256([]byte(cookie))
 	encrypted, err := m.cfg.Keys.seal(attempt, loginPurpose(hash))
 	if err != nil || m.store.SaveLoginAttempt(r.Context(), hash, encrypted, m.now().Add(10*time.Minute)) != nil {
@@ -121,7 +123,18 @@ func (m *Manager) callback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	setCookie(w, sessionCookie, credential, int(sessionTTL/time.Second))
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, localReturnPath(attempt.ReturnTo), http.StatusSeeOther)
+}
+
+// Return destinations are stored inside the authenticated login attempt.
+// Reject network-path and backslash forms that browsers can interpret as hosts.
+func localReturnPath(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || len(raw) > 512 || !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") ||
+		strings.Contains(u.Path, "\\") || strings.HasPrefix(u.Path, "//") || strings.ContainsFunc(u.Path, unicode.IsControl) || u.IsAbs() || u.Host != "" {
+		return "/"
+	}
+	return raw
 }
 
 func (m *Manager) newSessionState(ctx context.Context, access, refresh, rawID, tokenType, nonce string) (sessionState, Principal, error) {

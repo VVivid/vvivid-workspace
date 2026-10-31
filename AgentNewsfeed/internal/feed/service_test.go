@@ -3,6 +3,7 @@ package feed_test
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -248,5 +249,172 @@ func TestURLUpdateCollisionRollsBackAndDoesNotReserveKey(t *testing.T) {
 	}
 	if _, err := s.GetArticle(t.Context(), p, a.Article.ID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestOriginalMarkdownArchiveRestoreAndRevisionBoundaries(t *testing.T) {
+	f, s, alice, bob := setup(t)
+	original := content()
+	original.ContentMarkdown = "# Source heading\n\nThe original paragraph.\n\n> A source quotation.\n\n- Source point\n"
+	in := feed.AddInput{IdempotencyKey: "full-source", Article: original}
+	first, err := s.AddArticle(t.Context(), alice, in)
+	if err != nil || first.Article.ContentMarkdown != original.ContentMarkdown {
+		t.Fatalf("original content changed: %v", err)
+	}
+	detail, err := s.GetArticle(t.Context(), alice, first.Article.ID)
+	if err != nil || detail != first.Article || detail.ArchivedAt != 0 {
+		t.Fatal("reading changed saved state")
+	}
+	active, err := s.ListArticles(t.Context(), alice, feed.ListInput{})
+	if err != nil || len(active.Articles) != 1 || active.Articles[0].ContentMarkdown != "" {
+		t.Fatal("list loaded full article content")
+	}
+	legacy, _ := f.BrowserPrincipal(t, f.Cookie(t, "alice"))
+	if _, err := s.SetArchived(t.Context(), legacy, detail.ID, true); !errors.Is(err, identity.ErrForbidden) {
+		t.Fatal("legacy read-only grant archived")
+	}
+	if _, err := s.SetArchived(t.Context(), bob, detail.ID, true); !errors.Is(err, sqlite.ErrNotFound) {
+		t.Fatal("foreign owner archived")
+	}
+	archived, err := s.SetArchived(t.Context(), alice, detail.ID, true)
+	if err != nil || archived.ArchivedAt == 0 || archived.ContentMarkdown != detail.ContentMarkdown || archived.Revision != 2 {
+		t.Fatalf("archive damaged original: %#v %v", archived, err)
+	}
+	if again, err := s.SetArchived(t.Context(), alice, detail.ID, true); err != nil || again != archived {
+		t.Fatal("duplicate archive changed revision or ordering")
+	}
+	if active, _ := s.ListArticles(t.Context(), alice, feed.ListInput{}); len(active.Articles) != 0 {
+		t.Fatal("archived article remained in active feed")
+	}
+	archive, err := s.ListArticles(t.Context(), alice, feed.ListInput{Archived: true})
+	if err != nil || len(archive.Articles) != 1 || archive.Articles[0].ContentMarkdown != "" {
+		t.Fatal("archive list failed or loaded body")
+	}
+	update := feed.UpdateInput{IdempotencyKey: "update-archived", ArticleID: detail.ID, ExpectedRevision: 1, Article: original}
+	if _, err := s.UpdateArticle(t.Context(), alice, update); !errors.Is(err, sqlite.ErrConflict) {
+		t.Fatal("archive failed to invalidate old revision")
+	}
+	update.ExpectedRevision = 2
+	update.Article.ContentMarkdown = "## Revised original from the source\n\nMore source text."
+	revised, err := s.UpdateArticle(t.Context(), alice, update)
+	if err != nil || revised.Article.ArchivedAt != archived.ArchivedAt || revised.Article.ContentMarkdown != update.Article.ContentMarkdown {
+		t.Fatal("content update lost archive state")
+	}
+	duplicate := in
+	duplicate.IdempotencyKey = "duplicate-archived"
+	if out, err := s.AddArticle(t.Context(), alice, duplicate); err != nil || out.Created || out.Article != revised.Article {
+		t.Fatal("duplicate add unarchived or replaced original")
+	}
+	restored, err := s.SetArchived(t.Context(), alice, detail.ID, false)
+	if err != nil || restored.ArchivedAt != 0 || restored.CreatedAt != first.Article.CreatedAt || restored.ContentMarkdown != revised.Article.ContentMarkdown || restored.Revision != 4 {
+		t.Fatal("restore did not preserve source and saved time")
+	}
+	if out, err := s.AddArticle(t.Context(), alice, in); err != nil || out != first {
+		t.Fatal("archive or updates changed durable add replay")
+	}
+	update.IdempotencyKey, update.ExpectedRevision, update.Article.ContentMarkdown = "clear-body", 4, ""
+	if out, err := s.UpdateArticle(t.Context(), alice, update); err != nil || out.Article.ContentMarkdown != "" {
+		t.Fatal("full replacement did not clear omitted content")
+	}
+	if err := f.Store.DisableAccount(t.Context(), alice.Identity()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetArchived(t.Context(), alice, detail.ID, true); !errors.Is(err, identity.ErrUnauthenticated) {
+		t.Fatal("disabled account archived through cached principal")
+	}
+}
+
+func TestMarkdownByteBoundsAndFailedContentDoesNotReserveKey(t *testing.T) {
+	_, s, alice, _ := setup(t)
+	for _, body := range []string{strings.Repeat("a", feed.MaxContentBytes+1), strings.Repeat("é", feed.MaxContentBytes/2+1), "source\x00text", string([]byte{0xff})} {
+		c := content()
+		c.ContentMarkdown = body
+		if _, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "body-bound", Article: c}); !errors.Is(err, feed.ErrInvalid) {
+			t.Fatal("invalid Markdown accepted")
+		}
+	}
+	c := content()
+	c.ContentMarkdown = strings.Repeat("a", feed.MaxContentBytes-3) + "\n\t\r"
+	if _, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "body-bound", Article: c}); err != nil {
+		t.Fatalf("maximum valid source rejected or failed validation reserved key: %v", err)
+	}
+}
+
+func TestLegacyOmittedContentPayloadHashesStillReplay(t *testing.T) {
+	f, s, alice, _ := setup(t)
+	// These bytes are the pre-reader Article encoding, rather than an encoding
+	// derived from the current struct. Durable hashes must continue to match.
+	legacyPayload := []byte(`{"id":"","url":"https://example.com/story","title":"A sourced story","summary":"A short introduction supplied by the source.","revision":0,"created_at":0,"updated_at":0}`)
+	legacyArticle := sqlite.Article{URL: "https://example.com/story", Title: content().Title, Summary: content().Summary}
+	first, err := f.Store.MutateArticle(t.Context(), alice.Owner(), "legacy-add", "add_article", legacyPayload, legacyArticle, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replay, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "legacy-add", Article: content()}); err != nil || replay != first {
+		t.Fatalf("legacy add payload hash changed: %v", err)
+	}
+	legacyArticle.ID = first.Article.ID
+	legacyArticle.Title = "Original revision"
+	legacyUpdate := []byte(fmt.Sprintf(`{"Article":{"id":%q,"url":"https://example.com/story","title":"Original revision","summary":"A short introduction supplied by the source.","revision":0,"created_at":0,"updated_at":0},"Expected":1}`, first.Article.ID))
+	revised, err := f.Store.MutateArticle(t.Context(), alice.Owner(), "legacy-update", "update_article", legacyUpdate, legacyArticle, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := content()
+	c.Title = "Original revision"
+	f.Reopen(t)
+	policy, _ := thumbnail.NewPolicy("images.example.com")
+	s = feed.New(f.Store, policy)
+	if replay, err := s.UpdateArticle(t.Context(), alice, feed.UpdateInput{IdempotencyKey: "legacy-update", ArticleID: first.Article.ID, ExpectedRevision: 1, Article: c}); err != nil || replay != revised {
+		t.Fatalf("legacy update payload hash changed after restart: %v", err)
+	}
+}
+
+func TestArchivedPaginationIsStableAndCursorCannotCrossOwnerOrView(t *testing.T) {
+	_, s, alice, bob := setup(t)
+	for i := range 5 {
+		c := content()
+		c.URL = fmt.Sprintf("https://example.com/archive/%d", i)
+		out, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: fmt.Sprint(i), Article: c})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.SetArchived(t.Context(), alice, out.Article.ID, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, err := s.ListArticles(t.Context(), alice, feed.ListInput{Archived: true, Limit: 2})
+	if err != nil || first.NextCursor == "" {
+		t.Fatal("archive cursor missing")
+	}
+	for _, tc := range []struct {
+		p        identity.Principal
+		archived bool
+	}{{bob, true}, {alice, false}} {
+		if _, err := s.ListArticles(t.Context(), tc.p, feed.ListInput{Archived: tc.archived, Cursor: first.NextCursor}); !errors.Is(err, feed.ErrInvalid) {
+			t.Fatal("cursor crossed owner or list view")
+		}
+	}
+	seen := map[string]bool{}
+	var previous sqlite.Article
+	cursor := ""
+	for {
+		page, err := s.ListArticles(t.Context(), alice, feed.ListInput{Archived: true, Cursor: cursor, Limit: 2})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, a := range page.Articles {
+			if seen[a.ID] || (previous.ID != "" && (a.ArchivedAt > previous.ArchivedAt || (a.ArchivedAt == previous.ArchivedAt && a.ID >= previous.ID))) {
+				t.Fatal("archive pagination repeated or reordered an article")
+			}
+			seen[a.ID], previous = true, a
+		}
+		cursor = page.NextCursor
+		if cursor == "" {
+			break
+		}
+	}
+	if len(seen) != 5 {
+		t.Fatal("archive pagination lost records")
 	}
 }
