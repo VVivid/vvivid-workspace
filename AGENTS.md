@@ -23,7 +23,7 @@
 
 ## Website preview requests
 
-For a `vvivid.dev` preview, follow the [website preview instructions](vvivid.dev/AGENTS.md#preview-requests) and [preview deployment runbook](vvivid.dev/deploy/preview/README.md). The exact deployment branch is `release/vvivid-preview`, serving `https://preview.vvivid.dev/`; `main` serves live at `https://vvivid.dev/`.
+For a `vvivid.dev` preview, follow the [website release instructions](vvivid.dev/AGENTS.md#preview-requests) and [Fleet/Helm publication contract](vvivid.dev/deploy/gitops/README.md). `release/vvivid.dev/X.Y.Z` prepares staging at `https://preview.vvivid.dev/`; `vvivid.dev/vX.Y.Z` prepares production. `main` only checks. Publication and cutover require separate authorization and activation.
 
 ## Shared rules
 
@@ -37,7 +37,7 @@ For a `vvivid.dev` preview, follow the [website preview instructions](vvivid.dev
 - Each project owns its dependencies, build context, tests, runtime configuration, and version. Git branches and worktrees cover the whole repository; project folders do not isolate concurrent Git operations.
 - For each new editing task, create or reuse its dedicated branch and worktree before editing, including documentation changes. Read-only investigation may use the current checkout. Name branches `<type>/<area>/<task>`; use `feature`, `bugfix`, `docs`, `refactor`, `chore`, or `release`, and a project area or `workspace` for shared/cross-project work. Follow the [branching procedure](docs/DEVELOPMENT-WORKFLOW.md#branches-and-worktrees).
 - Keep all checkpoints and sequential agent stages for one task in the same worktree; reuse it for follow-ups. Deliver through a PR targeting `main`; commit, push, PR creation, merge, and release actions require the corresponding user instruction. The user controls merging. Never push directly to `main`, force-push, or rewrite published history.
-- Current CI watches project directories; root-only changes can skip all project workflows. Select checks explicitly rather than relying on skipped workflows.
+- Only website CI is enabled. Other projects retain manual Make commands; select their checks explicitly when changing them.
 - Keep source completion, independent approval, release, deployment, and runtime verification distinct. Planning does not authorize live infrastructure or data changes.
 - Keep secrets and personal/runtime data out of source, docs, fixtures, and logs. Retain lasting contracts and operating instructions in maintained documentation; development diaries stay local.
 - When adding or moving projects, update both maps and relevant build/CI entry points. Optional project `AGENTS.md` files add local guidance without duplicating the shared methodology.

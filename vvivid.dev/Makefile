@@ -1,4 +1,4 @@
-.PHONY: check test build deployment-test content-test indexing-test
+.PHONY: check test build deployment-test legacy-deployment-test content-test indexing-test chart-test
 
 # Rendering the production site also checks the Hugo version and guide exclusion.
 check test: deployment-test content-test indexing-test build
@@ -6,10 +6,16 @@ check test: deployment-test content-test indexing-test build
 build:
 	./scripts/build.sh
 
-# Exercises live and preview scopes using fake commands, including shared .env locking.
-# Never connects to a deployment server.
+# Exercises release policy and real local Git transaction races. No external writes.
 deployment-test:
-	python3 -m unittest discover -s deploy/live -p 'test_*.py' -v
+	python3 -m unittest discover -s deploy/gitops -p 'test_*.py' -v
+
+# Archived SSH helpers remain manual recovery references, outside active CI.
+legacy-deployment-test:
+	python3 -m unittest discover -s deploy/live -p 'test_deploy.py' -v
+
+chart-test:
+	python3 deploy/gitops/test_chart.py
 
 # Temporary source fixtures exercise the production content selection and digests.
 content-test:

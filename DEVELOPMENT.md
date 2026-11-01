@@ -42,15 +42,11 @@ Use `make go-case-study-check`, `make go-case-study-test`, or `make go-case-stud
 
 ## Pull request checks
 
-The [XTrace workflow](.github/workflows/xtrace-example.yml) runs automatically only for pull requests that change `examples/xtrace-example/**` and for matching pushes to `main`. It runs `make -C examples/xtrace-example check` directly, independently of the root Makefile. Changes confined to root files or workflow configuration do not trigger it; it can still be started manually.
+Only the [website workflow](.github/workflows/website.yml) is enabled. Other project workflow files have been removed; source code and all root/project Make commands remain available for manual validation. Select the affected projects explicitly before a PR.
 
-SSHMCP, GoogleHealthMCP, AgentShoppingList, and WebhookControl each have a workflow filtered to their own directory. WebhookControl also watches its own workflow file. A change confined to another project does not trigger the XTrace workflow.
+Website PR checks have read-only repository permissions and build both public base URLs without tailnet or publishing secrets. Main pushes run checks. After separate activation, `release/vvivid.dev/X.Y.Z` publishes staging artifacts and `vvivid.dev/vX.Y.Z` publishes production artifacts to private Zot, then records exact desired state in `VVivid/homelab-gitops`. Fleet reconciles only explicitly enabled website paths. The [publication contract](vvivid.dev/deploy/gitops/README.md) owns setup, credential boundaries and recovery; main and the old `release/vvivid-preview` branch never deploy automatically.
 
-The [website workflow](.github/workflows/website.yml) watches `vvivid.dev/**` and its own workflow file. It runs deployment tests and checks the complete Hugo/nginx image, including pinned Hugo, output exclusion, and HTTP guide blocking. Pull requests use `contents: read`. Matching pushes to `main` publish a GHCR image and deploy its digest through the protected `vvivid-live` environment and restricted Tailscale/SSH access. The separate [preview workflow](.github/workflows/website-preview.yml) checks the preview image on PRs and deploys every exact `release/vvivid-preview` push using preview URLs, tags, environment and identity. Both PR workflows watch site and both workflow files; preview pushes deliberately have no path filter, including branch creation. The [live runbook](vvivid.dev/deploy/live/README.md) and [preview runbook](vvivid.dev/deploy/preview/README.md) describe separate activation, shared server locking and recovery. Root-only Make changes require explicit local website checks.
-
-If merge rules are added later, account for path-filtered workflows being skipped on unrelated pull requests before making their checks required globally.
-
-Deployment automation is configured per project with its own destination and credentials; the XTrace demo currently runs locally.
+Account for path-filtered PR checks being skipped on unrelated changes before making them required globally. Future service CI must reuse the monorepo's shared artifact-publication environment and existing Tailscale CI trust; each app remains a separate release and adoption decision.
 
 ## Independent versions
 

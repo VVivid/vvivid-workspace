@@ -1,0 +1,20 @@
+image:
+  repository: registry.lab.vvivid.dev/products/vvivid-website
+  digest: UNCONFIGURED
+imagePullSecrets:
+  - name: zot-products-pull
+hostname: UNCONFIGURED
+ingress:
+  enabled: false
+tls:
+  productionEnabled: false
+  dnsTokenSecretName: cloudflare-dns01
+provenance:
+  sourceSha: UNCONFIGURED
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 96Mi

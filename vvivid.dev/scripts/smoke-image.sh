@@ -7,6 +7,7 @@ if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
 fi
 
 image=$1
+expected_base_url=${2:-}
 container=
 cleanup() {
     if [ -n "$container" ]; then
@@ -16,8 +17,13 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
-docker run --rm --entrypoint nginx "$image" -t
-container=$(docker run --detach --publish 127.0.0.1::80 "$image")
+# Match the Helm pod's UID, writable mounts and privilege boundary.
+set -- --platform linux/amd64 --user 101:101 --read-only --cap-drop ALL --security-opt no-new-privileges \
+    --sysctl net.ipv4.ip_unprivileged_port_start=0 \
+    --tmpfs /tmp:rw,nosuid,nodev,uid=101,gid=101 \
+    --tmpfs /var/cache/nginx:rw,nosuid,nodev,uid=101,gid=101
+docker run --rm "$@" --entrypoint nginx "$image" -t
+container=$(docker run --detach "$@" --publish 127.0.0.1::80 "$image")
 port=$(docker port "$container" 80/tcp)
 case "$port" in
     127.0.0.1:*) ;;
@@ -43,8 +49,8 @@ if [ -n "$leaked_guide" ]; then
     exit 1
 fi
 script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
-if [ "$#" -eq 2 ]; then
-    python3 "$script_dir/test-serving.py" "$origin" "$2"
+if [ -n "$expected_base_url" ]; then
+    python3 "$script_dir/test-serving.py" "$origin" "$expected_base_url"
 else
     python3 "$script_dir/test-serving.py" "$origin"
 fi

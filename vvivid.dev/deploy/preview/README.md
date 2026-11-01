@@ -1,8 +1,13 @@
-# GitHub preview deployment
+# Archived SSH preview procedure
 
-The [preview workflow](../../../.github/workflows/website-preview.yml) maps only
+This is a historical recovery reference for the existing service. The active [Fleet/Helm contract](../gitops/README.md) replaces automatic SSH deployment. `main` and `release/vvivid-preview` no longer trigger this procedure. Do not use the setup below to activate a new CI identity or deployment. Local legacy helper tests remain available as `make -C vvivid.dev legacy-deployment-test`.
+
+The historical procedure below describes the previous infrastructure; verify live ownership before any separately authorized recovery action.
+
+
+The `former preview workflow` maps only
 `release/vvivid-preview` to `https://preview.vvivid.dev/`. The
-[live workflow](../../../.github/workflows/website.yml) continues to map `main`
+`former live workflow` continues to map `main`
 to `https://vvivid.dev/`. Pull requests check both complete serving images with
 read-only repository permissions; they cannot publish or deploy.
 
