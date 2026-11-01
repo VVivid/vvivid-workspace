@@ -44,7 +44,7 @@ docker run --rm --publish 127.0.0.1:8080:80 vvivid-website:local
 
 Open [localhost:8080](http://localhost:8080/). The [Dockerfile](Dockerfile) builds with a Hugo image pinned by version and digest, runs the same production build script, and serves the generated site with nginx. Omit `--build-arg HUGO_BASEURL=...` to build with the production URL. This local command uses Docker's default network and requires no external Traefik network. The nginx configuration blocks agent-guide filenames at every URL depth.
 
-The [website workflow](../.github/workflows/website.yml) checks both base URLs on PRs and main pushes. Only canonical staging release branches and production version tags can publish, after explicit activation. It publishes checked Linux amd64 images and versioned Helm OCI charts to private Zot, then records exact digests/provenance in the private GitOps repository. See the [release contract](deploy/gitops/README.md). Existing live/preview hosting stays unchanged until the individual host cutovers.
+The [website workflow](../.github/workflows/website.yml) checks both base URLs on PRs and main pushes. Only canonical staging release branches and production version tags can publish, after explicit activation. Staging uses `https://stage.vvivid.dev/`; production remains `https://vvivid.dev/`. It publishes checked Linux amd64 images and versioned Helm OCI charts to private Zot, then records exact digests/provenance in the private GitOps repository. See the [release contract](deploy/gitops/README.md). Existing live/preview hosting stays unchanged until the individual host cutovers.
 
 The official `nginx:alpine` image includes the njs module used by
 [nginx/representations.js](nginx/representations.js) to parse HTTP `Accept`
@@ -149,12 +149,13 @@ they are not authentication or technical access controls.
 conditional math/diagram assets, the measured source baseline, and the account-free
 IndexNow helper. The helper defaults to a local JSON dry run and never submits
 URLs during a build or deployment. Native check/test also exercise its safeguards.
-Build previews with their own `HUGO_BASEURL`; they receive noindex metadata and an
+Build staging with `HUGO_BASEURL=https://stage.vvivid.dev/`; it receives noindex metadata and an
 empty sitemap. nginx adds a noindex header on every nonproduction host.
 
 The [search operations runbook](deploy/seo/README.md) provides narrow, reviewable
-Cloudflare rules for the already running preview and `www`, plus router/TLS and
-robots-cache checks. These require separate activation. Release branches build preview artifacts with preview URLs; version tags build production artifacts after separate activation.
+Cloudflare rules for staging and `www`, plus router/TLS and robots-cache checks.
+These require separate activation. Release branches build staging artifacts with
+staging URLs; version tags build production artifacts after separate activation.
 
 The site hosts no MCP server, account system, write endpoint, OAuth authorization
 server, token endpoint, or client registration. Articles and project links can

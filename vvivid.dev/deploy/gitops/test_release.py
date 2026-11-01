@@ -24,7 +24,7 @@ def candidate(channel="staging", version="1.2.3", run=10, attempt=1, sha=SHA):
 def initial(channel="staging"):
     return {"defaultNamespace": "website-" + channel, "helm": {
         "repo": "oci://" + CHART, "version": "UNCONFIGURED", "releaseName": "vvivid-website",
-        "values": {"hostname": "preview.vvivid.dev" if channel == "staging" else "vvivid.dev",
+        "values": {"hostname": "stage.vvivid.dev" if channel == "staging" else "vvivid.dev",
                    "image": {"repository": IMAGE, "digest": "UNCONFIGURED"},
                    "provenance": {"sourceSha": "UNCONFIGURED"}, "ingress": {"enabled": False}}}}
 
@@ -34,7 +34,7 @@ class ReleasePolicyTests(unittest.TestCase):
         staging, production = candidate(), candidate("production")
         self.assertEqual(staging.image_tag, "release-1.2.3")
         self.assertEqual(staging.chart_version, "1.2.3-staging.10.1")
-        self.assertEqual(staging.base_url, "https://preview.vvivid.dev/")
+        self.assertEqual(staging.base_url, "https://stage.vvivid.dev/")
         self.assertIn("staging-1.2.3-sha-", staging.source_tag)
         self.assertEqual(production.image_tag, "1.2.3")
         self.assertEqual(production.chart_version, "1.2.3")
@@ -96,6 +96,16 @@ class ReleasePolicyTests(unittest.TestCase):
         document["helm"]["version"] = "9.9.9"
         with self.assertRaisesRegex(ReleaseError, "Inconsistent"):
             update_desired_state(document, candidate(run=11), DIGEST, CHART_DIGEST)
+
+    def test_wrong_hostname_is_rejected_without_changing_desired_state(self):
+        for channel, hostname in (("staging", "preview.vvivid.dev"), ("staging", "vvivid.dev"),
+                                  ("production", "stage.vvivid.dev")):
+            document = initial(channel)
+            document["helm"]["values"]["hostname"] = hostname
+            before = copy.deepcopy(document)
+            with self.subTest(channel=channel, hostname=hostname), self.assertRaisesRegex(ReleaseError, "hostname"):
+                update_desired_state(document, candidate(channel), DIGEST, CHART_DIGEST)
+            self.assertEqual(document, before)
 
     def test_registry_preflight_blocks_partial_reuse(self):
         release = candidate("production")

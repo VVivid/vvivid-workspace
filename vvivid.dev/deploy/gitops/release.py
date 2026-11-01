@@ -48,7 +48,7 @@ class Release:
 
     @property
     def base_url(self):
-        return "https://preview.vvivid.dev/" if self.channel == "staging" else "https://vvivid.dev/"
+        return "https://stage.vvivid.dev/" if self.channel == "staging" else "https://vvivid.dev/"
 
     @property
     def image_tag(self):
