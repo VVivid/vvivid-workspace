@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["image", "hostname", "provenance"],
+  "properties": {
+    "image": {
+      "type": "object",
+      "required": ["repository", "digest"],
+      "properties": {
+        "repository": {"const": "registry.lab.vvivid.dev/products/vvivid-website"},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "hostname": {"enum": ["stage.vvivid.dev", "vvivid.dev"]},
+    "provenance": {
+      "type": "object",
+      "required": ["sourceSha"],
+      "properties": {"sourceSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {"enabled": {"type": "boolean"}}
+    },
+    "tls": {
+      "type": "object",
+      "properties": {
+        "productionEnabled": {"type": "boolean"},
+        "dnsTokenSecretName": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

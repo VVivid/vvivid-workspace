@@ -1,0 +1,43 @@
+{{- range $environment, $server := dict "staging" "https://acme-staging-v02.api.letsencrypt.org/directory" "production" "https://acme-v02.api.letsencrypt.org/directory" }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ $.Release.Name }}-{{ $environment }}
+spec:
+  acme:
+    server: {{ $server }}
+    privateKeySecretRef:
+      name: {{ $.Release.Name }}-acme-{{ $environment }}
+    solvers:
+      - selector:
+          dnsZones: [vvivid.dev]
+        dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: {{ $.Values.tls.dnsTokenSecretName }}
+              key: api-token
+---
+{{- end }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Release.Name }}-staging
+spec:
+  secretName: {{ .Release.Name }}-tls-staging
+  dnsNames: [{{ .Values.hostname | quote }}]
+  issuerRef:
+    name: {{ .Release.Name }}-staging
+    kind: Issuer
+{{- if .Values.tls.productionEnabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  secretName: {{ .Release.Name }}-tls
+  dnsNames: [{{ .Values.hostname | quote }}]
+  issuerRef:
+    name: {{ .Release.Name }}-production
+    kind: Issuer
+{{- end }}

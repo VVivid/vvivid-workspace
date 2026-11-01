@@ -9,11 +9,14 @@ ARG HUGO_BASEURL=https://vvivid.dev/
 RUN ./scripts/build.sh
 
 # Stage 2: Serve the site with Nginx
-FROM nginx:alpine
+FROM nginx:alpine@sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606
 
 # The official Alpine image bundles njs; use it for Accept quality parsing.
+# Keep nginx's pid and cache writable for nonroot runs without mounted volumes.
 RUN rm -rf /usr/share/nginx/html/* \
-    && sed -i '1i load_module /usr/lib/nginx/modules/ngx_http_js_module.so;' /etc/nginx/nginx.conf
+    && sed -i '1i load_module /usr/lib/nginx/modules/ngx_http_js_module.so;' /etc/nginx/nginx.conf \
+    && sed -i 's@^pid[[:space:]].*;@pid /tmp/nginx.pid;@; /^user[[:space:]]/d' /etc/nginx/nginx.conf \
+    && chown -R 101:101 /var/cache/nginx
 
 # Copy the built site from the builder stage
 COPY --from=builder /src/public /usr/share/nginx/html
@@ -26,6 +29,7 @@ COPY nginx/representations.js /etc/nginx/representations.js
 
 # Expose port 80
 EXPOSE 80
+USER 101:101
 
 # Start Nginx
 CMD ["nginx", "-g", "daemon off;"]

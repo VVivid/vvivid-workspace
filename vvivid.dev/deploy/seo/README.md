@@ -1,30 +1,30 @@
 # Search indexing operations
 
-These are reviewable operations for the existing public hosts. This repository
+These are reviewable operations for the public hosts. This repository
 change does not apply Cloudflare rules, modify routers, purge caches, submit
-URLs, or activate a preview rebuild. The
-[preview deployment runbook](../preview/README.md) owns the separate release-branch
-rebuild and cutover. The GitHub live workflow updates only `vvivid-live`; its next successful deployment cannot fix the already running
-`vvivid-preview` image by itself.
+URLs, or activate a staging rebuild. The [Fleet/Helm contract](../gitops/README.md)
+owns staging releases at `stage.vvivid.dev`; the private homelab repository owns
+activation and cutover. The [archived preview runbook](../preview/README.md)
+records the separate legacy `preview.vvivid.dev` hosting and must not be used to
+activate staging.
 
-## Keep the existing preview out of indexes
+## Keep staging out of indexes
 
-The source has two defenses for preview images. The preview workflow applies
-them during its own separately authorized activation:
+The source has two defenses for staging images. The website workflow checks
+both before publication:
 
-- Build with `HUGO_BASEURL=https://preview.vvivid.dev/`. All HTML gets
-  `noindex, follow`, self-canonicals use that preview URL, the sitemap is empty,
-  and robots does not advertise it. Do not build a preview with the production
+- Build with `HUGO_BASEURL=https://stage.vvivid.dev/`. All HTML gets
+  `noindex, follow`, self-canonicals use that staging URL, the sitemap is empty,
+  and robots does not advertise it. Do not build staging with the production
   base URL.
 - nginx sends `X-Robots-Tag: noindex, follow` for every host except `vvivid.dev`,
   including Markdown, APIs, assets, and errors. This covers a production-built
-  image that is reused on preview.
+  image that is reused on a nonproduction host.
 
-To cover the **currently running** separate preview before a rebuild, add the
-narrow Cloudflare Response Header Transform Rule in
+An optional extra edge defense is the narrow Cloudflare Response Header Transform Rule in
 [cloudflare-rules.example.json](cloudflare-rules.example.json). In the zone's
 Rules overview, create a response-header rule with custom expression
-`http.host eq "preview.vvivid.dev"`. Set the static response header
+`http.host eq "stage.vvivid.dev"`. Set the static response header
 `X-Robots-Tag` to `noindex, follow`. Use **Set**, so an existing value is replaced.
 Check the rule order for later overrides. It must not match the apex, `www`,
 analytics, or other subdomains.
@@ -32,9 +32,8 @@ analytics, or other subdomains.
 Keep robots crawlable with `Allow: /`: crawlers need to fetch the response to see
 noindex. A robots `Disallow` or a site-wide bot block can prevent that. Keep the
 existing `search=yes, ai-input=yes, ai-train=yes` Content Signals. Noindex is an
-indexing directive, not access control; public preview remains publicly readable.
-If a legacy preview has its own robots disallow, remove only that preview's
-restriction during the separately authorized activation.
+indexing directive, not access control; public staging remains publicly readable.
+Existing legacy preview hosting is separate from staging activation.
 
 ## Make www redirect reach the canonical site
 
@@ -114,14 +113,14 @@ and those controls after any change.
 
 ```sh
 curl -sSI 'https://www.vvivid.dev/posts/http_in_golang/?source=www&x=1'
-curl -sSI https://preview.vvivid.dev/
-curl -sSI https://preview.vvivid.dev/about/index.md
+curl -sSI https://stage.vvivid.dev/
+curl -sSI https://stage.vvivid.dev/about/index.md
 curl -sSI https://vvivid.dev/
 curl -sS https://vvivid.dev/robots.txt
 curl -sS https://vvivid.dev/sitemap.xml
 ```
 
-Expect one `www` redirect to the apex with the same path/query, preview's noindex
+Expect one `www` redirect to the apex with the same path/query, staging's noindex
 header, no site-wide noindex header at the apex, and the selected production
 sitemap URLs. Inspect both HTML and Markdown in both request orders using the
 [serving checks](../../README.md#representation-caching-and-deployment-checks).

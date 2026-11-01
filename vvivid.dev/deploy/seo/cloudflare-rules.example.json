@@ -1,9 +1,9 @@
 {
-  "preview_noindex": {
+  "staging_noindex": {
     "phase": "http_response_headers_transform",
     "rule": {
-      "description": "Keep the separate public preview out of search indexes",
-      "expression": "http.host eq \"preview.vvivid.dev\"",
+      "description": "Keep public staging out of search indexes",
+      "expression": "http.host eq \"stage.vvivid.dev\"",
       "action": "rewrite",
       "action_parameters": {
         "headers": {
