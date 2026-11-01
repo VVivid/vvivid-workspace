@@ -13,7 +13,7 @@ def main():
     helm = os.environ.get("HELM", "helm")
     with tempfile.TemporaryDirectory(prefix="website-chart-check-") as directory:
         values_path = Path(directory) / "fixture.json"
-        for channel, hostname in (("staging", "preview.vvivid.dev"), ("production", "vvivid.dev")):
+        for channel, hostname in (("staging", "stage.vvivid.dev"), ("production", "vvivid.dev")):
             values = {"hostname": hostname, "image": {"digest": "sha256:" + "a" * 64},
                       "provenance": {"sourceSha": "b" * 40}}
             values_path.write_text(json.dumps(values))
@@ -28,6 +28,10 @@ def main():
         unconfigured = subprocess.run([helm, "template", "vvivid-website", str(chart)], capture_output=True)
         if unconfigured.returncode == 0:
             raise SystemExit("Unconfigured chart unexpectedly rendered")
+        old_hostname = subprocess.run([helm, "template", "vvivid-website", str(chart), "-f", str(values_path),
+                                       "--set", "hostname=preview.vvivid.dev"], capture_output=True)
+        if old_hostname.returncode == 0:
+            raise SystemExit("Legacy preview hostname unexpectedly accepted for GitOps")
     print("Both chart environments passed lint/render and activation-gate checks (fixture digests only).")
 
 

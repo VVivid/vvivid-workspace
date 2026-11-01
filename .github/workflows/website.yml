@@ -22,7 +22,7 @@ jobs:
       matrix:
         include:
           - channel: staging
-            base_url: https://preview.vvivid.dev/
+            base_url: https://stage.vvivid.dev/
           - channel: production
             base_url: https://vvivid.dev/
     steps:

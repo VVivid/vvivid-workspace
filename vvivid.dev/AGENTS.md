@@ -16,9 +16,9 @@ Theme runtime files are vendored under `themes/hugo-blog-awesome/`; [upstream pr
 
 ## Preview requests
 
-Use a user-selected canonical version branch `release/vvivid.dev/X.Y.Z` for staging at `https://preview.vvivid.dev/`. Production uses an immutable annotated `vvivid.dev/vX.Y.Z` tag at a verified merged commit. Main checks only; the former `release/vvivid-preview` branch has no workflow.
+Use a user-selected canonical version branch `release/vvivid.dev/X.Y.Z` for staging at `https://stage.vvivid.dev/`. Production uses an immutable annotated `vvivid.dev/vX.Y.Z` tag at a verified merged commit. Main checks only; the former `release/vvivid-preview` branch has no workflow.
 
-Read the [publication contract](deploy/gitops/README.md) before preparing a release. Source publication, registry publication, CI-to-GitOps writes and host cutover each require the applicable authorization. Preserve an existing release branch and use normal merge/fast-forward updates; never reset or force-push it. Keep preview noindex and never submit preview URLs to IndexNow.
+Read the [publication contract](deploy/gitops/README.md) before preparing a release. Source publication, registry publication, CI-to-GitOps writes and host cutover each require the applicable authorization. Preserve an existing release branch and use normal merge/fast-forward updates; never reset or force-push it. Keep staging noindex and never submit staging URLs to IndexNow.
 
 Reuse the monorepo shared artifact-publication environment and one existing Tailscale GitHub OIDC CI trust. At activation, query the repository's actual `sub_claim_prefix` and update that existing trust's exact environment subject once. Do not create per-project identities or use operator/developer credentials.
 

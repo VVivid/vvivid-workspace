@@ -72,7 +72,7 @@ class ServingTests(unittest.TestCase):
         self.assertIn("accept", headers.get("vary", "").lower().split(", "))
         self.assertEqual(headers.get("x-content-type-options"), "nosniff")
 
-    def test_build_base_url_and_preview_indexing(self):
+    def test_build_base_url_and_staging_indexing(self):
         snapshot = json.loads(self.request("/api/content.json")[2])
         base = snapshot["site"]["url"]
         if self.expected_base_url is not None:
@@ -341,9 +341,9 @@ class ServingTests(unittest.TestCase):
         site = json.loads(self.request("/api/content.json")[2])["site"]["url"]
         self.assertEqual(any(line.startswith("Sitemap:") for line in lines), site == "https://vvivid.dev/")
 
-    def test_runtime_preview_noindex_and_www_redirect(self):
+    def test_runtime_staging_noindex_and_www_redirect(self):
         for path in ("/", "/about/", "/about/index.md", "/robots.txt", "/api/content.json", "/missing/", "/images/site-cover.jpg"):
-            for host in ("preview.vvivid.dev", "preview.example", "unconfigured.example"):
+            for host in ("stage.vvivid.dev", "preview.vvivid.dev", "preview.example", "unconfigured.example"):
                 with self.subTest(path=path, host=host):
                     _, headers, _ = self.request(path, headers={"Host": host})
                     self.assertEqual(headers["x-robots-tag"], "noindex, follow")

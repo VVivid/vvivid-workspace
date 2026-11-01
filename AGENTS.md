@@ -23,7 +23,7 @@
 
 ## Website preview requests
 
-For a `vvivid.dev` preview, follow the [website release instructions](vvivid.dev/AGENTS.md#preview-requests) and [Fleet/Helm publication contract](vvivid.dev/deploy/gitops/README.md). `release/vvivid.dev/X.Y.Z` prepares staging at `https://preview.vvivid.dev/`; `vvivid.dev/vX.Y.Z` prepares production. `main` only checks. Publication and cutover require separate authorization and activation.
+For a `vvivid.dev` preview, follow the [website release instructions](vvivid.dev/AGENTS.md#preview-requests) and [Fleet/Helm publication contract](vvivid.dev/deploy/gitops/README.md). `release/vvivid.dev/X.Y.Z` prepares staging at `https://stage.vvivid.dev/`; `vvivid.dev/vX.Y.Z` prepares production. `main` only checks. Publication and cutover require separate authorization and activation.
 
 ## Shared rules
 

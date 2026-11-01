@@ -11,7 +11,7 @@
         "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       }
     },
-    "hostname": {"enum": ["preview.vvivid.dev", "vvivid.dev"]},
+    "hostname": {"enum": ["stage.vvivid.dev", "vvivid.dev"]},
     "provenance": {
       "type": "object",
       "required": ["sourceSha"],

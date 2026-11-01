@@ -8,7 +8,7 @@ or a website migration. The existing services remain available during preparatio
 | --- | --- | --- |
 | Pull request | Read-only native, policy, chart and real serving checks | Both URLs |
 | `main` push | Checks only | Both URLs |
-| `release/vvivid.dev/X.Y.Z` branch | Zot image alias `release-X.Y.Z`; staging desired state | `https://preview.vvivid.dev/` |
+| `release/vvivid.dev/X.Y.Z` branch | Zot image alias `release-X.Y.Z`; staging desired state | `https://stage.vvivid.dev/` |
 | `vvivid.dev/vX.Y.Z` annotated version tag | Zot image `X.Y.Z`; production desired state | `https://vvivid.dev/` |
 
 Versions use canonical numeric SemVer without prerelease/build suffixes. The old
@@ -26,7 +26,7 @@ versions are `X.Y.Z`. Charts publish as OCI artifacts at
 `oci://registry.lab.vvivid.dev/products/charts/vvivid-website`.
 
 The workflow checks both native output and the actual Linux amd64 nginx image
-before publishing. Runtime image and actions are pinned by digest/SHA. Preview
+before publishing. Runtime image and actions are pinned by digest/SHA. Staging
 uses its own build URL, noindex metadata/headers and empty sitemap; CI never
 submits IndexNow URLs. The image smoke check uses the Helm security settings.
 
@@ -72,8 +72,9 @@ Activation is separate authorized work. Keep the repository variable
 `WEBSITE_GITOPS_ENABLED` unset/false until the private GitOps main branch and
 reviewed configuration are published and all prerequisites are ready. Before
 enabling it, configure one protected GitHub environment `artifact-publication`
-for approved `release/vvivid.dev/*` branches and `vvivid.dev/v*` tags, with the
-required reviewers/release controls. Do not allow arbitrary branches into it.
+with the required reviewers/release controls. For staging-only activation, allow
+only approved `release/vvivid.dev/*` branches. Add `vvivid.dev/v*` tags only under
+later production authorization. Do not allow arbitrary branches into it.
 
 | Environment configuration | Purpose |
 | --- | --- |
@@ -114,7 +115,10 @@ pushes** at activation; local plan approval does not grant that authorization.
 The private homelab repository owns `clusters/personal-prod-2/gitrepo.yaml`,
 namespace/certificate preparation, Fleet read credentials and staged host cutover.
 Its bootstrap stays paused, desired versions/digests stay `UNCONFIGURED`, and no
-existing manual services are adopted. Downstream image-pull, Fleet Helm-read and
+existing manual services are adopted during preparation. Staging activation selects
+only `foundation/staging` and `staging`, serving `https://stage.vvivid.dev/` in
+`website-staging`. The production foundation/bundle remain unenrolled until a
+separate production request. Downstream image-pull, Fleet Helm-read and
 Git-read credentials are separate from the CI publishing/App credentials.
 
 ## Local checks
@@ -126,8 +130,8 @@ make -C vvivid.dev check chart-test
 docker build --platform linux/amd64 -t vvivid-website:production ./vvivid.dev
 ./vvivid.dev/scripts/smoke-image.sh vvivid-website:production https://vvivid.dev/
 docker build --platform linux/amd64 -t vvivid-website:staging \
-  --build-arg HUGO_BASEURL=https://preview.vvivid.dev/ ./vvivid.dev
-./vvivid.dev/scripts/smoke-image.sh vvivid-website:staging https://preview.vvivid.dev/
+  --build-arg HUGO_BASEURL=https://stage.vvivid.dev/ ./vvivid.dev
+./vvivid.dev/scripts/smoke-image.sh vvivid-website:staging https://stage.vvivid.dev/
 ```
 
 Promotion tests use temporary local bare repositories, including concurrent
