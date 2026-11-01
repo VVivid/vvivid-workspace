@@ -4,7 +4,7 @@ Ou David's personal website, built with Hugo Extended. This project owns its con
 
 ## Native build and preview
 
-Install Make, a POSIX shell, Python 3, Bash for deployment workflow tests, and **Hugo Extended 0.162.1**, the version recorded in [.hugo-version](.hugo-version). No Node or Go installation is needed. Download the matching Extended archive for your platform from the [official release](https://github.com/gohugoio/hugo/releases/tag/v0.162.1) and verify its published checksum.
+Install Make, a POSIX shell, Python 3, Bash and Helm 4.3.1 for chart checks, and **Hugo Extended 0.162.1**, the version recorded in [.hugo-version](.hugo-version). No Node or Go installation is needed. Download the matching Extended archive for your platform from the [official release](https://github.com/gohugoio/hugo/releases/tag/v0.162.1) and verify its published checksum.
 
 For Linux amd64, a temporary installation can be used without changing system tools:
 
@@ -19,7 +19,7 @@ tar -xzf "$site_hugo_dir/hugo.tar.gz" -C "$site_hugo_dir"
 HUGO="$site_hugo_dir/hugo" make -C vvivid.dev check
 ```
 
-Use `make website-check`, `make website-test`, or `make website-build` at the repository root, or `make check`, `make test`, or `make build` inside this directory. All three project targets render the production site through [scripts/build.sh](scripts/build.sh). Check and test also run the [deployment tests](deploy/live/README.md#local-checks) with fake Docker/HTTP/GitHub commands; no remote service is contacted. Build remains a render-only target. The build script requires the pinned Extended version, minifies output, and fails if any case variant of `AGENTS.md` or `AGENT.md` reaches the output. Generated `public/` and `resources/` directories are ignored by Git.
+Use `make website-check`, `make website-test`, or `make website-build` at the repository root, or `make check`, `make test`, or `make build` inside this directory. All three project targets render the production site through [scripts/build.sh](scripts/build.sh). Check and test also run the [release/promotion tests](deploy/gitops/README.md#local-checks), including real temporary local Git races; no external service is changed. Build remains a render-only target. The build script requires the pinned Extended version, minifies output, and fails if any case variant of `AGENTS.md` or `AGENT.md` reaches the output. Generated `public/` and `resources/` directories are ignored by Git.
 
 Set `HUGO=/absolute/path/to/hugo` when the binary is outside `PATH`. `HUGO_DESTINATION` changes the output directory; relative paths are resolved from `vvivid.dev/`. `HUGO_BASEURL` overrides the production default of `https://vvivid.dev/`.
 
@@ -44,13 +44,7 @@ docker run --rm --publish 127.0.0.1:8080:80 vvivid-website:local
 
 Open [localhost:8080](http://localhost:8080/). The [Dockerfile](Dockerfile) builds with a Hugo image pinned by version and digest, runs the same production build script, and serves the generated site with nginx. Omit `--build-arg HUGO_BASEURL=...` to build with the production URL. This local command uses Docker's default network and requires no external Traefik network. The nginx configuration blocks agent-guide filenames at every URL depth.
 
-The [live GitHub workflow](../.github/workflows/website.yml) builds and smoke-checks the complete Docker image on site or workflow changes. Pull requests have read-only repository permissions. Matching pushes to `main` publish an immutable image to GHCR and deploy only live through restricted SSH over Tailscale after the [one-time setup](deploy/live/README.md). The deployment job uses the `vvivid-live` GitHub environment, serializes updates, verifies the exact running image and local/public HTTP health, and restores the previous live image on failure. The separate
-[preview workflow](../.github/workflows/website-preview.yml) checks the preview
-image on pull requests and deploys only exact `release/vvivid-preview` pushes to
-`preview.vvivid.dev`, using its own URL, `preview-sha-<commit>` image tags,
-`vvivid-preview` environment, and restricted identity. Both helpers serialize
-shared `.env` writes; see the [preview runbook](deploy/preview/README.md) for
-installation and migration of the existing service.
+The [website workflow](../.github/workflows/website.yml) checks both base URLs on PRs and main pushes. Only canonical staging release branches and production version tags can publish, after explicit activation. It publishes checked Linux amd64 images and versioned Helm OCI charts to private Zot, then records exact digests/provenance in the private GitOps repository. See the [release contract](deploy/gitops/README.md). Existing live/preview hosting stays unchanged until the individual host cutovers.
 
 The official `nginx:alpine` image includes the njs module used by
 [nginx/representations.js](nginx/representations.js) to parse HTTP `Accept`
@@ -68,7 +62,7 @@ After building the image, run the real HTTP checks locally:
 This needs Docker, curl, and Python 3. It starts a temporary container on an
 automatically assigned loopback port, checks the nginx configuration, runs
 [scripts/test-serving.py](scripts/test-serving.py), and removes the container.
-Both website workflows call this same entry point. An optional second argument
+CI calls this same entry point for both base URLs. It uses the chart runtime settings: UID/GID101, a read-only root, dropped capabilities, no privilege escalation and writable temporary/cache mounts. An optional second argument
 asserts the build base URL; each workflow passes its own public URL. It checks
 HTML/Markdown,
 Accept quality values and exclusions, HEAD, conditional requests, redirects,
@@ -160,9 +154,7 @@ empty sitemap. nginx adds a noindex header on every nonproduction host.
 
 The [search operations runbook](deploy/seo/README.md) provides narrow, reviewable
 Cloudflare rules for the already running preview and `www`, plus router/TLS and
-robots-cache checks. These require separate activation. The live GitHub workflow
-changes only live; preview images are rebuilt by the separate exact-branch
-workflow after its own activation.
+robots-cache checks. These require separate activation. Release branches build preview artifacts with preview URLs; version tags build production artifacts after separate activation.
 
 The site hosts no MCP server, account system, write endpoint, OAuth authorization
 server, token endpoint, or client registration. Articles and project links can
@@ -212,11 +204,6 @@ they do not establish the live CDN configuration or activate these resources.
 
 ## Deployment
 
-The [live deployment runbook](deploy/live/README.md) owns GitHub/Tailscale setup, restricted server installation, the live-only Compose change, cutover, and rollback. Deployment activation is a separate operational step; local builds do not change external services. The [preview deployment runbook](deploy/preview/README.md) owns separate
-`release/vvivid-preview` activation and shared-lock migration; `main` remains
-live. Preview branch creation/publication and service cutover are separate
-operational actions.
+The [Fleet/Helm publication contract](deploy/gitops/README.md) describes release branches, version tags, pinned artifacts and the private GitOps update. The private homelab repository owns cluster bootstrap, DNS-01, per-environment activation and recovery. `main` has no production deployment trigger.
 
-The archived GitLab pipeline is retained under [deploy/legacy/](deploy/legacy/README.md), outside the active CI filename. Its registry, external `/infra/compose.yml`, preview/live services, Traefik configuration, and credentials were not migrated.
-
-The root [docker-compose.yml](docker-compose.yml), [cleanup script](scripts/cleanup-vvivid-images.sh), and [live-tag script](scripts/persist-vvivid-live-tag.sh) remain operational references to that infrastructure. Invoking them can change external services, images, or environment files. The Make targets and GitHub workflow do not run these legacy operations. Source import and local builds do not establish a live deployment.
+The [SSH live](deploy/live/README.md), [SSH preview](deploy/preview/README.md), [GitLab](deploy/legacy/README.md), project-root [Compose](docker-compose.yml), [cleanup script](scripts/cleanup-vvivid-images.sh) and [live-tag script](scripts/persist-vvivid-live-tag.sh) remain archived operational references. Invoking those helpers can change external services; active Make/CI targets do not invoke them. Local source preparation does not establish a migration or a live deployment.

@@ -1,0 +1,7 @@
+apiVersion: v2
+name: vvivid-website
+description: Digest-pinned static website with public Traefik HTTPS and DNS-01 certificates
+type: application
+# Packaging replaces both fields; this source version is never a release.
+version: 0.0.0
+appVersion: UNCONFIGURED
