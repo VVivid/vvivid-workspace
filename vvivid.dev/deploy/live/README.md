@@ -1,8 +1,13 @@
-# GitHub live deployment
+# Archived SSH live procedure
 
 > **Anonymized example:** Personal host addresses, account paths, private chat/page references and session identifiers in this document use fictional example values. Operational narratives illustrate the procedure; they are not an inventory of a current deployment or evidence that an example command was executed. Resolve real values from private operator configuration before use. Public product endpoints and versioned software contracts retain their documented meanings.
 
-The [website workflow](../../../.github/workflows/website.yml) builds the complete
+This is a historical recovery reference for the existing service. The active [Fleet/Helm contract](../gitops/README.md) replaces automatic SSH deployment. `main` and `release/vvivid-preview` no longer trigger this procedure. Do not use the setup below to activate a new CI identity or deployment. Local legacy helper tests remain available as `make -C vvivid.dev legacy-deployment-test`.
+
+The historical procedure below describes the previous infrastructure; verify live ownership before any separately authorized recovery action.
+
+
+The `former website workflow` builds the complete
 Linux amd64 Hugo/nginx image, checks its HTTP responses and guide exclusion, and
 publishes `ghcr.io/vvivid/vvivid-website:sha-<commit>` with `GITHUB_TOKEN`.
 Deployment uses the registry's immutable `sha256` digest, not the tag. Pushes to

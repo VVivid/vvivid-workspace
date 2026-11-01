@@ -1,7 +1,6 @@
 # vvivid.dev agent guidance
 
-Follow the [root instructions](../AGENTS.md) and shared workflow. This project owns the Hugo site, content, layout overrides, static assets, and its vendored theme. The original archive's GitLab deployment is retained only as [legacy reference](deploy/legacy/gitlab-ci.yml); it is not an active repository workflow. GitHub live deployment setup and recovery are documented in the [live runbook](deploy/live/README.md); the separate [preview runbook](deploy/preview/README.md) covers only
-`release/vvivid-preview` and its shared-lock migration. `main` remains live.
+Follow the [root instructions](../AGENTS.md) and shared workflow. This project owns the Hugo site, chart and release helpers. The [Fleet/Helm publication contract](deploy/gitops/README.md) owns active CI. The old [SSH live](deploy/live/README.md), [SSH preview](deploy/preview/README.md) and [GitLab](deploy/legacy/README.md) procedures are archived recovery references; do not activate them from this guide.
 
 ## Content and author
 
@@ -17,15 +16,13 @@ Theme runtime files are vendored under `themes/hugo-blog-awesome/`; [upstream pr
 
 ## Preview requests
 
-When the user asks for a website preview, use the exact deployment branch `release/vvivid-preview` and URL `https://preview.vvivid.dev/`. Other `release/vvivid-*` branches and a branch named `preview` do not deploy. `main` continues to deploy live at `https://vvivid.dev/`; a preview request does not promote changes to live.
+Use a user-selected canonical version branch `release/vvivid.dev/X.Y.Z` for staging at `https://stage.vvivid.dev/`. Production uses an immutable annotated `vvivid.dev/vX.Y.Z` tag at a verified merged commit. Main checks only; the former `release/vvivid-preview` branch has no workflow.
 
-Read the [preview runbook](deploy/preview/README.md) before publishing a preview. Before the first release-branch push, verify that the workflow is included in the selected source and the one-time GitHub environment, Tailscale, restricted server helper, shared-lock migration, routing, and legacy GitLab cutover are ready. Creating a branch alone does not install these prerequisites.
+Read the [publication contract](deploy/gitops/README.md) before preparing a release. Source publication, registry publication, CI-to-GitOps writes and host cutover each require the applicable authorization. Preserve an existing release branch and use normal merge/fast-forward updates; never reset or force-push it. Keep staging noindex and never submit staging URLs to IndexNow.
 
-When creating or replacing an OIDC credential, query the repository's actual `sub_claim_prefix` as documented in the runbook. This repository uses immutable owner/repository IDs in the subject; a name-only subject causes Tailscale authentication to fail.
+Reuse the monorepo shared artifact-publication environment and one existing Tailscale GitHub OIDC CI trust. At activation, query the repository's actual `sub_claim_prefix` and update that existing trust's exact environment subject once. Do not create per-project identities or use operator/developer credentials.
 
-Prepare and validate requested changes in the task's dedicated worktree through the shared development workflow. Identify the source commit the user wants to preview. Inspect any existing `release/vvivid-preview` branch before updating it; preserve its work and use a normal merge or fast-forward rather than resetting or force-pushing. Remote creation or updates require explicit push permission covering `origin` and `release/vvivid-preview`, unless that authorization was already supplied. Publishing a task branch or merging a PR into `main` does not update the preview branch automatically.
-
-Each push to `release/vvivid-preview` runs the [preview workflow](../.github/workflows/website-preview.yml), builds with `HUGO_BASEURL=https://preview.vvivid.dev/`, and deploys a checked immutable digest to only `vvivid-preview`. Preview remains publicly readable with `noindex`; do not submit preview URLs to IndexNow. After an authorized push, inspect the workflow result and verify the exact running image, local/public preview health, indexing exclusion, and unchanged live service as described in the runbook. Report the preview URL and actual deployment result; a successful branch push alone is not deployment success.
+After activation, distinguish successful artifact publication, a GitOps commit, Fleet readiness and actual public HTTP acceptance. The homelab runbook owns staged DNS-01 validation and later individual host cutovers. Preparing chart/manifests never migrates a running website.
 
 ## Public output and operations
 
@@ -33,4 +30,4 @@ Keep this file and agent-only notes outside `content/`, `static/`, and `assets/`
 
 Public examples and links must use public hostnames. Never expose internal VPN addresses, private IPs, `sslip.io`, or registry hostnames in published content. Preserve existing public `gitlab.vvivid.dev` references unless an authorized content change replaces them.
 
-Legacy operational scripts and the project-root Compose configuration are imported references to the former infrastructure. The live deployment helper has its own fixed server scope in the live runbook. Building the site does not authorize running those operations or deploying it.
+Legacy operational scripts and the project-root Compose configuration are imported references to the former infrastructure. The archived SSH deployment helper retains its fixed server scope in the archived live runbook. Building the site does not authorize running those operations or deploying it.

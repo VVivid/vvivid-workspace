@@ -134,7 +134,7 @@ class GeneratedContentTests(unittest.TestCase):
                 'link: "https://example.com/fixture"\nthumbnail: false\n---\n\n'
                 'A listing fixture.\n', encoding="utf-8")
         cls.outputs = {}
-        for name, base in (("production", "https://vvivid.dev/"), ("preview", "https://preview.vvivid.dev/")):
+        for name, base in (("production", "https://vvivid.dev/"), ("staging", "https://stage.vvivid.dev/")):
             output = Path(cls.temporary.name) / name
             environment = dict(os.environ, HUGO_BASEURL=base, HUGO_DESTINATION=str(output))
             built = subprocess.run(["./scripts/build.sh"], cwd=cls.site, env=environment,
@@ -150,16 +150,16 @@ class GeneratedContentTests(unittest.TestCase):
         return [node.text for node in ET.fromstring(self.read("sitemap.xml", build)).findall("{*}url/{*}loc")]
 
     def test_published_snapshot_and_skill_integrity(self):
-        content = json.loads(self.read("api/content.json", "preview"))
+        content = json.loads(self.read("api/content.json", "staging"))
         self.assertEqual(content["count"], len(content["items"]))
         fixture = next(item for item in content["items"] if item["title"] == "Fixture published")
         self.assertEqual(fixture["description"], "Quoted metadata: café & tests")
         self.assertEqual(fixture["tags"], ["fixture"])
         self.assertEqual(fixture["published_at"], "2002-01-01T00:00:00Z")
         self.assertEqual(fixture["modified_at"], "2003-01-01T00:00:00Z")
-        self.assertEqual(fixture["url"], "https://preview.vvivid.dev/posts/fixture-published/")
+        self.assertEqual(fixture["url"], "https://stage.vvivid.dev/posts/fixture-published/")
         markdown = urlsplit(fixture["markdown_url"]).path.lstrip("/")
-        self.assertIn('```go\nfmt.Println("fixture")\n```', self.read(markdown, "preview"))
+        self.assertIn('```go\nfmt.Println("fixture")\n```', self.read(markdown, "staging"))
         about = next(item for item in content["items"] if urlsplit(item["url"]).path == "/about/")
         self.assertNotIn("published_at", about)
         self.assertNotIn("modified_at", about)
@@ -177,10 +177,10 @@ class GeneratedContentTests(unittest.TestCase):
             self.assertTrue(artifact.startswith(f'---\nname: {skill["name"]}\n'.encode()))
             self.assertIn(f'description: {skill["description"]}\n'.encode(), artifact)
             self.assertFalse(any(path.name.lower() in ("agent.md", "agents.md") for path in self.outputs[build].rglob("*")))
-        catalog = json.loads(self.read(".well-known/api-catalog", "preview"))
-        self.assertEqual(catalog["linkset"][0]["anchor"], "https://preview.vvivid.dev/api/content.json")
-        specification = json.loads(self.read("api/openapi.json", "preview"))
-        self.assertEqual(specification["servers"], [{"url": "https://preview.vvivid.dev"}])
+        catalog = json.loads(self.read(".well-known/api-catalog", "staging"))
+        self.assertEqual(catalog["linkset"][0]["anchor"], "https://stage.vvivid.dev/api/content.json")
+        specification = json.loads(self.read("api/openapi.json", "staging"))
+        self.assertEqual(specification["servers"], [{"url": "https://stage.vvivid.dev"}])
 
     def test_only_indexable_canonical_pages_are_in_production_sitemap(self):
         urls = self.sitemap()
@@ -199,18 +199,18 @@ class GeneratedContentTests(unittest.TestCase):
             self.assertEqual(Metadata(self.read(path + "index.html")).meta["robots"], "noindex, follow")
         self.assertEqual(Metadata(self.read("404.html")).meta["robots"], "noindex, follow")
 
-    def test_preview_never_advertises_indexable_or_production_pages(self):
-        self.assertEqual(self.sitemap("preview"), [])
-        robots = self.read("robots.txt", "preview")
+    def test_staging_never_advertises_indexable_or_production_pages(self):
+        self.assertEqual(self.sitemap("staging"), [])
+        robots = self.read("robots.txt", "staging")
         self.assertIn("Allow: /", robots)
         self.assertNotIn("Disallow:", robots)
         self.assertNotIn("Sitemap:", robots)
         self.assertIn("Content-Signal: search=yes, ai-input=yes, ai-train=yes", robots)
-        for file in self.outputs["preview"].rglob("*.html"):
+        for file in self.outputs["staging"].rglob("*.html"):
             page = Metadata(file.read_text())
             self.assertEqual(page.meta["robots"], "noindex, follow", str(file))
             canonicals = [link["href"] for link in page.links if link.get("rel") == "canonical"]
-            self.assertTrue(all(url.startswith("https://preview.vvivid.dev/") for url in canonicals))
+            self.assertTrue(all(url.startswith("https://stage.vvivid.dev/") for url in canonicals))
 
     def test_author_profile_dates_and_visible_article_structure(self):
         about = Metadata(self.read("about/index.html"))

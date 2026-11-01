@@ -63,8 +63,9 @@ class IndexNowTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             indexnow.build_payload(self.public, self.key)
 
-    def test_preview_and_noncanonical_hosts_are_rejected(self):
-        for url in ("https://preview.vvivid.dev/posts/example/", "https://www.vvivid.dev/posts/example/",
+    def test_staging_and_noncanonical_hosts_are_rejected(self):
+        for url in ("https://stage.vvivid.dev/posts/example/", "https://preview.vvivid.dev/posts/example/",
+                    "https://www.vvivid.dev/posts/example/",
                     "http://vvivid.dev/posts/example/", "https://vvivid.dev:443/posts/example/",
                     "https://vvivid.dev/posts/example/?preview=true", "https://vvivid.dev/posts/example/#intro",
                     "https://vvivid.dev/a/../posts/example/", "https://vvivid.dev/%2e%2e/", "https://vvivid.dev//posts/example/"):
@@ -77,6 +78,7 @@ class IndexNowTests(unittest.TestCase):
 
     def test_noindex_or_wrong_canonical_cannot_be_submitted(self):
         for canonical, robots in ((self.url, "noindex, follow"), (self.url, "none"),
+                                  ("https://stage.vvivid.dev/posts/example/", ""),
                                   ("https://preview.vvivid.dev/posts/example/", "")):
             with self.subTest(canonical=canonical, robots=robots), self.assertRaises(ValueError):
                 self.write_page(canonical, robots)
@@ -85,7 +87,8 @@ class IndexNowTests(unittest.TestCase):
     def test_selection_is_limited_to_eligible_sitemap_pages(self):
         result = indexnow.build_payload(self.public, self.key, [self.url, self.url])
         self.assertEqual(result["urlList"], [self.url])
-        for selection in ([], ["https://vvivid.dev/tags/thin/"], ["https://preview.vvivid.dev/"]):
+        for selection in ([], ["https://vvivid.dev/tags/thin/"], ["https://stage.vvivid.dev/"],
+                          ["https://preview.vvivid.dev/"]):
             with self.subTest(selection=selection), self.assertRaises(ValueError):
                 indexnow.build_payload(self.public, self.key, selection)
 
@@ -101,6 +104,7 @@ class IndexNowTests(unittest.TestCase):
         self.assertEqual(sent.method, "POST")
         self.assertEqual(json.loads(sent.data), payload)
         for body, url in ((b"wrong-key", payload["keyLocation"]),
+                          (self.key.encode(), "https://stage.vvivid.dev/key.txt"),
                           (self.key.encode(), "https://preview.vvivid.dev/key.txt")):
             with self.subTest(body=body, url=url), \
                     patch.object(indexnow.request, "urlopen", return_value=Response(body, url=url)) as http, \
