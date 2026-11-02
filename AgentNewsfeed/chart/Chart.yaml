@@ -1,0 +1,6 @@
+apiVersion: v2
+name: agent-newsfeed
+description: Private reading feed with direct browser OIDC and private gateway MCP
+version: 0.1.0
+appVersion: 0.1.0
+type: application

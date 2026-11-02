@@ -1,6 +1,8 @@
-.PHONY: check test race build fmt run frontend-check frontend-test frontend-build container-build container-test compose-check
+.PHONY: check test race build fmt run frontend-check frontend-test frontend-build container-build container-test compose-check chart-test
 
 .DEFAULT_GOAL := check
+
+PYTHON ?= python3
 
 VERSION ?= dev
 COMMIT ?= unknown
@@ -52,3 +54,7 @@ container-test:
 
 compose-check:
 	sh scripts/test-compose.sh
+
+# Requires Helm and the isolated check dependencies in deploy/gitops/requirements.txt.
+chart-test:
+	$(PYTHON) -m unittest discover -s deploy/gitops -p 'test_*.py'
