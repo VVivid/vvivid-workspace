@@ -1,0 +1,37 @@
+# Unpublished defaults intentionally fail schema validation until a release is selected.
+image:
+  repository: registry.lab.vvivid.dev/products/agent-newsfeed
+  digest: UNCONFIGURED
+imagePullSecrets:
+  - name: rd-registry-pull
+hostname: newsfeed.vvivid.dev
+# Quiesce the single SQLite writer through desired state for offline maintenance.
+maintenance: false
+existingServiceAccountName: rd-workload
+identity:
+  issuer: https://auth.rd.vvivid.dev/realms/vvivid-rd
+  webClientID: newsfeed-web
+  existingSecret: agent-newsfeed-identity
+  gatewayIssuer: https://mcp.rd.lab.vvivid.dev
+  gatewayAudience: agent-newsfeed-mcp
+  mcpClientIDs: newsfeed-chatgpt
+  existingGatewayJWKS: rd-gateway-public-jwks
+thumbnailHosts: ''
+persistence:
+  claimName: agent-newsfeed-data
+  storageClassName: rd-local-retain
+  size: 5Gi
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {cpu: 500m, memory: 512Mi}
+# This pinned image supplies only sh/cp for nonroot init, matching the existing gateway.
+initImage: docker.io/library/postgres:17-bookworm@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
+ingress:
+  enabled: false
+tls:
+  productionEnabled: false
+  stagingIssuer: letsencrypt-staging
+  productionIssuer: letsencrypt-production
+  privateSecretName: tls-rd-edge
+provenance:
+  sourceSha: UNCONFIGURED
