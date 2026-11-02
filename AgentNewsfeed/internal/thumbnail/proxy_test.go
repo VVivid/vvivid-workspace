@@ -19,19 +19,30 @@ import (
 )
 
 type fakeResolver struct {
-	addresses []netip.Addr
-	calls     int
+	addresses  []netip.Addr
+	afterFirst []netip.Addr
+	calls      int
 }
 
 func (r *fakeResolver) LookupNetIP(context.Context, string, string) ([]netip.Addr, error) {
 	r.calls++
+	if r.calls > 1 && r.afterFirst != nil {
+		return r.afterFirst, nil
+	}
 	return r.addresses, nil
 }
 
 func TestThumbnailPolicyAndPublicAddresses(t *testing.T) {
 	empty, _ := NewPolicy("")
-	if empty.Validate("https://example.com/p.png") == nil {
-		t.Fatal("empty allowlist permitted image")
+	for _, raw := range []string{"https://example.com/p.png", "https://images.publisher.example/source.jpg", "https://Images.Publisher.Example/source.jpg"} {
+		if empty.Validate(raw) != nil {
+			t.Fatalf("default policy rejected a public HTTPS image %q", raw)
+		}
+	}
+	for _, raw := range []string{"http://example.com/image.png", "https://localhost/a", "https://host.internal/a", "https://127.0.0.1/a", "https://0x7f.0.0.1/a", "https://[::1]/a", "https://user:pass@example.com/a", "https://example.com:443/a", "https://example.com/a\u00a0b", "https://example.com/a\x00b"} {
+		if empty.Validate(raw) == nil {
+			t.Fatalf("default policy accepted unsafe image %q", raw)
+		}
 	}
 	p, err := NewPolicy("images.example.com")
 	if err != nil {
@@ -58,7 +69,7 @@ func TestThumbnailPolicyAndPublicAddresses(t *testing.T) {
 }
 
 func TestRejectPrivateOrMixedDNSBeforeDial(t *testing.T) {
-	policy, _ := NewPolicy("example.com")
+	policy, _ := NewPolicy("")
 	for _, addresses := range [][]netip.Addr{{netip.MustParseAddr("169.254.169.254")}, {netip.MustParseAddr("93.184.216.34"), netip.MustParseAddr("10.0.0.1")}, {netip.MustParseAddr("::ffff:127.0.0.1")}, nil} {
 		p := NewProxy(policy)
 		p.resolver = &fakeResolver{addresses: addresses}
@@ -69,6 +80,36 @@ func TestRejectPrivateOrMixedDNSBeforeDial(t *testing.T) {
 		if _, err := p.Fetch(t.Context(), "https://example.com/photo.jpg"); err == nil {
 			t.Fatal("unsafe DNS accepted")
 		}
+	}
+}
+
+func TestDefaultPolicyAllowsPublicRedirectAndRechecksDNS(t *testing.T) {
+	for _, rebind := range []bool{false, true} {
+		t.Run(fmt.Sprintf("rebind=%v", rebind), func(t *testing.T) {
+			p, resolver, dials := testProxy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/start" {
+					http.Redirect(w, r, "https://cdn.example.com/final", http.StatusFound)
+					return
+				}
+				w.Header().Set("Content-Type", "image/png")
+				_, _ = w.Write(pngImage(t))
+			}))
+			p.policy = Policy{}
+			if rebind {
+				resolver.afterFirst = []netip.Addr{netip.MustParseAddr("10.0.0.1")}
+			}
+			_, err := p.Fetch(t.Context(), "https://example.com/start")
+			if rebind {
+				if err == nil || len(*dials) != 1 {
+					t.Fatalf("redirect DNS rebinding reached dial: %v %v", err, *dials)
+				}
+			} else if err != nil || len(*dials) != 2 {
+				t.Fatalf("public CDN redirect rejected: %v %v", err, *dials)
+			}
+			if resolver.calls != 2 {
+				t.Fatalf("redirect did not resolve each connection: %d", resolver.calls)
+			}
+		})
 	}
 }
 

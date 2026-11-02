@@ -83,7 +83,7 @@ func TestSeedPreflightsAllContentAndBoundsBeforeWriting(t *testing.T) {
 	for _, invalid := range []feed.AddInput{
 		{IdempotencyKey: "bad", Article: feed.Content{URL: "javascript:alert(1)", Title: "Bad", Summary: "Bad"}},
 		{IdempotencyKey: "bad", Article: feed.Content{URL: "https://example.com/other", Title: "", Summary: "Bad"}},
-		{IdempotencyKey: "bad", Article: feed.Content{URL: "https://example.com/other", Title: "Bad", Summary: "Bad", ThumbnailURL: "https://images.example.com/tracker.png"}},
+		{IdempotencyKey: "bad", Article: feed.Content{URL: "https://example.com/other", Title: "Bad", Summary: "Bad", ThumbnailURL: "https://127.0.0.1/tracker.png"}},
 		seedInput("seed-a"),
 	} {
 		path := seedFile(t, []feed.AddInput{seedInput("seed-a"), invalid})

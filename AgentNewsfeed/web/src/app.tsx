@@ -155,7 +155,7 @@ function Reader({ data, article }: { data: Bootstrap; article: Article }) {
         </header>
         <Separator />
         {article.content_markdown ? (
-          <ArticleMarkdown content={article.content_markdown} sourceURL={article.url} />
+          <ArticleMarkdown content={article.content_markdown} sourceURL={article.url} images={data.content_images} />
         ) : (
           <div className="reader-fallback">
             <h2>This story is waiting at the source.</h2>
