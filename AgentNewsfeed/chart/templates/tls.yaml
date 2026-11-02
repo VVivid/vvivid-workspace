@@ -1,0 +1,24 @@
+# Reference the existing namespace issuers; do not own shared ACME state.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Release.Name }}-staging
+spec:
+  secretName: {{ .Release.Name }}-tls-staging
+  dnsNames: [{{ .Values.hostname | quote }}]
+  issuerRef:
+    name: {{ .Values.tls.stagingIssuer }}
+    kind: Issuer
+{{- if .Values.tls.productionEnabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  secretName: {{ .Release.Name }}-tls
+  dnsNames: [{{ .Values.hostname | quote }}]
+  issuerRef:
+    name: {{ .Values.tls.productionIssuer }}
+    kind: Issuer
+{{- end }}

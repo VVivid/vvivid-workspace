@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "newsfeed.labels" . | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traefik
+              app.kubernetes.io/instance: traefik-kube-system
+      ports: [{protocol: TCP, port: 8091}]
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: rd-gateway
+      ports: [{protocol: TCP, port: 8091}]

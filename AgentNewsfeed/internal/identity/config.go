@@ -32,6 +32,9 @@ type Config struct {
 	MCPAudience     string
 	MCPClientIDs    []string
 	Keys            *Keyring
+	MCPAuthMode     string
+	GatewayIssuer   string
+	GatewayJWKSFile string
 }
 
 // LoadConfig leaves the public shell available when the entire identity bundle
@@ -47,9 +50,15 @@ func LoadConfig(lookup func(string) (string, bool)) (*Config, error) {
 		"NEWSFEED_MCP_CLIENT_IDS",
 		"NEWSFEED_SESSION_KEYS_FILE",
 	}
+	optional := []string{"NEWSFEED_MCP_AUTH_MODE", "NEWSFEED_MCP_GATEWAY_ISSUER", "NEWSFEED_MCP_GATEWAY_JWKS_FILE"}
 	values := make(map[string]string)
 	configured := false
 	for _, name := range names {
+		value, present := lookup(name)
+		configured = configured || present
+		values[name] = value
+	}
+	for _, name := range optional {
 		value, present := lookup(name)
 		configured = configured || present
 		values[name] = value
@@ -63,12 +72,15 @@ func LoadConfig(lookup func(string) (string, bool)) (*Config, error) {
 		}
 	}
 	cfg := &Config{
-		Origin:       values["NEWSFEED_ORIGIN"],
-		Issuer:       values["NEWSFEED_OIDC_ISSUER"],
-		WebClientID:  values["NEWSFEED_WEB_CLIENT_ID"],
-		APIAudience:  values["NEWSFEED_API_AUDIENCE"],
-		MCPAudience:  values["NEWSFEED_MCP_AUDIENCE"],
-		MCPClientIDs: strings.Split(values["NEWSFEED_MCP_CLIENT_IDS"], ","),
+		Origin:          values["NEWSFEED_ORIGIN"],
+		MCPAuthMode:     values["NEWSFEED_MCP_AUTH_MODE"],
+		GatewayIssuer:   values["NEWSFEED_MCP_GATEWAY_ISSUER"],
+		GatewayJWKSFile: values["NEWSFEED_MCP_GATEWAY_JWKS_FILE"],
+		Issuer:          values["NEWSFEED_OIDC_ISSUER"],
+		WebClientID:     values["NEWSFEED_WEB_CLIENT_ID"],
+		APIAudience:     values["NEWSFEED_API_AUDIENCE"],
+		MCPAudience:     values["NEWSFEED_MCP_AUDIENCE"],
+		MCPClientIDs:    strings.Split(values["NEWSFEED_MCP_CLIENT_IDS"], ","),
 	}
 	secret, err := readPrivateFile(values["NEWSFEED_WEB_CLIENT_SECRET_FILE"])
 	if err != nil {
@@ -94,8 +106,21 @@ func (cfg *Config) validate() error {
 	if _, err := secureURL(cfg.Issuer); err != nil {
 		return fmt.Errorf("NEWSFEED_OIDC_ISSUER must be an exact HTTPS issuer (HTTP loopback is allowed for local issuers)")
 	}
-	if cfg.APIAudience != cfg.Origin+"/api/v1" || cfg.MCPAudience != cfg.Origin+"/mcp" {
-		return fmt.Errorf("API and MCP audiences must be the exact origin plus /api/v1 and /mcp respectively")
+	if cfg.APIAudience != cfg.Origin+"/api/v1" {
+		return fmt.Errorf("API audience must be the exact origin plus /api/v1")
+	}
+	switch cfg.MCPAuthMode {
+	case "", "direct":
+		if cfg.MCPAudience != cfg.Origin+"/mcp" || cfg.GatewayIssuer != "" || cfg.GatewayJWKSFile != "" {
+			return fmt.Errorf("direct MCP requires the origin plus /mcp audience and no gateway settings")
+		}
+	case "gateway":
+		gateway, err := secureURL(cfg.GatewayIssuer)
+		if err != nil || gateway.Scheme != "https" || gateway.Path != "" || gateway.RawPath != "" || cfg.GatewayJWKSFile == "" || cfg.MCPAudience != "agent-newsfeed-mcp" {
+			return fmt.Errorf("gateway MCP requires an exact HTTPS gateway origin, pinned JWKS file and agent-newsfeed-mcp audience")
+		}
+	default:
+		return fmt.Errorf("NEWSFEED_MCP_AUTH_MODE must be direct or gateway")
 	}
 	if !validClient(cfg.WebClientID) || cfg.WebClientSecret == "" || len(cfg.WebClientSecret) > 4096 || cfg.Keys == nil {
 		return fmt.Errorf("identity requires a web client, private client secret and session keyring")
