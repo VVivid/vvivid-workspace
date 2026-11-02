@@ -26,4 +26,5 @@ export interface Bootstrap {
   sign_in_url: string
   page?: Page
   article?: Article
+  content_images?: Record<string, string>
 }

@@ -7,6 +7,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/google/jsonschema-go v0.4.3
 	github.com/modelcontextprotocol/go-sdk v1.8.0
+	github.com/yuin/goldmark v1.8.7
 	golang.org/x/oauth2 v0.37.0
 	modernc.org/sqlite v1.60.1
 )

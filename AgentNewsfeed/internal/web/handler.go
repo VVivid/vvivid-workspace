@@ -3,7 +3,9 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -29,11 +31,15 @@ var assets embed.FS
 type handler struct {
 	auth      *identity.Manager
 	service   *feed.Service
-	proxy     *thumbnail.Proxy
+	proxy     imageFetcher
 	templates *template.Template
 }
 
-func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, proxy *thumbnail.Proxy) (http.Handler, error) {
+type imageFetcher interface {
+	Fetch(context.Context, string) ([]byte, error)
+}
+
+func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, proxy imageFetcher) (http.Handler, error) {
 	templates, err := template.ParseFS(assets, "templates/*.gohtml")
 	if err != nil {
 		return nil, err
@@ -67,6 +73,7 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 		mux.Handle("POST /api/v1/articles/{id}/archive", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.archive(true)))
 		mux.Handle("POST /api/v1/articles/{id}/restore", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.archive(false)))
 		mux.Handle("GET /thumbnails/{id}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.image)))
+		mux.Handle("GET /thumbnails/{id}/content/{image}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.image)))
 		mux.Handle("/mcp", auth.BearerMiddleware(auth.MCPAudience(), nil, feedmcp.NewHandler(service, logger)))
 	} else {
 		mux.HandleFunc("/mcp", unconfigured)
@@ -106,15 +113,16 @@ func headers(next http.Handler, auth *identity.Manager) http.Handler {
 }
 
 type bootstrap struct {
-	Configured    bool            `json:"configured"`
-	Authenticated bool            `json:"authenticated"`
-	CanWrite      bool            `json:"can_write"`
-	CSRF          string          `json:"csrf"`
-	View          string          `json:"view"`
-	FromArchive   bool            `json:"from_archive"`
-	SignInURL     string          `json:"sign_in_url"`
-	Page          *feed.Page      `json:"page,omitempty"`
-	Article       *sqlite.Article `json:"article,omitempty"`
+	Configured    bool              `json:"configured"`
+	Authenticated bool              `json:"authenticated"`
+	CanWrite      bool              `json:"can_write"`
+	CSRF          string            `json:"csrf"`
+	View          string            `json:"view"`
+	FromArchive   bool              `json:"from_archive"`
+	SignInURL     string            `json:"sign_in_url"`
+	Page          *feed.Page        `json:"page,omitempty"`
+	Article       *sqlite.Article   `json:"article,omitempty"`
+	ContentImages map[string]string `json:"content_images,omitempty"`
 }
 
 func (h *handler) index(w http.ResponseWriter, r *http.Request) {
@@ -140,6 +148,7 @@ func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			data.Article = &a
+			data.ContentImages = contentImageRoutes(a)
 		} else {
 			page, err := h.service.ListArticles(r.Context(), p, feed.ListInput{Cursor: r.URL.Query().Get("cursor"), Archived: data.View == "archive"})
 			if err != nil {
@@ -219,17 +228,44 @@ func (h *handler) archive(archived bool) http.Handler {
 func (h *handler) image(w http.ResponseWriter, r *http.Request) {
 	p, _ := identity.FromContext(r.Context())
 	a, err := h.service.GetArticle(r.Context(), p, r.PathValue("id"))
-	if err != nil || a.ThumbnailURL == "" {
+	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	body, err := h.proxy.Fetch(r.Context(), a.ThumbnailURL)
+	imageURL := a.ThumbnailURL
+	if imageID := r.PathValue("image"); imageID != "" {
+		imageURL = ""
+		for _, candidate := range thumbnail.MarkdownImages(a.URL, a.ContentMarkdown) {
+			if contentImageID(candidate) == imageID {
+				imageURL = candidate
+				break
+			}
+		}
+	}
+	if imageURL == "" {
+		http.NotFound(w, r)
+		return
+	}
+	body, err := h.proxy.Fetch(r.Context(), imageURL)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", "image/jpeg")
 	_, _ = w.Write(body)
+}
+
+func contentImageID(imageURL string) string {
+	sum := sha256.Sum256([]byte(imageURL))
+	return hex.EncodeToString(sum[:])
+}
+
+func contentImageRoutes(article sqlite.Article) map[string]string {
+	routes := make(map[string]string)
+	for destination, imageURL := range thumbnail.MarkdownImages(article.URL, article.ContentMarkdown) {
+		routes[destination] = "/thumbnails/" + url.PathEscape(article.ID) + "/content/" + contentImageID(imageURL)
+	}
+	return routes
 }
 
 func writeError(w http.ResponseWriter, err error) {
