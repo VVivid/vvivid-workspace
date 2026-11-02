@@ -2,7 +2,12 @@ package web_test
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -113,10 +118,13 @@ func TestOfficialMCPAddListUpdateAndBrowserSharePrivateRecords(t *testing.T) {
 	if strings.Join(names, ",") != "add_article,list_articles,update_article" {
 		t.Fatalf("unexpected tools %v", names)
 	}
-	in := feed.AddInput{IdempotencyKey: "mcp-add", Article: feed.Content{URL: "https://example.com/story?utm_source=agent", Title: "An interesting story", Summary: "A concise, sourced introduction."}}
+	in := feed.AddInput{IdempotencyKey: "mcp-add", Article: feed.Content{URL: "https://example.com/story?utm_source=agent", Title: "An interesting story", Summary: "A concise, sourced introduction.", ThumbnailURL: "https://images.publisher.example/source.png"}}
 	first := decode[sqlite.MutationResult](t, call(t, c, "add_article", in))
 	if !first.Created {
 		t.Fatal("MCP did not create article")
+	}
+	if first.Article.ThumbnailURL != in.Article.ThumbnailURL {
+		t.Fatal("MCP did not preserve the supplied public HTTPS thumbnail")
 	}
 	if again := decode[sqlite.MutationResult](t, call(t, c, "add_article", in)); again != first {
 		t.Fatal("MCP replay changed original result")
@@ -126,9 +134,10 @@ func TestOfficialMCPAddListUpdateAndBrowserSharePrivateRecords(t *testing.T) {
 		t.Fatal("MCP list did not see write")
 	}
 	in.Article.Title = `<img src=x onerror=alert(1)>`
+	in.Article.ThumbnailURL = "https://another-publisher.example/replacement.png"
 	edit := feed.UpdateInput{IdempotencyKey: "mcp-edit", ArticleID: first.Article.ID, ExpectedRevision: 1, Article: in.Article}
 	updated := decode[sqlite.MutationResult](t, call(t, c, "update_article", edit))
-	if updated.Article.Revision != 2 {
+	if updated.Article.Revision != 2 || updated.Article.ThumbnailURL != in.Article.ThumbnailURL {
 		t.Fatal("revision not incremented")
 	}
 	stale := edit
@@ -270,7 +279,7 @@ func TestUnconfiguredShellFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/", "/archive", "/articles/anything", "/health/ready", "/mcp", "/api/v1/articles", "/auth/login", "/thumbnails/anything"} {
+	for _, path := range []string{"/", "/archive", "/articles/anything", "/health/ready", "/mcp", "/api/v1/articles", "/auth/login", "/thumbnails/anything", "/thumbnails/anything/content/image"} {
 		if out := request(h, "GET", path, nil, ""); out.Code != 503 {
 			t.Fatalf("unconfigured %s returned %d", path, out.Code)
 		}
@@ -280,6 +289,96 @@ func TestUnconfiguredShellFailsClosed(t *testing.T) {
 	}
 	if out := request(h, "GET", "/", nil, ""); out.Header().Get("Content-Type") != "text/html; charset=utf-8" {
 		t.Fatal("unconfigured shell content type lost")
+	}
+}
+
+type recordingImageFetcher struct {
+	urls []string
+	err  error
+}
+
+func (f *recordingImageFetcher) Fetch(_ context.Context, raw string) ([]byte, error) {
+	f.urls = append(f.urls, raw)
+	return []byte("sanitized-raster"), f.err
+}
+
+func TestOwnedPersistedMarkdownImagesUseProtectedRoutes(t *testing.T) {
+	f, s, _ := app(t)
+	fetcher := &recordingImageFetcher{}
+	h, err := web.New(slog.New(slog.NewTextHandler(io.Discard, nil)), f.Manager, s, fetcher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := f.Principal(t, "alice", allScopes)
+	content := feed.Content{URL: "https://publisher.example/articles/story", Title: "Source", Summary: "Source introduction", ThumbnailURL: "https://cdn.publisher.example/card.png", ContentMarkdown: "![Source image](../photo.png)\n\n![Again][source]\n\n[source]: ../photo.png\n\n![Private](https://127.0.0.1/private.png)\n\n[Link only](https://publisher.example/link-only.png)"}
+	article, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: "image-source", Article: content})
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, other := f.Cookie(t, "alice"), f.Cookie(t, "bob")
+	page := request(h, "GET", "/articles/"+article.Article.ID, owner, "")
+	_, after, ok := strings.Cut(page.Body.String(), `data-bootstrap="`)
+	encoded, _, closed := strings.Cut(after, `"`)
+	if page.Code != 200 || !ok || !closed {
+		t.Fatalf("reader bootstrap missing: %d", page.Code)
+	}
+	var bootstrap struct {
+		ContentImages map[string]string `json:"content_images"`
+	}
+	if err := json.Unmarshal([]byte(html.UnescapeString(encoded)), &bootstrap); err != nil {
+		t.Fatal(err)
+	}
+	path := bootstrap.ContentImages["../photo.png"]
+	if len(bootstrap.ContentImages) != 1 || !strings.HasPrefix(path, "/thumbnails/"+article.Article.ID+"/content/") || strings.Contains(path, "https:") {
+		t.Fatalf("image routes not bound to parsed saved images: %v", bootstrap.ContentImages)
+	}
+	if len(fetcher.urls) != 0 {
+		t.Fatal("reader render fetched source images")
+	}
+	for _, tc := range []struct {
+		cookie *http.Cookie
+		status int
+	}{
+		{nil, 401},
+		{other, 404},
+	} {
+		if response := request(h, "GET", path, tc.cookie, ""); response.Code != tc.status {
+			t.Fatalf("unauthorized image status %d, want %d", response.Code, tc.status)
+		}
+	}
+	if len(fetcher.urls) != 0 {
+		t.Fatal("unauthorized route fetched an image")
+	}
+	response := request(h, "GET", path+"?url=https://attacker.example/arbitrary.png", owner, "")
+	if response.Code != 200 || response.Header().Get("Content-Type") != "image/jpeg" || response.Header().Get("Cache-Control") != "no-store" || response.Body.String() != "sanitized-raster" || !slices.Equal(fetcher.urls, []string{"https://publisher.example/photo.png"}) {
+		t.Fatalf("persisted image fetch changed: %d %v", response.Code, fetcher.urls)
+	}
+	for _, raw := range []string{"https://127.0.0.1/private.png", "https://publisher.example/link-only.png", "https://attacker.example/arbitrary.png"} {
+		sum := sha256.Sum256([]byte(raw))
+		forged := "/thumbnails/" + article.Article.ID + "/content/" + hex.EncodeToString(sum[:])
+		if response := request(h, "GET", forged, owner, ""); response.Code != 404 {
+			t.Fatalf("non-image or unsafe destination authorized: %s %d", raw, response.Code)
+		}
+	}
+	if len(fetcher.urls) != 1 {
+		t.Fatal("forged image identifier reached fetch")
+	}
+	fetcher.err = errors.New("remote unavailable")
+	if response := request(h, "GET", path, owner, ""); response.Code != 404 {
+		t.Fatal("failed image fetch exposed an error response")
+	}
+	fetcher.err = nil
+	thumbnailPath := "/thumbnails/" + article.Article.ID
+	if response := request(h, "GET", thumbnailPath, owner, ""); response.Code != 200 || fetcher.urls[len(fetcher.urls)-1] != content.ThumbnailURL {
+		t.Fatal("card thumbnail contract changed")
+	}
+	content.ContentMarkdown = "Original text, with the image removed."
+	if _, err := s.UpdateArticle(t.Context(), p, feed.UpdateInput{IdempotencyKey: "remove-image", ArticleID: article.Article.ID, ExpectedRevision: 1, Article: content}); err != nil {
+		t.Fatal(err)
+	}
+	before := len(fetcher.urls)
+	if response := request(h, "GET", path, owner, ""); response.Code != 404 || len(fetcher.urls) != before {
+		t.Fatal("image removed from current content remained fetchable")
 	}
 }
 

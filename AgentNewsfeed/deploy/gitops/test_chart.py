@@ -117,7 +117,7 @@ class ChartTests(unittest.TestCase):
                 def matches(request):
                     return any(request == path if kind == "Exact" else request.rstrip("/") == path.rstrip("/") or
                                request.startswith(path.rstrip("/") + "/") for path, kind in allowed)
-                for path in ("/", "/auth/callback", "/archive", "/api/v1/articles/abc/archive", "/articles/abc", "/static/assets/app.js", "/thumbnails/abc"):
+                for path in ("/", "/auth/callback", "/archive", "/api/v1/articles/abc/archive", "/articles/abc", "/static/assets/app.js", "/thumbnails/abc", "/thumbnails/abc/content/" + "a" * 64):
                     self.assertTrue(matches(path), path)
                 for path in ("/mcp", "/mcp/", "/health/live", "/health/ready", "/.well-known/oauth-protected-resource/mcp", "/api/admin", "/api/v1/articles-evil", "/auth/admin"):
                     self.assertFalse(matches(path), path)
