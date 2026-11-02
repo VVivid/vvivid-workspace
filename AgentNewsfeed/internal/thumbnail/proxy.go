@@ -1,4 +1,4 @@
-// Package thumbnail fetches only explicitly permitted source-provided images.
+// Package thumbnail fetches only public HTTPS source-provided images.
 // It never inspects article pages or returns an external image URL to a browser.
 package thumbnail
 
@@ -23,6 +23,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"agentnewsfeed/internal/urls"
 )
@@ -31,7 +33,8 @@ const maxBytes = 2 << 20
 
 type Policy struct{ hosts []string }
 
-// NewPolicy has no permitted hosts by default. Hosts are exact, not suffixes.
+// NewPolicy permits public HTTPS hosts by default. A nonempty list restricts
+// images to those exact hosts, not their suffixes; DNS is still checked at fetch.
 func NewPolicy(raw string) (Policy, error) {
 	p := Policy{}
 	if raw == "" {
@@ -50,14 +53,19 @@ func (p Policy) Validate(raw string) error {
 	if raw == "" {
 		return nil
 	}
-	if len(raw) > 2048 {
+	if len(raw) > 2048 || !utf8.ValidString(raw) {
 		return fmt.Errorf("thumbnail URL is too long")
 	}
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.User != nil || u.Opaque != "" || u.Fragment != "" || u.Host == "" || u.Host != u.Hostname() || !slices.Contains(p.hosts, u.Hostname()) || strings.ContainsAny(raw, "\\ \t\r\n") {
-		return fmt.Errorf("thumbnail requires an explicitly permitted HTTPS host without credentials, fragment or port")
+	if err != nil || u.Scheme != "https" || u.User != nil || u.Opaque != "" || u.Fragment != "" || u.Host == "" || u.Host != u.Hostname() || !p.permitsHost(u.Hostname()) || strings.ContainsRune(raw, '\\') || strings.ContainsFunc(raw, func(r rune) bool { return unicode.IsControl(r) || unicode.IsSpace(r) }) {
+		return fmt.Errorf("thumbnail requires a public HTTPS host allowed by policy without credentials, fragment or port")
 	}
 	return nil
+}
+
+func (p Policy) permitsHost(host string) bool {
+	host = strings.ToLower(host)
+	return urls.PublicHostname(host) && (len(p.hosts) == 0 || slices.Contains(p.hosts, host))
 }
 
 type resolver interface {
@@ -99,7 +107,7 @@ func (p *Proxy) Fetch(ctx context.Context, raw string) ([]byte, error) {
 	defer transport.CloseIdleConnections()
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(address)
-		if err != nil || port != "443" || !slices.Contains(p.policy.hosts, host) {
+		if err != nil || port != "443" || !p.policy.permitsHost(host) {
 			return nil, fmt.Errorf("thumbnail destination denied")
 		}
 		addresses, err := p.resolver.LookupNetIP(ctx, "ip", host)

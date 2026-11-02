@@ -1,0 +1,10 @@
+{
+  "source_url": "https://publisher.example/articles/story",
+  "markdown": "![Relative](../images/photo.png)\n\n![Reference][hero]\n\n![Repeated](../images/photo.png)\n\n[hero]: //cdn.publisher.example/source.png \"Original caption\"\n\n![Escaped](images/pic\\(1\\).png?width=100&amp;height=80)\n\n![Unicode](images/été.png)\n\n[Ordinary link](https://links.example/not-an-image.png)\n\n`![Inline code](https://code.example/inline.png)`\n\n```md\n![Fenced code](https://code.example/fenced.png)\n```\n\n<img src=\"https://raw.example/raw.png\">\n\n![Private](https://10.0.0.1/private.png)\n\n![Local](https://host.local/private.png)\n\n![HTTP](http://publisher.example/insecure.png)\n\n![Executable](javascript:alert%281%29)\n\n![Data](data:image/png;base64,AAAA)\n\n![Port](https://cdn.publisher.example:444/port.png)\n\n![Credentials](https://user:pass@cdn.publisher.example/private.png)\n\n![Fragment](https://cdn.publisher.example/image.png#fragment)",
+  "images": {
+    "../images/photo.png": "https://publisher.example/images/photo.png",
+    "//cdn.publisher.example/source.png": "https://cdn.publisher.example/source.png",
+    "images/pic(1).png?width=100&height=80": "https://publisher.example/articles/images/pic(1).png?width=100&height=80",
+    "images/%C3%A9t%C3%A9.png": "https://publisher.example/articles/images/%C3%A9t%C3%A9.png"
+  }
+}

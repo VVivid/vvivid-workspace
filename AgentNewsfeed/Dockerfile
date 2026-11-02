@@ -5,6 +5,8 @@ RUN --mount=type=secret,id=build-ca,target=/run/secrets/build-ca \
     if [ -f /run/secrets/build-ca ]; then NODE_EXTRA_CA_CERTS=/run/secrets/build-ca npm ci --ignore-scripts; else npm ci --ignore-scripts; fi
 COPY tsconfig.json ./
 COPY web ./web
+# TypeScript checks frontend tests, which share this Markdown fixture with Go.
+COPY internal/thumbnail/testdata/markdown-images.json ./internal/thumbnail/testdata/
 RUN npm run build
 
 FROM --platform=$BUILDPLATFORM golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c AS build

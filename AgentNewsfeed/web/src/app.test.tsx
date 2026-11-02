@@ -1,8 +1,10 @@
+import { createHash } from 'node:crypto'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from '@/app'
 import type { Article, Bootstrap } from '@/types'
+import imageFixture from '../../internal/thumbnail/testdata/markdown-images.json'
 
 const article: Article = {
   id: 'synthetic-owned-article',
@@ -105,7 +107,7 @@ describe('article reader', () => {
     }
   })
 
-  it('disables raw HTML, executable URLs and inline images while escaping source titles', () => {
+  it('disables raw HTML, executable URLs and images absent from the server manifest while escaping source titles', () => {
     const { container } = render(<App data={reader({ article: { ...article, title: '<img src=x onerror=alert(1)>', content_markdown: '# Source\n\n<script>window.compromised=true</script>\n\n<img src="https://evil.example/raw.png" onerror="alert(1)">\n\n![inline](https://evil.example/markdown.png)\n\n[unsafe](javascript:alert%281%29)\n\nSafe source text.' } })} />)
     expect(screen.getByRole('heading', { name: '<img src=x onerror=alert(1)>' })).toBeVisible()
     expect(container.querySelector('script')).not.toBeInTheDocument()
@@ -113,6 +115,43 @@ describe('article reader', () => {
     expect(container.querySelector('[onerror]')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'unsafe' })).not.toBeInTheDocument()
     expect(screen.getByText('Safe source text.')).toBeVisible()
+  })
+
+  it('matches the shared Markdown image destinations to protected routes without using parser order', () => {
+    const images = Object.fromEntries(Object.entries(imageFixture.images).map(([destination, url]) => [
+      destination, `/thumbnails/${article.id}/content/${createHash('sha256').update(url).digest('hex')}`,
+    ]))
+    const { container } = render(<App data={reader({
+      article: { ...article, url: imageFixture.source_url, content_markdown: imageFixture.markdown },
+      content_images: images,
+    })} />)
+    const rendered = container.querySelectorAll('.article-prose img')
+    expect(rendered).toHaveLength(5)
+    for (const [alt, destination] of [
+      ['Relative', '../images/photo.png'],
+      ['Reference', '//cdn.publisher.example/source.png'],
+      ['Repeated', '../images/photo.png'],
+      ['Escaped', 'images/pic(1).png?width=100&height=80'],
+      ['Unicode', 'images/%C3%A9t%C3%A9.png'],
+    ]) {
+      expect(screen.getByRole('img', { name: alt })).toHaveAttribute('src', images[destination])
+    }
+    expect(container.querySelector('img[src^="https:"]')).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'Private' })).not.toBeInTheDocument()
+    expect(screen.getByText('Private', { selector: '.article-image-fallback' })).toBeVisible()
+    fireEvent.error(screen.getByRole('img', { name: 'Reference' }))
+    expect(screen.queryByRole('img', { name: 'Reference' })).not.toBeInTheDocument()
+    expect(screen.getByText('Reference', { selector: '.article-image-fallback' })).toBeVisible()
+  })
+
+  it('rejects external and malformed image routes even if supplied in a manifest', () => {
+    const { container } = render(<App data={reader({
+      article: { ...article, content_markdown: '![External](photo.png) ![Inherited](__proto__) ![Wrong route](other.png)' },
+      content_images: { 'photo.png': 'https://attacker.example/image.png', 'other.png': '/thumbnails/another?url=https://attacker.example/image.png' },
+    })} />)
+    expect(container.querySelector('img')).not.toBeInTheDocument()
+    expect(screen.getByText('External', { selector: '.article-image-fallback' })).toBeVisible()
+    expect(screen.getByText('Inherited', { selector: '.article-image-fallback' })).toBeVisible()
   })
 
   it('opens without a mutation and archives only through an explicit CSRF form', () => {

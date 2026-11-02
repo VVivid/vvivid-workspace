@@ -190,7 +190,7 @@ func (s *Service) SetArchived(ctx context.Context, p identity.Principal, id stri
 func SafeError(err error) string {
 	switch {
 	case errors.Is(err, ErrInvalid):
-		return "Invalid article request. Use a public HTTPS source URL, title (1–300 bytes), short introduction (1–1200 bytes), optional original-source Markdown (up to 256 KiB), and a permitted thumbnail or omit it."
+		return "Invalid article request. Use a public HTTPS source URL, title (1–300 bytes), short introduction (1–1200 bytes), optional original-source Markdown (up to 256 KiB), and an optional source-provided public HTTPS thumbnail allowed by the image policy."
 	case errors.Is(err, identity.ErrUnauthenticated):
 		return "Authentication required."
 	case errors.Is(err, identity.ErrForbidden), errors.Is(err, sqlite.ErrOwnerRequired):
