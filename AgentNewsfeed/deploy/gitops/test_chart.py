@@ -112,13 +112,22 @@ class ChartTests(unittest.TestCase):
                 self.assertEqual(entrypoint, "websecure")
                 self.assertEqual(rule["host"], "newsfeed.vvivid.dev")
                 allowed = {(p["path"], p["pathType"]) for p in paths}
-                self.assertEqual(allowed, {(p, "Exact") for p in ("/", "/archive", "/trash", "/auth/login", "/auth/callback", "/auth/logout")} |
+                # Traefik does not admit /jobs through the trailing-slash prefix alone.
+                self.assertIn(("/jobs", "Exact"), allowed)
+                self.assertIn(("/jobs/", "Prefix"), allowed)
+                self.assertEqual(allowed, {(p, "Exact") for p in ("/", "/archive", "/trash", "/jobs", "/auth/login", "/auth/callback", "/auth/logout")} |
                                  {(p, "Prefix") for p in ("/articles/", "/api/v1/articles", "/jobs/", "/api/v1/opportunities", "/static/assets/", "/thumbnails/")})
                 def matches(request):
-                    return any(request == path if kind == "Exact" else request.rstrip("/") == path.rstrip("/") or
-                               request.startswith(path.rstrip("/") + "/") for path, kind in allowed)
+                    for path, kind in allowed:
+                        if request == path:
+                            return True
+                        if kind == "Prefix":
+                            descendant_prefix = path if path.endswith("/") else path + "/"
+                            if request.startswith(descendant_prefix):
+                                return True
+                    return False
                 for path in ("/", "/auth/callback", "/archive", "/trash", "/api/v1/articles/abc/archive", "/articles/abc",
-                             "/jobs", "/jobs/archive", "/jobs/trash", "/jobs/abc", "/api/v1/opportunities", "/api/v1/opportunities/abc",
+                             "/jobs", "/jobs/", "/jobs/archive", "/jobs/trash", "/jobs/abc", "/api/v1/opportunities", "/api/v1/opportunities/abc",
                              "/api/v1/opportunities/abc/archive", "/api/v1/opportunities/abc/unarchive", "/api/v1/opportunities/abc/trash", "/api/v1/opportunities/abc/restore",
                              "/static/assets/app.js", "/thumbnails/abc", "/thumbnails/abc/content/" + "a" * 64):
                     self.assertTrue(matches(path), path)
