@@ -20,9 +20,9 @@ function Thumbnail({ article }: { article: Article }) {
   const [failed, setFailed] = useState(false)
   return (
     <div className="article-thumbnail">
-      {article.thumbnail_url && !failed ? (
+      {article.thumbnail_url && !['unavailable', 'budget_exceeded'].includes(article.thumbnail_status ?? '') && !failed ? (
         <img
-          src={`/thumbnails/${encodeURIComponent(article.id)}`}
+          src={`/thumbnails/${encodeURIComponent(article.id)}${article.trashed_at ? '?trashed=true' : ''}`}
           alt=""
           loading="lazy"
           width="312"
@@ -39,7 +39,8 @@ function Thumbnail({ article }: { article: Article }) {
 }
 
 function Header({ data }: { data: Bootstrap }) {
-  const archiveSelected = data.view === 'archive' || (data.view === 'reader' && data.from_archive)
+  const readerShelf = data.from_trash ? 'trash' : data.from_archive ? 'archive' : 'feed'
+  const selectedShelf = data.view === 'reader' ? readerShelf : data.view
   return (
     <header className="site-header">
       <div className="header-inner">
@@ -48,8 +49,9 @@ function Header({ data }: { data: Bootstrap }) {
         {data.authenticated && (
           <>
             <nav aria-label="Library">
-              <a href="/" aria-current={!archiveSelected ? 'page' : undefined}>Feed</a>
-              <a href="/archive" aria-current={archiveSelected ? 'page' : undefined}>Archive</a>
+              <a href="/" aria-current={selectedShelf === 'feed' ? 'page' : undefined}>Feed</a>
+              <a href="/archive" aria-current={selectedShelf === 'archive' ? 'page' : undefined}>Archive</a>
+              <a href="/trash" aria-current={selectedShelf === 'trash' ? 'page' : undefined}>Trash</a>
             </nav>
             <form method="post" action="/auth/logout">
               <input type="hidden" name="csrf_token" value={data.csrf} />
@@ -64,25 +66,26 @@ function Header({ data }: { data: Bootstrap }) {
 
 function Shelf({ data }: { data: Bootstrap }) {
   const archived = data.view === 'archive'
+  const trashed = data.view === 'trash'
   const articles = data.page?.articles ?? []
-  const shelfPath = archived ? '/archive' : '/'
+  const shelfPath = trashed ? '/trash' : archived ? '/archive' : '/'
   return (
     <main id="main" className="shelf page-width">
       <div className="shelf-intro">
-        <p className="eyebrow">{archived ? 'Kept for another day' : 'Your private collection'}</p>
-        <h1>{archived ? 'Your archive' : 'Your reading shelf'}</h1>
-        <p className="subtitle">{archived ? 'Good stories, read and kept close.' : 'Good stories, saved for a slower moment.'}</p>
+        <p className="eyebrow">{trashed ? 'Room to reconsider' : archived ? 'Kept for another day' : 'Your private collection'}</p>
+        <h1>{trashed ? 'Your trash' : archived ? 'Your archive' : 'Your reading shelf'}</h1>
+        <p className="subtitle">{trashed ? 'Stories kept safely until you want them back.' : archived ? 'Good stories, read and kept close.' : 'Good stories, saved for a slower moment.'}</p>
       </div>
       <div className="list-heading">
-        <span>{archived ? 'Archived articles' : 'Saved articles'}</span>
-        <span>{archived ? 'Newest archived first' : 'Newest saved first'}</span>
+        <span>{trashed ? 'Trashed articles' : archived ? 'Archived articles' : 'Saved articles'}</span>
+        <span>{trashed ? 'Newest trashed first' : archived ? 'Newest archived first' : 'Newest saved first'}</span>
       </div>
       <Separator />
       {articles.length > 0 ? (
         <div className="article-list">
           {articles.map(article => {
-            const readerURL = `/articles/${encodeURIComponent(article.id)}?from=${archived ? 'archive' : 'feed'}`
-            const timestamp = archived ? article.archived_at! : article.created_at
+            const readerURL = `/articles/${encodeURIComponent(article.id)}?from=${trashed ? 'trash' : archived ? 'archive' : 'feed'}`
+            const timestamp = trashed ? article.trashed_at! : archived ? article.archived_at! : article.created_at
             return (
               <article className="feed-row" key={article.id}>
                 <a href={readerURL} className="thumbnail-link" tabIndex={-1} aria-hidden="true">
@@ -93,7 +96,7 @@ function Shelf({ data }: { data: Bootstrap }) {
                     <span className="source">{sourceHostname(article.url)}</span>
                     <span aria-hidden="true">·</span>
                     <span>
-                      {archived ? 'Archived' : 'Saved'}{' '}
+                      {trashed ? 'Trashed' : archived ? 'Archived' : 'Saved'}{' '}
                       <time dateTime={new Date(timestamp).toISOString()}>{formatDate(timestamp)}</time>
                     </span>
                   </p>
@@ -108,16 +111,16 @@ function Shelf({ data }: { data: Bootstrap }) {
       ) : (
         <div className="empty-shelf">
           <Leaf />
-          <h2>{archived ? 'Room for stories you have read.' : 'A little space for a good story.'}</h2>
-          <p>{archived ? 'Articles you archive will be waiting here. Restore one whenever you want to return to it.' : 'Save a sourced article with your connected agent, then settle in here when you have a moment.'}</p>
-          {archived && <a className="reading-link" href="/">Back to your feed <Arrow /></a>}
+          <h2>{trashed ? 'Nothing in the trash.' : archived ? 'Room for stories you have read.' : 'A little space for a good story.'}</h2>
+          <p>{trashed ? 'Trashed articles stay recoverable, with their original content and images. Nothing is permanently deleted.' : archived ? 'Articles you archive will be waiting here. Restore one whenever you want to return to it.' : 'Save a sourced article with your connected agent, then settle in here when you have a moment.'}</p>
+          {(archived || trashed) && <a className="reading-link" href="/">Back to your feed <Arrow /></a>}
         </div>
       )}
       {data.page?.next_cursor && (
         <div className="pagination">
           <Button asChild variant="outline">
             <a href={`${shelfPath}?cursor=${encodeURIComponent(data.page.next_cursor)}`}>
-              {archived ? 'Earlier archived articles' : 'Older articles'} <Arrow />
+              {trashed ? 'Earlier trashed articles' : archived ? 'Earlier archived articles' : 'Older articles'} <Arrow />
             </a>
           </Button>
         </div>
@@ -128,11 +131,16 @@ function Shelf({ data }: { data: Bootstrap }) {
 
 function Reader({ data, article }: { data: Bootstrap; article: Article }) {
   const archived = Boolean(article.archived_at)
-  const action = archived ? 'restore' : 'archive'
+  const trashed = Boolean(article.trashed_at)
+  const action = trashed ? 'restore-trash' : archived ? 'restore' : 'archive'
+  const actionLabel = trashed
+    ? archived ? 'Restore to archive' : 'Restore to feed'
+    : archived ? 'Restore to feed' : 'Archive article'
+  const back = data.from_trash ? 'trash' : data.from_archive ? 'archive' : 'feed'
   return (
     <main id="main" className="reader page-width">
-      <a className="back-link" href={data.from_archive ? '/archive' : '/'}>
-        <Arrow direction="left" /> Back to {data.from_archive ? 'archive' : 'feed'}
+      <a className="back-link" href={back === 'feed' ? '/' : `/${back}`}>
+        <Arrow direction="left" /> Back to {back}
       </a>
       <article className="reader-article">
         <header className="reader-heading">
@@ -151,7 +159,8 @@ function Reader({ data, article }: { data: Bootstrap; article: Article }) {
               <a href={article.url} target="_blank" rel="noopener noreferrer">Read original <Arrow direction="up-right" /></a>
             </Button>
           </div>
-          {archived && <p className="archive-note">Archived {formatDate(article.archived_at!)}. Kept here for another day.</p>}
+          {trashed && <p className="archive-note">In Trash since {formatDate(article.trashed_at!)}. Restore to {archived ? 'archive' : 'feed'} whenever you are ready.</p>}
+          {!trashed && archived && <p className="archive-note">Archived {formatDate(article.archived_at!)}. Kept here for another day.</p>}
         </header>
         <Separator />
         {article.content_markdown ? (
@@ -168,16 +177,29 @@ function Reader({ data, article }: { data: Bootstrap; article: Article }) {
         <footer className="reader-footer">
           <Separator />
           <div className="reader-end">
-            <p>{archived ? 'Bring this story back to your reading shelf.' : 'Finished for now? Keep this story in your archive.'}</p>
+            <p>{trashed ? 'This story is safely kept. Restore it to its previous place.' : archived ? 'Bring this story back to your reading shelf.' : 'Finished for now? Keep this story in your archive.'}</p>
             <form method="post" action={`/api/v1/articles/${encodeURIComponent(article.id)}/${action}`}>
               <input type="hidden" name="csrf_token" value={data.csrf} />
+              {trashed && <>
+                <input type="hidden" name="expected_revision" value={article.revision} />
+                <input type="hidden" name="idempotency_key" value={data.mutation_key ?? ''} />
+              </>}
               <Button variant="outline" type="submit" disabled={!data.can_write}>
-                {archived ? 'Restore to feed' : 'Archive article'}
+                {actionLabel}
               </Button>
             </form>
           </div>
+          {!trashed && <div className="reader-end">
+            <p>Want to set this story aside? You can restore it later.</p>
+            <form method="post" action={`/api/v1/articles/${encodeURIComponent(article.id)}/trash`}>
+              <input type="hidden" name="csrf_token" value={data.csrf} />
+              <input type="hidden" name="expected_revision" value={article.revision} />
+              <input type="hidden" name="idempotency_key" value={data.mutation_key ?? ''} />
+              <Button variant="outline" type="submit" disabled={!data.can_write}>Move to Trash</Button>
+            </form>
+          </div>}
           {!data.can_write && (
-            <p className="permission-note" role="status">Archiving is unavailable with this sign-in. Sign in again after your account has write permission.</p>
+            <p className="permission-note" role="status">Article actions are unavailable with this sign-in. Sign in again after your account has write permission.</p>
           )}
         </footer>
       </article>

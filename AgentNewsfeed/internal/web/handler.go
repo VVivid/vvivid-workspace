@@ -3,6 +3,7 @@ package web
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
@@ -65,6 +66,7 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
 	mux.HandleFunc("GET /{$}", h.index)
 	mux.HandleFunc("GET /archive", h.index)
+	mux.HandleFunc("GET /trash", h.index)
 	mux.HandleFunc("GET /articles/{id}", h.index)
 	if auth != nil {
 		auth.Register(mux)
@@ -72,6 +74,8 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 		mux.Handle("GET /api/v1/articles/{id}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.detail)))
 		mux.Handle("POST /api/v1/articles/{id}/archive", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.archive(true)))
 		mux.Handle("POST /api/v1/articles/{id}/restore", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.archive(false)))
+		mux.Handle("POST /api/v1/articles/{id}/trash", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.trash(false)))
+		mux.Handle("POST /api/v1/articles/{id}/restore-trash", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.trash(true)))
 		mux.Handle("GET /thumbnails/{id}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.image)))
 		mux.Handle("GET /thumbnails/{id}/content/{image}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.image)))
 		mux.Handle("/mcp", auth.BearerMiddleware(auth.MCPAudience(), nil, feedmcp.NewHandler(service, logger)))
@@ -119,6 +123,8 @@ type bootstrap struct {
 	CSRF          string            `json:"csrf"`
 	View          string            `json:"view"`
 	FromArchive   bool              `json:"from_archive"`
+	FromTrash     bool              `json:"from_trash"`
+	MutationKey   string            `json:"mutation_key,omitempty"`
 	SignInURL     string            `json:"sign_in_url"`
 	Page          *feed.Page        `json:"page,omitempty"`
 	Article       *sqlite.Article   `json:"article,omitempty"`
@@ -129,9 +135,12 @@ func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 	data := bootstrap{Configured: h.auth != nil, View: "feed", SignInURL: "/auth/login?return_to=" + url.QueryEscape(r.URL.RequestURI())}
 	if r.URL.Path == "/archive" {
 		data.View = "archive"
+	} else if r.URL.Path == "/trash" {
+		data.View = "trash"
 	} else if r.PathValue("id") != "" {
 		data.View = "reader"
 		data.FromArchive = r.URL.Query().Get("from") == "archive"
+		data.FromTrash = r.URL.Query().Get("from") == "trash"
 	}
 	status := http.StatusOK
 	if h.auth == nil {
@@ -142,15 +151,21 @@ func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if data.View == "reader" {
-			a, err := h.service.GetArticle(r.Context(), p, r.PathValue("id"))
+			a, err := h.service.GetArticleInView(r.Context(), p, r.PathValue("id"), data.FromTrash)
 			if err != nil {
 				writeError(w, err)
 				return
 			}
 			data.Article = &a
 			data.ContentImages = contentImageRoutes(a)
+			if data.FromTrash {
+				for destination, route := range data.ContentImages {
+					data.ContentImages[destination] = route + "?trashed=true"
+				}
+			}
+			data.MutationKey = rand.Text()
 		} else {
-			page, err := h.service.ListArticles(r.Context(), p, feed.ListInput{Cursor: r.URL.Query().Get("cursor"), Archived: data.View == "archive"})
+			page, err := h.service.ListArticles(r.Context(), p, feed.ListInput{Cursor: r.URL.Query().Get("cursor"), Archived: data.View == "archive", Trashed: data.View == "trash"})
 			if err != nil {
 				writeError(w, err)
 				return
@@ -181,6 +196,13 @@ func (h *handler) list(w http.ResponseWriter, r *http.Request) {
 		}
 		in.Archived = raw == "true"
 	}
+	if raw := r.URL.Query().Get("trashed"); raw != "" {
+		if raw != "true" && raw != "false" {
+			writeError(w, feed.ErrInvalid)
+			return
+		}
+		in.Trashed = raw == "true"
+	}
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		var err error
 		in.Limit, err = strconv.Atoi(raw)
@@ -200,7 +222,12 @@ func (h *handler) list(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) detail(w http.ResponseWriter, r *http.Request) {
 	p, _ := identity.FromContext(r.Context())
-	a, err := h.service.GetArticle(r.Context(), p, r.PathValue("id"))
+	trashed, err := trashSelection(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	a, err := h.service.GetArticleInView(r.Context(), p, r.PathValue("id"), trashed)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -227,9 +254,26 @@ func (h *handler) archive(archived bool) http.Handler {
 
 func (h *handler) image(w http.ResponseWriter, r *http.Request) {
 	p, _ := identity.FromContext(r.Context())
-	a, err := h.service.GetArticle(r.Context(), p, r.PathValue("id"))
+	trashed, err := trashSelection(r)
 	if err != nil {
 		http.NotFound(w, r)
+		return
+	}
+	a, err := h.service.GetArticleInView(r.Context(), p, r.PathValue("id"), trashed)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	// Saved thumbnail payloads never contact their former source. Only legacy
+	// URL-only records retain the previous protected proxy until refreshed.
+	if r.PathValue("image") == "" && a.ThumbnailStatus != "legacy" {
+		body, err := h.service.Thumbnail(r.Context(), p, a.ID, trashed)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write(body)
 		return
 	}
 	imageURL := a.ThumbnailURL
@@ -253,6 +297,51 @@ func (h *handler) image(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "image/jpeg")
 	_, _ = w.Write(body)
+}
+
+func trashSelection(r *http.Request) (bool, error) {
+	values, ok := r.URL.Query()["trashed"]
+	if !ok {
+		return false, nil
+	}
+	if len(values) != 1 || (values[0] != "true" && values[0] != "false") {
+		return false, feed.ErrInvalid
+	}
+	return values[0] == "true", nil
+}
+
+func (h *handler) trash(restore bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p, _ := identity.FromContext(r.Context())
+		if len(r.PostForm) != 3 || len(r.PostForm["idempotency_key"]) != 1 || len(r.PostForm["expected_revision"]) != 1 {
+			writeError(w, feed.ErrInvalid)
+			return
+		}
+		revision, err := strconv.ParseInt(r.PostForm.Get("expected_revision"), 10, 64)
+		if err != nil {
+			writeError(w, feed.ErrInvalid)
+			return
+		}
+		in := feed.StateInput{IdempotencyKey: r.PostForm.Get("idempotency_key"), ArticleID: r.PathValue("id"), ExpectedRevision: revision}
+		var out sqlite.MutationResult
+		if restore {
+			out, err = h.service.RestoreArticle(r.Context(), p, in)
+		} else {
+			out, err = h.service.TrashArticle(r.Context(), p, in)
+		}
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		from := "trash"
+		if restore {
+			from = "feed"
+			if out.Article.ArchivedAt != 0 {
+				from = "archive"
+			}
+		}
+		http.Redirect(w, r, "/articles/"+url.PathEscape(out.Article.ID)+"?from="+from, http.StatusSeeOther)
+	})
 }
 
 func contentImageID(imageURL string) string {

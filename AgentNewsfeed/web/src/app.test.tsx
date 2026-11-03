@@ -38,7 +38,7 @@ describe('private reading shelf', () => {
     expect(screen.getByRole('link', { name: article.title })).toHaveAttribute('href', '/articles/synthetic-owned-article?from=feed')
     expect(screen.getByRole('link', { name: 'Read article' })).toHaveAttribute('href', '/articles/synthetic-owned-article?from=feed')
     expect(screen.getByRole('link', { name: 'Older articles' })).toHaveAttribute('href', '/?cursor=opaque-cursor')
-    expect(screen.getByRole('navigation', { name: 'Library' })).toHaveTextContent('FeedArchive')
+    expect(screen.getByRole('navigation', { name: 'Library' })).toHaveTextContent('FeedArchiveTrash')
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
@@ -54,6 +54,8 @@ describe('private reading shelf', () => {
     expect(screen.getByRole('link', { name: 'Feed' })).toHaveFocus()
     await user.tab()
     expect(screen.getByRole('link', { name: 'Archive' })).toHaveFocus()
+    await user.tab()
+    expect(screen.getByRole('link', { name: 'Trash' })).toHaveFocus()
     await user.tab()
     expect(screen.getByRole('button', { name: 'Sign out' })).toHaveFocus()
     await user.tab()
@@ -181,7 +183,7 @@ describe('article reader', () => {
   it('leaves old read-only grants usable and explains why archiving is unavailable', () => {
     render(<App data={reader({ can_write: false })} />)
     expect(screen.getByRole('button', { name: 'Archive article' })).toBeDisabled()
-    expect(screen.getByRole('status')).toHaveTextContent('Archiving is unavailable with this sign-in.')
+    expect(screen.getByRole('status')).toHaveTextContent('Article actions are unavailable with this sign-in.')
     expect(screen.getByText(article.summary)).toBeVisible()
   })
 })
@@ -198,5 +200,57 @@ describe('private shell', () => {
     render(<App data={{ ...shelf, authenticated: false, configured: false, page: undefined }} />)
     expect(screen.getByText('Your shelf is being prepared.')).toBeVisible()
     expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument()
+  })
+})
+
+describe('recoverable Trash', () => {
+  it('keeps Trash navigation, ordering and pagination separate from Archive', () => {
+    const trashed = { ...article, trashed_at: 1793232000000 }
+    render(<App data={{ ...shelf, view: 'trash', page: { articles: [trashed], next_cursor: 'trash-cursor' } }} />)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Your trash')
+    expect(screen.getByRole('link', { name: 'Trash' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Feed' })).not.toHaveAttribute('aria-current')
+    expect(screen.getByRole('link', { name: 'Read article' })).toHaveAttribute('href', '/articles/synthetic-owned-article?from=trash')
+    expect(screen.getByRole('link', { name: 'Earlier trashed articles' })).toHaveAttribute('href', '/trash?cursor=trash-cursor')
+    expect(screen.getByText('Newest trashed first')).toBeVisible()
+  })
+
+  it('uses explicit CSRF, revision and retry-key forms for Trash and Restore', () => {
+    const { rerender } = render(<App data={reader({ mutation_key: 'unique-intent' })} />)
+    const move = screen.getByRole('button', { name: 'Move to Trash' }).closest('form')!
+    expect(move).toHaveAttribute('method', 'post')
+    expect(move).toHaveAttribute('action', '/api/v1/articles/synthetic-owned-article/trash')
+    expect(move.querySelector('input[name="csrf_token"]')).toHaveValue(shelf.csrf)
+    expect(move.querySelector('input[name="expected_revision"]')).toHaveValue('1')
+    expect(move.querySelector('input[name="idempotency_key"]')).toHaveValue('unique-intent')
+    rerender(<App data={reader({ from_trash: true, mutation_key: 'restore-intent', article: { ...article, revision: 3, archived_at: 1793145600000, trashed_at: 1793232000000 } })} />)
+    const restore = screen.getByRole('button', { name: 'Restore to archive' }).closest('form')!
+    expect(restore).toHaveAttribute('action', '/api/v1/articles/synthetic-owned-article/restore-trash')
+    expect(restore.querySelector('input[name="expected_revision"]')).toHaveValue('3')
+    expect(restore.querySelector('input[name="idempotency_key"]')).toHaveValue('restore-intent')
+    expect(screen.queryByRole('button', { name: 'Move to Trash' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Archive article' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to trash' })).toHaveAttribute('href', '/trash')
+  })
+
+  it('shows recoverability and permission state without a permanent-delete action', () => {
+    const { rerender } = render(<App data={{ ...shelf, view: 'trash', page: { articles: [] } }} />)
+    expect(screen.getByText('Nothing in the trash.')).toBeVisible()
+    expect(screen.getByText(/Nothing is permanently deleted/)).toBeVisible()
+    rerender(<App data={reader({ can_write: false, from_trash: true, article: { ...article, trashed_at: 1793232000000 } })} />)
+    expect(screen.getByRole('button', { name: 'Restore to feed' })).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('Article actions are unavailable')
+    expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument()
+  })
+
+  it('loads stored Trash images only through the explicitly selected protected route', () => {
+    const path = `/thumbnails/${article.id}/content/${'a'.repeat(64)}?trashed=true`
+    const { container, rerender } = render(<App data={reader({ from_trash: true, article: { ...article, trashed_at: 1793232000000, content_markdown: '![Source figure](photo.png)' }, content_images: { 'photo.png': path } })} />)
+    expect(screen.getByRole('img', { name: 'Source figure' })).toHaveAttribute('src', path)
+    rerender(<App data={{ ...shelf, view: 'trash', page: { articles: [{ ...article, trashed_at: 1793232000000, thumbnail_url: 'https://images.example.com/source.jpg', thumbnail_status: 'stored' }] } }} />)
+    expect(container.querySelector('img')).toHaveAttribute('src', `/thumbnails/${article.id}?trashed=true`)
+    rerender(<App data={{ ...shelf, page: { articles: [{ ...article, thumbnail_url: 'https://images.example.com/source.jpg', thumbnail_status: 'unavailable' }] } }} />)
+    expect(container.querySelector('img')).not.toBeInTheDocument()
+    expect(screen.getByText('A story for a slower moment')).toBeVisible()
   })
 })
