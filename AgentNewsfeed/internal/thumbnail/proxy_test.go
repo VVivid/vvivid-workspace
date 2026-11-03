@@ -239,3 +239,65 @@ func TestResponseTypeSizeDimensionsRedirectAndCancellation(t *testing.T) {
 		t.Fatal("cancelled request exceeded bound")
 	}
 }
+
+func TestStoredThumbnailCompressionBoundsAspectRatioAndMetadata(t *testing.T) {
+	for _, size := range []image.Point{{X: 80, Y: 120}, {X: 1280, Y: 640}, {X: 640, Y: 640}} {
+		t.Run(fmt.Sprintf("%dx%d", size.X, size.Y), func(t *testing.T) {
+			source := image.NewRGBA(image.Rect(0, 0, size.X, size.Y))
+			// Deterministic high-entropy pixels exercise the hard output limit,
+			// rather than relying on a solid image that always compresses easily.
+			state := uint32(12345)
+			for y := range size.Y {
+				for x := range size.X {
+					state = 1664525*state + 1013904223
+					source.SetRGBA(x, y, color.RGBA{R: uint8(state >> 24), G: uint8(state >> 16), B: uint8(state >> 8), A: 255})
+				}
+			}
+			var encoded bytes.Buffer
+			if err := png.Encode(&encoded, source); err != nil {
+				t.Fatal(err)
+			}
+			input := append(encoded.Bytes(), []byte("PRIVATE_SOURCE_METADATA")...)
+			body, err := compressThumbnail(input)
+			if err != nil || len(body) > MaxStoredBytes {
+				t.Fatalf("bounded compression: %d %v", len(body), err)
+			}
+			cfg, err := jpeg.DecodeConfig(bytes.NewReader(body))
+			if err != nil || cfg.Width > 640 || cfg.Height > 640 || cfg.Width > size.X || cfg.Height > size.Y {
+				t.Fatal("thumbnail dimensions upscaled or exceeded limit")
+			}
+			if cfg.Width*size.Y != cfg.Height*size.X {
+				t.Fatal("thumbnail aspect ratio changed")
+			}
+			if size.X == 80 && (cfg.Width != 80 || cfg.Height != 120) {
+				t.Fatal("small source unnecessarily resized")
+			}
+			if bytes.Contains(body, []byte("PRIVATE_SOURCE_METADATA")) {
+				t.Fatal("stored thumbnail retained metadata")
+			}
+		})
+	}
+}
+
+func TestStoredThumbnailSharesPinnedFetchRedirectAndFailureControls(t *testing.T) {
+	p, resolver, dials := testProxy(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/redirect" {
+			http.Redirect(w, r, "https://example.com/image", 302)
+			return
+		}
+		if r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" || r.Header.Get("Referer") != "" {
+			t.Error("thumbnail source received credentials")
+		}
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(pngImage(t))
+	}))
+	body, err := p.FetchThumbnail(t.Context(), "https://example.com/redirect")
+	if err != nil || len(body) > MaxStoredBytes || resolver.calls != 2 || len(*dials) != 2 {
+		t.Fatalf("stored thumbnail bypassed pinned redirect fetch: %v", err)
+	}
+	resolver.afterFirst = []netip.Addr{netip.MustParseAddr("127.0.0.1")}
+	before := len(*dials)
+	if _, err := p.FetchThumbnail(t.Context(), "https://example.com/image"); err == nil || len(*dials) != before {
+		t.Fatal("stored fetch accepted private DNS")
+	}
+}

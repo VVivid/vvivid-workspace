@@ -9,6 +9,12 @@ export interface Article {
   updated_at: number
   content_markdown?: string
   archived_at?: number
+  trashed_at?: number
+  thumbnail_status?: 'legacy' | 'stored' | 'unavailable' | 'budget_exceeded'
+  thumbnail_hash?: string
+  thumbnail_width?: number
+  thumbnail_height?: number
+  thumbnail_bytes?: number
 }
 
 export interface Page {
@@ -21,8 +27,10 @@ export interface Bootstrap {
   authenticated: boolean
   can_write: boolean
   csrf: string
-  view: 'feed' | 'archive' | 'reader'
+  view: 'feed' | 'archive' | 'trash' | 'reader'
   from_archive: boolean
+  from_trash?: boolean
+  mutation_key?: string
   sign_in_url: string
   page?: Page
   article?: Article
