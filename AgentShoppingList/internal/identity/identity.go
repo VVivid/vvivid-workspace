@@ -74,14 +74,15 @@ type providerMetadata struct {
 }
 
 type Manager struct {
-	cfg        Config
-	store      *sqlite.Store
-	client     *http.Client
-	oauth      oauth2.Config
-	metadata   providerMetadata
-	keys       *oidc.RemoteKeySet
-	idVerifier *oidc.IDTokenVerifier
-	now        func() time.Time
+	cfg         Config
+	store       *sqlite.Store
+	client      *http.Client
+	oauth       oauth2.Config
+	metadata    providerMetadata
+	keys        *oidc.RemoteKeySet
+	idVerifier  *oidc.IDTokenVerifier
+	now         func() time.Time
+	gatewayKeys jose.JSONWebKeySet
 	// One application instance owns SQLite. Serialize refresh for a given cookie
 	// so rotating refresh tokens cannot race. Stripes keep memory bounded.
 	sessionLocks [64]sync.Mutex
@@ -93,6 +94,14 @@ func New(ctx context.Context, cfg Config, store *sqlite.Store) (*Manager, error)
 	}
 	if store == nil {
 		return nil, fmt.Errorf("identity requires durable storage")
+	}
+	var gatewayKeys jose.JSONWebKeySet
+	if cfg.MCPAuthMode == "gateway" {
+		var err error
+		gatewayKeys, err = loadGatewayKeys(cfg.GatewayJWKSFile)
+		if err != nil {
+			return nil, err
+		}
 	}
 	client := &http.Client{Timeout: 8 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	provider, err := oidc.NewProvider(oidc.ClientContext(ctx, client), cfg.Issuer)
@@ -111,7 +120,7 @@ func New(ctx context.Context, cfg Config, store *sqlite.Store) (*Manager, error)
 			return nil, fmt.Errorf("OIDC endpoints must use the configured issuer origin")
 		}
 	}
-	m := &Manager{cfg: cfg, store: store, client: client, metadata: metadata, now: time.Now}
+	m := &Manager{cfg: cfg, store: store, client: client, metadata: metadata, now: time.Now, gatewayKeys: gatewayKeys}
 	endpoint.AuthStyle = oauth2.AuthStyleInHeader
 	m.oauth = oauth2.Config{
 		ClientID:     cfg.WebClientID,
@@ -195,6 +204,13 @@ func (m *Manager) principal(ctx context.Context, claims accessClaims) (Principal
 }
 
 func (m *Manager) AuthenticateBearer(ctx context.Context, raw, audience string) (Principal, error) {
+	if m.cfg.MCPAuthMode == "gateway" && audience == m.cfg.MCPAudience {
+		claims, err := m.verifyGateway(raw)
+		if err != nil {
+			return Principal{}, err
+		}
+		return m.principal(ctx, claims)
+	}
 	claims, err := m.verifyAccess(ctx, raw, audience)
 	if err != nil {
 		return Principal{}, err

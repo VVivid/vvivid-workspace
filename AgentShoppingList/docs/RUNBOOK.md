@@ -82,3 +82,7 @@ For the separately prepared OAuth compatibility patch, follow its reviewed [appl
 ## Remaining release acceptance
 
 The no-backup correction is in its local Builder → Translation → final validation → fresh independent Review workflow. Prior05ff303 beta images and their test/scan reports are historical; replacement final-commit images must be rebuilt, tested and scanned after approval. Live issuer/client/proxy/SSH isolation/phone checks, server secret/mount validation and deployment approval remain pending. Keep CP03/06/10 in progress. No live rollout, backup or infrastructure write is authorized by these local instructions.
+
+## R&D migration exception
+
+The separately authorized R&D migration prepares app-only Helm/Fleet deployment and dedicated CI in the [production delivery contract](../deploy/gitops/README.md). The user authorized a one-time consistent migration recovery copy server-to-server for C3; keep data/private keys on the servers, preserve the existing owner and every table, deliberately remap the enrollment, and revoke obsolete sessions/login attempts. This narrow migration copy does not authorize recurring backups or Mac recovery copies. The homelab Shopping runbook owns the guarded remap, restore validation and cutover sequence; do not use a fresh empty enrollment as a migration.

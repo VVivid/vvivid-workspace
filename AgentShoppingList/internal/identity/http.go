@@ -90,7 +90,11 @@ func (m *Manager) BearerMiddleware(audience string, scopes []string, next http.H
 				status = http.StatusForbidden
 				challenge += `, error="insufficient_scope"`
 			}
-			w.Header().Set("WWW-Authenticate", challenge)
+			// The gateway owns external MCP discovery and OAuth challenges. Browser
+			// API and direct MCP clients keep the existing discovery contract.
+			if m.cfg.MCPAuthMode != "gateway" || audience != m.cfg.MCPAudience {
+				w.Header().Set("WWW-Authenticate", challenge)
+			}
 			http.Error(w, http.StatusText(status), status)
 			return
 		}
