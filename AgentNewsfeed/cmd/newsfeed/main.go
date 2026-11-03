@@ -87,7 +87,8 @@ func run(ctx context.Context, logger *slog.Logger) (err error) {
 			return err
 		}
 	}
-	handler, err := web.New(logger, auth, feed.New(store, policy), thumbnail.NewProxy(policy))
+	images := thumbnail.NewProxy(policy)
+	handler, err := web.New(logger, auth, feed.NewWithThumbnailFetcher(store, policy, images), images)
 	if err != nil {
 		return err
 	}

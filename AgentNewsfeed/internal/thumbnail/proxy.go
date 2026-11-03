@@ -27,6 +27,7 @@ import (
 	"unicode/utf8"
 
 	"agentnewsfeed/internal/urls"
+	xdraw "golang.org/x/image/draw"
 )
 
 const maxBytes = 2 << 20
@@ -88,6 +89,16 @@ func NewProxy(policy Policy) *Proxy {
 // Fetch constrains the complete operation, including DNS, redirects, TLS, bytes,
 // pixels and re-encoding. All answers must be public before one is pinned.
 func (p *Proxy) Fetch(ctx context.Context, raw string) ([]byte, error) {
+	return p.fetch(ctx, raw, sanitize)
+}
+
+// FetchThumbnail applies the same network controls as inline figures, then
+// produces only the small JPEG that may be stored on the owner's SQLite volume.
+func (p *Proxy) FetchThumbnail(ctx context.Context, raw string) ([]byte, error) {
+	return p.fetch(ctx, raw, compressThumbnail)
+}
+
+func (p *Proxy) fetch(ctx context.Context, raw string, process func([]byte) ([]byte, error)) ([]byte, error) {
 	if raw == "" || p.policy.Validate(raw) != nil {
 		return nil, fmt.Errorf("thumbnail unavailable")
 	}
@@ -149,7 +160,7 @@ func (p *Proxy) Fetch(ctx context.Context, raw string) ([]byte, error) {
 	if err != nil || len(body) > maxBytes {
 		return nil, fmt.Errorf("thumbnail too large")
 	}
-	return sanitize(body)
+	return process(body)
 }
 
 func sanitize(body []byte) ([]byte, error) {
@@ -170,6 +181,44 @@ func sanitize(body []byte) ([]byte, error) {
 		return nil, fmt.Errorf("thumbnail encoding denied")
 	}
 	return output.Bytes(), nil
+}
+
+const MaxStoredBytes = 100 << 10
+
+func compressThumbnail(body []byte) ([]byte, error) {
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(body))
+	if err != nil || (format != "jpeg" && format != "png") || cfg.Width < 64 || cfg.Height < 64 || cfg.Width > 2048 || cfg.Height > 2048 || cfg.Width*cfg.Height > 1<<20 {
+		return nil, fmt.Errorf("thumbnail dimensions denied")
+	}
+	source, _, err := image.Decode(bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("thumbnail image denied")
+	}
+	width, height := cfg.Width, cfg.Height
+	if longest := max(width, height); longest > 640 {
+		width, height = max(1, width*640/longest), max(1, height*640/longest)
+	}
+	// Bounded quality steps normally suffice. If high-entropy pixels still do
+	// not fit, reduce dimensions before trying again; never upscale or retain
+	// source metadata. The final 64px bound guarantees finite work.
+	for {
+		target := image.NewRGBA(image.Rect(0, 0, width, height))
+		draw.Draw(target, target.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+		xdraw.CatmullRom.Scale(target, target.Bounds(), source, source.Bounds(), draw.Over, nil)
+		for _, quality := range []int{75, 65, 55, 45} {
+			var output bytes.Buffer
+			if err := jpeg.Encode(&output, target, &jpeg.Options{Quality: quality}); err != nil {
+				return nil, fmt.Errorf("thumbnail encoding denied")
+			}
+			if output.Len() <= MaxStoredBytes {
+				return output.Bytes(), nil
+			}
+		}
+		if max(width, height) <= 64 {
+			return nil, fmt.Errorf("thumbnail encoding denied")
+		}
+		width, height = max(1, width*3/4), max(1, height*3/4)
+	}
 }
 
 var deniedNetworks = []netip.Prefix{
