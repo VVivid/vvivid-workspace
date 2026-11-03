@@ -115,7 +115,7 @@ func TestOfficialMCPAddListUpdateAndBrowserSharePrivateRecords(t *testing.T) {
 		}
 	}
 	slices.Sort(names)
-	if strings.Join(names, ",") != "add_article,get_article,list_articles,patch_article,restore_article,set_article_archived,trash_article,update_article" {
+	if strings.Join(names, ",") != "add_article,add_opportunity,get_article,get_opportunity,list_articles,list_opportunities,patch_article,patch_opportunity,restore_article,restore_opportunity,set_article_archived,set_opportunity_archived,trash_article,trash_opportunity,update_article,update_opportunity" {
 		t.Fatalf("unexpected tools %v", names)
 	}
 	in := feed.AddInput{IdempotencyKey: "mcp-add", Article: feed.Content{URL: "https://example.com/story?utm_source=agent", Title: "An interesting story", Summary: "A concise, sourced introduction.", ThumbnailURL: "https://images.publisher.example/source.png"}}

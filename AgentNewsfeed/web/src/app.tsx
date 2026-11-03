@@ -4,6 +4,7 @@ import { Separator } from '@/components/ui/separator'
 import { Leaf } from '@/components/leaf'
 import { Arrow } from '@/components/arrow'
 import { ArticleMarkdown } from '@/components/markdown'
+import { Opportunities } from '@/opportunities'
 import type { Article, Bootstrap } from '@/types'
 
 function formatDate(timestamp: number) {
@@ -48,12 +49,12 @@ function Header({ data }: { data: Bootstrap }) {
         <span className="private-label">Private</span>
         {data.authenticated && (
           <>
-            <nav aria-label="Library">
+            {data.section !== 'jobs' && <nav aria-label="Library">
               <a href="/" aria-current={selectedShelf === 'feed' ? 'page' : undefined}>Feed</a>
               <a href="/archive" aria-current={selectedShelf === 'archive' ? 'page' : undefined}>Archive</a>
               <a href="/trash" aria-current={selectedShelf === 'trash' ? 'page' : undefined}>Trash</a>
-            </nav>
-            <form method="post" action="/auth/logout">
+            </nav>}
+            <form method="post" action="/auth/logout" className={data.section === 'jobs' ? 'header-signout' : undefined}>
               <input type="hidden" name="csrf_token" value={data.csrf} />
               <Button variant="outline" type="submit" size="sm">Sign out</Button>
             </form>
@@ -61,6 +62,18 @@ function Header({ data }: { data: Bootstrap }) {
         )}
       </div>
     </header>
+  )
+}
+
+function Sections({ data }: { data: Bootstrap }) {
+  return (
+    <aside className="section-sidebar">
+      <p className="eyebrow">Your sections</p>
+      <nav aria-label="Sections">
+        <a href="/" aria-current={data.section !== 'jobs' ? 'page' : undefined}><Leaf /><span>News</span></a>
+        <a href="/jobs" aria-current={data.section === 'jobs' ? 'page' : undefined}><Arrow direction="up-right" /><span>Jobs &amp; Internships</span></a>
+      </nav>
+    </aside>
   )
 }
 
@@ -230,10 +243,15 @@ export function App({ data }: { data: Bootstrap }) {
       <Header data={data} />
       {!data.authenticated ? (
         <Gate data={data} />
-      ) : data.view === 'reader' && data.article ? (
-        <Reader data={data} article={data.article} />
       ) : (
-        <Shelf data={data} />
+        <div className="library-layout">
+          <Sections data={data} />
+          <div className="library-content">
+            {data.section === 'jobs' ? <Opportunities data={data} /> : data.view === 'reader' && data.article
+              ? <Reader data={data} article={data.article} />
+              : <Shelf data={data} />}
+          </div>
+        </div>
       )}
       <footer className="site-footer page-width">
         <Separator />

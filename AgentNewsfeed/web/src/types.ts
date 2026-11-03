@@ -22,6 +22,33 @@ export interface Page {
   next_cursor?: string
 }
 
+export interface Opportunity {
+  id: string
+  kind: 'job' | 'internship'
+  url: string
+  title: string
+  company: string
+  location?: string
+  workplace?: 'remote' | 'hybrid' | 'on_site'
+  employment_type?: 'full_time' | 'part_time' | 'contract' | 'temporary' | 'seasonal' | 'other'
+  employment_period?: string
+  compensation?: string
+  deadline?: string
+  tags?: string[]
+  source_description?: string
+  agent_note?: string
+  revision: number
+  created_at: number
+  updated_at: number
+  archived_at?: number
+  trashed_at?: number
+}
+
+export interface OpportunitiesPage {
+  opportunities: Opportunity[]
+  next_cursor?: string
+}
+
 export interface Bootstrap {
   configured: boolean
   authenticated: boolean
@@ -35,4 +62,9 @@ export interface Bootstrap {
   page?: Page
   article?: Article
   content_images?: Record<string, string>
+  section?: 'news' | 'jobs'
+  cursor?: string
+  detail_selected?: boolean
+  opportunities_page?: OpportunitiesPage
+  opportunity?: Opportunity
 }
