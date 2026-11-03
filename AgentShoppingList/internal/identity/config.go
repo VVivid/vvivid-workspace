@@ -35,12 +35,15 @@ type Config struct {
 	MCPAudience     string
 	MCPClientIDs    []string
 	Keys            *Keyring
+	MCPAuthMode     string
+	GatewayIssuer   string
+	GatewayJWKSFile string
 }
 
 // LoadConfig leaves the public shell available when the entire identity bundle
 // is absent. A partial bundle is an error, never a weaker authentication mode.
 func LoadConfig(lookup func(string) (string, bool)) (*Config, error) {
-	names := []string{
+	requiredNames := []string{
 		"SHOPPING_ORIGIN",
 		"SHOPPING_OIDC_ISSUER",
 		"SHOPPING_WEB_CLIENT_ID",
@@ -50,9 +53,15 @@ func LoadConfig(lookup func(string) (string, bool)) (*Config, error) {
 		"SHOPPING_MCP_CLIENT_IDS",
 		"SHOPPING_SESSION_KEYS_FILE",
 	}
+	optionalNames := []string{"SHOPPING_MCP_AUTH_MODE", "SHOPPING_MCP_GATEWAY_ISSUER", "SHOPPING_MCP_GATEWAY_JWKS_FILE"}
 	values := make(map[string]string)
 	configured := false
-	for _, name := range names {
+	for _, name := range requiredNames {
+		value, present := lookup(name)
+		configured = configured || present
+		values[name] = value
+	}
+	for _, name := range optionalNames {
 		value, present := lookup(name)
 		configured = configured || present
 		values[name] = value
@@ -60,18 +69,21 @@ func LoadConfig(lookup func(string) (string, bool)) (*Config, error) {
 	if !configured {
 		return nil, nil
 	}
-	for _, name := range names {
+	for _, name := range requiredNames {
 		if values[name] == "" {
 			return nil, fmt.Errorf("%s is required when identity is configured", name)
 		}
 	}
 	cfg := &Config{
-		Origin:       values["SHOPPING_ORIGIN"],
-		Issuer:       values["SHOPPING_OIDC_ISSUER"],
-		WebClientID:  values["SHOPPING_WEB_CLIENT_ID"],
-		APIAudience:  values["SHOPPING_API_AUDIENCE"],
-		MCPAudience:  values["SHOPPING_MCP_AUDIENCE"],
-		MCPClientIDs: strings.Split(values["SHOPPING_MCP_CLIENT_IDS"], ","),
+		Origin:          values["SHOPPING_ORIGIN"],
+		Issuer:          values["SHOPPING_OIDC_ISSUER"],
+		WebClientID:     values["SHOPPING_WEB_CLIENT_ID"],
+		APIAudience:     values["SHOPPING_API_AUDIENCE"],
+		MCPAudience:     values["SHOPPING_MCP_AUDIENCE"],
+		MCPClientIDs:    strings.Split(values["SHOPPING_MCP_CLIENT_IDS"], ","),
+		MCPAuthMode:     values["SHOPPING_MCP_AUTH_MODE"],
+		GatewayIssuer:   values["SHOPPING_MCP_GATEWAY_ISSUER"],
+		GatewayJWKSFile: values["SHOPPING_MCP_GATEWAY_JWKS_FILE"],
 	}
 	secret, err := readPrivateFile(values["SHOPPING_WEB_CLIENT_SECRET_FILE"])
 	if err != nil {
@@ -97,8 +109,22 @@ func (cfg *Config) validate() error {
 	if _, err := secureURL(cfg.Issuer); err != nil {
 		return fmt.Errorf("SHOPPING_OIDC_ISSUER must be an exact HTTPS issuer (HTTP loopback is allowed for local issuers)")
 	}
-	if cfg.APIAudience != cfg.Origin+"/api/v1" || cfg.MCPAudience != cfg.Origin+"/mcp" {
-		return fmt.Errorf("API and MCP audiences must be the exact origin plus /api/v1 and /mcp respectively")
+	if cfg.APIAudience != cfg.Origin+"/api/v1" {
+		return fmt.Errorf("API audience must be the exact origin plus /api/v1")
+	}
+	switch cfg.MCPAuthMode {
+	case "", "direct":
+		if cfg.MCPAudience != cfg.Origin+"/mcp" || cfg.GatewayIssuer != "" || cfg.GatewayJWKSFile != "" {
+			return fmt.Errorf("direct MCP requires the origin plus /mcp audience and no gateway settings")
+		}
+	case "gateway":
+		gateway, err := secureURL(cfg.GatewayIssuer)
+		if err != nil || gateway.Scheme != "https" || gateway.Path != "" || gateway.RawPath != "" ||
+			cfg.GatewayJWKSFile == "" || cfg.MCPAudience != "agent-shopping-list-mcp" {
+			return fmt.Errorf("gateway MCP requires an exact HTTPS gateway origin, pinned JWKS file and agent-shopping-list-mcp audience")
+		}
+	default:
+		return fmt.Errorf("SHOPPING_MCP_AUTH_MODE must be direct or gateway")
 	}
 	if !validClient(cfg.WebClientID) || cfg.WebClientSecret == "" || len(cfg.WebClientSecret) > 4096 || cfg.Keys == nil {
 		return fmt.Errorf("identity requires a web client, private client secret and session keyring")

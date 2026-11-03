@@ -1,0 +1,6 @@
+apiVersion: v2
+name: agent-shopping-list
+description: Private shopping lists with browser OIDC and private gateway MCP
+version: 0.1.0
+appVersion: 0.1.0
+type: application

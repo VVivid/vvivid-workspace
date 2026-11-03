@@ -1,4 +1,7 @@
-.PHONY: assets build check fmt run process-test container-test
+.PHONY: assets build check fmt run process-test container-test race chart-test
+
+PYTHON ?= python3
+TEST_IMAGE ?= $(if $(SHOPPING_TEST_IMAGE),$(SHOPPING_TEST_IMAGE),agentshoppinglist:local)
 
 VERSION ?= dev
 COMMIT ?= unknown
@@ -28,4 +31,11 @@ process-test:
 	SHOPPING_PROCESS_TEST=1 go test -count=1 -v ./internal/acceptance
 
 container-test:
-	sh scripts/test-container.sh
+	SHOPPING_TEST_IMAGE=$(TEST_IMAGE) sh scripts/test-container.sh
+
+race:
+	go test -race ./...
+
+# Helm plus isolated check-only dependencies from deploy/gitops/requirements.txt.
+chart-test:
+	$(PYTHON) -m unittest discover -s deploy/gitops -p 'test_*.py'
