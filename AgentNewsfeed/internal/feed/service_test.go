@@ -22,7 +22,7 @@ func setup(t *testing.T) (*testfixture.Identity, *feed.Service, identity.Princip
 	f.Enroll(t, "alice")
 	f.Enroll(t, "bob")
 	policy, _ := thumbnail.NewPolicy("images.example.com")
-	return f, feed.New(f.Store, policy), f.Principal(t, "alice", scopes), f.Principal(t, "bob", scopes)
+	return f, feed.NewWithThumbnailFetcher(f.Store, policy, &preparedImages{err: errors.New("image unavailable")}), f.Principal(t, "alice", scopes), f.Principal(t, "bob", scopes)
 }
 func content() feed.Content {
 	return feed.Content{URL: "https://example.com/story?utm_source=agent#top", Title: "A sourced story", Summary: "A short introduction supplied by the source."}

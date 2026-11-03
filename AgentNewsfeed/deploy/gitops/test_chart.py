@@ -112,12 +112,12 @@ class ChartTests(unittest.TestCase):
                 self.assertEqual(entrypoint, "websecure")
                 self.assertEqual(rule["host"], "newsfeed.vvivid.dev")
                 allowed = {(p["path"], p["pathType"]) for p in paths}
-                self.assertEqual(allowed, {(p, "Exact") for p in ("/", "/archive", "/auth/login", "/auth/callback", "/auth/logout")} |
+                self.assertEqual(allowed, {(p, "Exact") for p in ("/", "/archive", "/trash", "/auth/login", "/auth/callback", "/auth/logout")} |
                                  {(p, "Prefix") for p in ("/articles/", "/api/v1/articles", "/static/assets/", "/thumbnails/")})
                 def matches(request):
                     return any(request == path if kind == "Exact" else request.rstrip("/") == path.rstrip("/") or
                                request.startswith(path.rstrip("/") + "/") for path, kind in allowed)
-                for path in ("/", "/auth/callback", "/archive", "/api/v1/articles/abc/archive", "/articles/abc", "/static/assets/app.js", "/thumbnails/abc", "/thumbnails/abc/content/" + "a" * 64):
+                for path in ("/", "/auth/callback", "/archive", "/trash", "/api/v1/articles/abc/archive", "/articles/abc", "/static/assets/app.js", "/thumbnails/abc", "/thumbnails/abc/content/" + "a" * 64):
                     self.assertTrue(matches(path), path)
                 for path in ("/mcp", "/mcp/", "/health/live", "/health/ready", "/.well-known/oauth-protected-resource/mcp", "/api/admin", "/api/v1/articles-evil", "/auth/admin"):
                     self.assertFalse(matches(path), path)

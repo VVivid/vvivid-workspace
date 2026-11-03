@@ -35,7 +35,7 @@ func app(t *testing.T) (*testfixture.Identity, *feed.Service, http.Handler) {
 	f.Enroll(t, "alice")
 	f.Enroll(t, "bob")
 	policy, _ := thumbnail.NewPolicy("")
-	s := feed.New(f.Store, policy)
+	s := feed.NewWithThumbnailFetcher(f.Store, policy, unavailableThumbnailFetcher{})
 	h, err := web.New(slog.New(slog.NewTextHandler(io.Discard, nil)), f.Manager, s, thumbnail.NewProxy(policy))
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +115,7 @@ func TestOfficialMCPAddListUpdateAndBrowserSharePrivateRecords(t *testing.T) {
 		}
 	}
 	slices.Sort(names)
-	if strings.Join(names, ",") != "add_article,list_articles,update_article" {
+	if strings.Join(names, ",") != "add_article,get_article,list_articles,patch_article,restore_article,set_article_archived,trash_article,update_article" {
 		t.Fatalf("unexpected tools %v", names)
 	}
 	in := feed.AddInput{IdempotencyKey: "mcp-add", Article: feed.Content{URL: "https://example.com/story?utm_source=agent", Title: "An interesting story", Summary: "A concise, sourced introduction.", ThumbnailURL: "https://images.publisher.example/source.png"}}
@@ -311,7 +311,12 @@ func TestOwnedPersistedMarkdownImagesUseProtectedRoutes(t *testing.T) {
 	}
 	p := f.Principal(t, "alice", allScopes)
 	content := feed.Content{URL: "https://publisher.example/articles/story", Title: "Source", Summary: "Source introduction", ThumbnailURL: "https://cdn.publisher.example/card.png", ContentMarkdown: "![Source image](../photo.png)\n\n![Again][source]\n\n[source]: ../photo.png\n\n![Private](https://127.0.0.1/private.png)\n\n[Link only](https://publisher.example/link-only.png)"}
-	article, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: "image-source", Article: content})
+	legacy, err := feed.NormalizeAddInput(feed.AddInput{IdempotencyKey: "image-source", Article: content}, thumbnail.Policy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, _ := json.Marshal(legacy)
+	article, err := f.Store.MutateArticle(t.Context(), p.Owner(), "image-source", "add_article", payload, legacy, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
