@@ -16,7 +16,7 @@ export function ArticleMarkdown({ content, sourceURL, images = {} }: { content: 
     urlTransform={(value, key) => {
       if (key === 'src') {
         const route = Object.hasOwn(images, value) ? images[value] : ''
-        return /^\/thumbnails\/[^/?#]+\/content\/[a-f0-9]{64}$/.test(route) ? route : ''
+        return /^\/thumbnails\/[^/?#]+\/content\/[a-f0-9]{64}(?:\?trashed=true)?$/.test(route) ? route : ''
       }
       const safe = defaultUrlTransform(value)
       if (!safe) return ''

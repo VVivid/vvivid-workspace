@@ -3,9 +3,14 @@
 package acceptance
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"image"
+	"image/jpeg"
 	"net/http"
 	"os"
 	"os/exec"
@@ -22,8 +27,12 @@ const database = "/data/newsfeed.sqlite"
 const expectedFile = "/data/container-expected.json"
 
 type persistenceExpected struct {
-	Retry   sqlite.MutationResult `json:"retry"`
-	Current sqlite.Article        `json:"current"`
+	Retry          sqlite.MutationResult `json:"retry"`
+	Current        sqlite.Article        `json:"current"`
+	Trashed        sqlite.Article        `json:"trashed"`
+	ThumbnailPatch sqlite.MutationResult `json:"thumbnail_patch"`
+	TrashRetry     sqlite.MutationResult `json:"trash_retry"`
+	RestoreRetry   sqlite.MutationResult `json:"restore_retry"`
 }
 
 var syntheticIdentity = sqlite.ExternalIdentity{Issuer: "https://issuer.example.com/realms/container-test", Subject: "synthetic-container-owner"}
@@ -50,7 +59,7 @@ func TestContainerProcessAndPrivatePersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	article := sqlite.Article{URL: "https://example.com/container-story", Title: "Synthetic container article", Summary: "Only local acceptance fixture data.", ContentMarkdown: "## Synthetic original\n\nPersisted source Markdown."}
+	article := sqlite.Article{URL: "https://example.com/container-story", Title: "Synthetic container article", Summary: "Only local acceptance fixture data.", ThumbnailURL: "https://images.example.com/container.jpg", ContentMarkdown: "## Synthetic original\n\nPersisted source Markdown."}
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +68,7 @@ func TestContainerProcessAndPrivatePersistence(t *testing.T) {
 	if err := os.WriteFile(subjectFile, []byte(syntheticIdentity.Subject), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	inputs, _ := json.Marshal([]feed.AddInput{{IdempotencyKey: "container-write", Article: feed.Content{URL: article.URL, Title: article.Title, Summary: article.Summary, ContentMarkdown: article.ContentMarkdown}}})
+	inputs, _ := json.Marshal([]feed.AddInput{{IdempotencyKey: "container-write", Article: feed.Content{URL: article.URL, Title: article.Title, Summary: article.Summary, ThumbnailURL: article.ThumbnailURL, ContentMarkdown: article.ContentMarkdown}}})
 	if err := os.WriteFile(seedFile, inputs, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -81,6 +90,11 @@ func TestContainerProcessAndPrivatePersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	prepared := expected.Article
+	thumbnailPatch, err := store.MutateArticle(t.Context(), owner, "container-thumbnail", "patch_article", []byte("container-thumbnail"), prepared, 1, sqlite.ThumbnailChange{Replace: true, JPEG: containerThumbnail(t)})
+	if err != nil || thumbnailPatch.Article.ThumbnailStatus != "stored" {
+		t.Fatalf("stored thumbnail fixture: %v", err)
+	}
 	archived, err := store.SetArchived(t.Context(), owner, expected.Article.ID, true)
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +102,33 @@ func TestContainerProcessAndPrivatePersistence(t *testing.T) {
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
-	raw, _ := json.Marshal(persistenceExpected{Retry: expected, Current: archived})
+	store, err = sqlite.Open(t.Context(), database, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	trash, err := store.MutateArticle(t.Context(), owner, "container-trash", "trash_article", []byte("container-trash"), sqlite.Article{ID: archived.ID}, archived.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := store.MutateArticle(t.Context(), owner, "container-restore", "restore_article", []byte("container-restore"), sqlite.Article{ID: archived.ID}, trash.Article.Revision)
+	if err != nil || restored.Article.ArchivedAt != archived.ArchivedAt {
+		t.Fatal("restore did not preserve Archive fixture")
+	}
+	retained := article
+	retained.URL = "https://example.com/container-retained-trash"
+	retainedPayload, _ := json.Marshal(retained)
+	added, err := store.MutateArticle(t.Context(), owner, "container-retained", "add_article", retainedPayload, retained, 0, sqlite.ThumbnailChange{Replace: true, JPEG: containerThumbnail(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	trashed, err := store.MutateArticle(t.Context(), owner, "container-retained-trash", "trash_article", []byte("container-retained-trash"), sqlite.Article{ID: added.Article.ID}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(persistenceExpected{Retry: expected, Current: restored.Article, Trashed: trashed.Article, ThumbnailPatch: thumbnailPatch, TrashRetry: trash, RestoreRetry: restored})
 	if err := os.WriteFile(expectedFile, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +223,7 @@ func assertFailClosed(t *testing.T) {
 	}
 	client := &http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{Proxy: nil}}
 	defer client.CloseIdleConnections()
-	for _, path := range []string{"/", "/archive", "/articles/synthetic", "/health/ready", "/api/v1/articles", "/api/v1/articles/synthetic", "/mcp"} {
+	for _, path := range []string{"/", "/archive", "/trash", "/articles/synthetic", "/thumbnails/synthetic", "/health/ready", "/api/v1/articles", "/api/v1/articles/synthetic", "/mcp"} {
 		request, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1:8091"+path, nil)
 		response, err := client.Do(request)
 		if err != nil {
@@ -240,10 +280,55 @@ func verifyPersistence(t *testing.T) {
 	if err != nil || current != expected.Current || current.ContentMarkdown == "" || current.ArchivedAt == 0 {
 		t.Fatal("archived original did not persist")
 	}
-	article := sqlite.Article{URL: "https://example.com/container-story", Title: "Synthetic container article", Summary: "Only local acceptance fixture data.", ContentMarkdown: "## Synthetic original\n\nPersisted source Markdown."}
+	trashed, err := store.ArticleInView(t.Context(), owner, expected.Trashed.ID, true)
+	if err != nil || trashed != expected.Trashed {
+		t.Fatal("retained Trash fixture did not persist")
+	}
+	trashPage, err := store.ListArticles(t.Context(), owner, sqlite.Cursor{Trashed: true}, 10)
+	trashSummary := expected.Trashed
+	trashSummary.ContentMarkdown = ""
+	if err != nil || len(trashPage) != 1 || trashPage[0] != trashSummary {
+		t.Fatal("retained Trash list did not persist")
+	}
+	for _, a := range []sqlite.Article{current, trashed} {
+		body, err := store.Thumbnail(t.Context(), owner, a.ID, a.TrashedAt != 0)
+		if err != nil || !bytes.Equal(body, containerThumbnail(t)) || len(body) > sqlite.MaxThumbnailBytes {
+			t.Fatal("stored JPEG did not survive network-none restart")
+		}
+		cfg, err := jpeg.DecodeConfig(bytes.NewReader(body))
+		sum := sha256.Sum256(body)
+		if err != nil || cfg.Width > 640 || cfg.Height > 640 || a.ThumbnailHash != hex.EncodeToString(sum[:]) || a.ThumbnailStatus != "stored" {
+			t.Fatal("stored JPEG metadata changed")
+		}
+	}
+	if _, err := store.Thumbnail(t.Context(), owner, trashed.ID, false); !errors.Is(err, sqlite.ErrNotFound) {
+		t.Fatal("ordinary thumbnail read included Trash")
+	}
+	if replay, err := store.MutateArticle(t.Context(), owner, "container-thumbnail", "patch_article", []byte("container-thumbnail"), sqlite.Article{ID: current.ID}, 1); err != nil || replay != expected.ThumbnailPatch {
+		t.Fatal("stored thumbnail retry changed after restart")
+	}
+	if replay, err := store.MutateArticle(t.Context(), owner, "container-trash", "trash_article", []byte("container-trash"), sqlite.Article{ID: current.ID}, 3); err != nil || replay != expected.TrashRetry {
+		t.Fatal("Trash retry changed after restore/restart")
+	}
+	if replay, err := store.MutateArticle(t.Context(), owner, "container-restore", "restore_article", []byte("container-restore"), sqlite.Article{ID: current.ID}, 4); err != nil || replay != expected.RestoreRetry {
+		t.Fatal("Restore retry changed after restart")
+	}
+	if actual, err := store.Article(t.Context(), owner, current.ID); err != nil || actual != expected.Current {
+		t.Fatal("historical retries reapplied state changes")
+	}
+	article := sqlite.Article{URL: "https://example.com/container-story", Title: "Synthetic container article", Summary: "Only local acceptance fixture data.", ThumbnailURL: "https://images.example.com/container.jpg", ContentMarkdown: "## Synthetic original\n\nPersisted source Markdown."}
 	payload, _ := json.Marshal(article)
 	replay, err := store.MutateArticle(t.Context(), owner, "container-write", "add_article", payload, article, 0)
 	if err != nil || replay != expected.Retry {
 		t.Fatalf("durable retry result changed: %#v %v", replay, err)
 	}
+}
+
+func containerThumbnail(t *testing.T) []byte {
+	t.Helper()
+	var output bytes.Buffer
+	if err := jpeg.Encode(&output, image.NewRGBA(image.Rect(0, 0, 160, 80)), &jpeg.Options{Quality: 75}); err != nil {
+		t.Fatal(err)
+	}
+	return output.Bytes()
 }
