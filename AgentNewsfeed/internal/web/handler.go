@@ -68,6 +68,10 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 	mux.HandleFunc("GET /archive", h.index)
 	mux.HandleFunc("GET /trash", h.index)
 	mux.HandleFunc("GET /articles/{id}", h.index)
+	mux.HandleFunc("GET /jobs", h.jobs)
+	mux.HandleFunc("GET /jobs/archive", h.jobs)
+	mux.HandleFunc("GET /jobs/trash", h.jobs)
+	mux.HandleFunc("GET /jobs/{id}", h.jobs)
 	if auth != nil {
 		auth.Register(mux)
 		mux.Handle("GET /api/v1/articles", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.list)))
@@ -76,6 +80,11 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 		mux.Handle("POST /api/v1/articles/{id}/restore", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.archive(false)))
 		mux.Handle("POST /api/v1/articles/{id}/trash", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.trash(false)))
 		mux.Handle("POST /api/v1/articles/{id}/restore-trash", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.trash(true)))
+		mux.Handle("GET /api/v1/opportunities", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.listOpportunities)))
+		mux.Handle("GET /api/v1/opportunities/{id}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.opportunityDetail)))
+		for _, action := range []string{"archive", "unarchive", "trash", "restore"} {
+			mux.Handle("POST /api/v1/opportunities/{id}/"+action, auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.opportunityState(action)))
+		}
 		mux.Handle("GET /thumbnails/{id}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.image)))
 		mux.Handle("GET /thumbnails/{id}/content/{image}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.image)))
 		mux.Handle("/mcp", auth.BearerMiddleware(auth.MCPAudience(), nil, feedmcp.NewHandler(service, logger)))
@@ -117,22 +126,27 @@ func headers(next http.Handler, auth *identity.Manager) http.Handler {
 }
 
 type bootstrap struct {
-	Configured    bool              `json:"configured"`
-	Authenticated bool              `json:"authenticated"`
-	CanWrite      bool              `json:"can_write"`
-	CSRF          string            `json:"csrf"`
-	View          string            `json:"view"`
-	FromArchive   bool              `json:"from_archive"`
-	FromTrash     bool              `json:"from_trash"`
-	MutationKey   string            `json:"mutation_key,omitempty"`
-	SignInURL     string            `json:"sign_in_url"`
-	Page          *feed.Page        `json:"page,omitempty"`
-	Article       *sqlite.Article   `json:"article,omitempty"`
-	ContentImages map[string]string `json:"content_images,omitempty"`
+	Configured        bool                    `json:"configured"`
+	Authenticated     bool                    `json:"authenticated"`
+	CanWrite          bool                    `json:"can_write"`
+	CSRF              string                  `json:"csrf"`
+	View              string                  `json:"view"`
+	FromArchive       bool                    `json:"from_archive"`
+	FromTrash         bool                    `json:"from_trash"`
+	MutationKey       string                  `json:"mutation_key,omitempty"`
+	SignInURL         string                  `json:"sign_in_url"`
+	Page              *feed.Page              `json:"page,omitempty"`
+	Article           *sqlite.Article         `json:"article,omitempty"`
+	ContentImages     map[string]string       `json:"content_images,omitempty"`
+	Section           string                  `json:"section"`
+	Cursor            string                  `json:"cursor,omitempty"`
+	DetailSelected    bool                    `json:"detail_selected"`
+	OpportunitiesPage *feed.OpportunitiesPage `json:"opportunities_page,omitempty"`
+	Opportunity       *sqlite.Opportunity     `json:"opportunity,omitempty"`
 }
 
 func (h *handler) index(w http.ResponseWriter, r *http.Request) {
-	data := bootstrap{Configured: h.auth != nil, View: "feed", SignInURL: "/auth/login?return_to=" + url.QueryEscape(r.URL.RequestURI())}
+	data := bootstrap{Configured: h.auth != nil, Section: "news", View: "feed", SignInURL: "/auth/login?return_to=" + url.QueryEscape(r.URL.RequestURI())}
 	if r.URL.Path == "/archive" {
 		data.View = "archive"
 	} else if r.URL.Path == "/trash" {
@@ -174,6 +188,10 @@ func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 		}
 		data.Authenticated, data.CSRF, data.CanWrite = true, csrf, p.Allows(identity.ArticlesWrite)
 	}
+	h.renderShell(w, status, data)
+}
+
+func (h *handler) renderShell(w http.ResponseWriter, status int, data bootstrap) {
 	body, err := json.Marshal(data)
 	if err != nil {
 		writeError(w, err)
@@ -358,9 +376,13 @@ func contentImageRoutes(article sqlite.Article) map[string]string {
 }
 
 func writeError(w http.ResponseWriter, err error) {
+	writeSafeError(w, err, feed.SafeError(err))
+}
+
+func writeSafeError(w http.ResponseWriter, err error, message string) {
 	status := http.StatusServiceUnavailable
 	switch {
-	case errors.Is(err, feed.ErrInvalid):
+	case errors.Is(err, feed.ErrInvalid), errors.Is(err, feed.ErrInvalidOpportunity):
 		status = http.StatusBadRequest
 	case errors.Is(err, identity.ErrForbidden):
 		status = http.StatusForbidden
@@ -371,5 +393,5 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, sqlite.ErrConflict), errors.Is(err, sqlite.ErrIdempotencyConflict):
 		status = http.StatusConflict
 	}
-	http.Error(w, feed.SafeError(err), status)
+	http.Error(w, message, status)
 }
