@@ -24,11 +24,22 @@ const MaxContentBytes = 256 << 10
 type Service struct {
 	store      *sqlite.Store
 	thumbnails thumbnail.Policy
+	images     ThumbnailFetcher
 }
 
 func New(store *sqlite.Store, policy thumbnail.Policy) *Service {
-	return &Service{store: store, thumbnails: policy}
+	return NewWithThumbnailFetcher(store, policy, thumbnail.NewProxy(policy))
 }
+
+// ThumbnailFetcher prepares a bounded JPEG without holding a database lock.
+type ThumbnailFetcher interface {
+	FetchThumbnail(context.Context, string) ([]byte, error)
+}
+
+func NewWithThumbnailFetcher(store *sqlite.Store, policy thumbnail.Policy, images ThumbnailFetcher) *Service {
+	return &Service{store: store, thumbnails: policy, images: images}
+}
+
 func (s *Service) Ready(ctx context.Context) error { return s.store.Ready(ctx) }
 
 type Content struct {
@@ -52,6 +63,7 @@ type ListInput struct {
 	Limit    int    `json:"limit,omitzero"`
 	Cursor   string `json:"cursor,omitempty"`
 	Archived bool   `json:"archived,omitzero"`
+	Trashed  bool   `json:"trashed,omitzero"`
 }
 type Page struct {
 	Articles   []sqlite.Article `json:"articles"`
@@ -63,8 +75,8 @@ func boundedText(value string, max int) bool {
 }
 
 // Recheck enrollment even when a previously verified principal is reused.
-func (s *Service) authorize(ctx context.Context, p identity.Principal, scope string) error {
-	if err := p.Require(scope); err != nil {
+func (s *Service) authorize(ctx context.Context, p identity.Principal, scopes ...string) error {
+	if err := p.Require(scopes...); err != nil {
 		return err
 	}
 	owner, err := s.store.OwnerForIdentity(ctx, p.Identity())
@@ -109,7 +121,17 @@ func (s *Service) AddArticle(ctx context.Context, p identity.Principal, in AddIn
 		return sqlite.MutationResult{}, err
 	}
 	payload, _ := json.Marshal(a)
-	return s.store.MutateArticle(ctx, p.Owner(), in.IdempotencyKey, "add_article", payload, a, 0)
+	if out, found, err := s.store.ReplayMutation(ctx, p.Owner(), in.IdempotencyKey, "add_article", payload); found || err != nil {
+		return out, err
+	}
+	// Canonical duplicates, including retained Trash, do not fetch a new image.
+	if _, err := s.store.ArticleForURL(ctx, p.Owner(), a.URL); err == nil {
+		return s.store.MutateArticle(ctx, p.Owner(), in.IdempotencyKey, "add_article", payload, a, 0)
+	} else if !errors.Is(err, sqlite.ErrNotFound) {
+		return sqlite.MutationResult{}, err
+	}
+	change := s.prepareThumbnail(ctx, a.ThumbnailURL)
+	return s.store.MutateArticle(ctx, p.Owner(), in.IdempotencyKey, "add_article", payload, a, 0, change)
 }
 
 func (s *Service) UpdateArticle(ctx context.Context, p identity.Principal, in UpdateInput) (sqlite.MutationResult, error) {
@@ -128,7 +150,26 @@ func (s *Service) UpdateArticle(ctx context.Context, p identity.Principal, in Up
 		Article  sqlite.Article
 		Expected int64
 	}{a, in.ExpectedRevision})
-	return s.store.MutateArticle(ctx, p.Owner(), in.IdempotencyKey, "update_article", payload, a, in.ExpectedRevision)
+	if out, found, err := s.store.ReplayMutation(ctx, p.Owner(), in.IdempotencyKey, "update_article", payload); found || err != nil {
+		return out, err
+	}
+	current, err := s.store.Article(ctx, p.Owner(), a.ID)
+	if err != nil {
+		return sqlite.MutationResult{}, err
+	}
+	if current.Revision != in.ExpectedRevision {
+		return sqlite.MutationResult{}, sqlite.ErrConflict
+	}
+	if duplicate, err := s.store.ArticleForURL(ctx, p.Owner(), a.URL); err == nil && duplicate.ID != a.ID {
+		return sqlite.MutationResult{}, sqlite.ErrConflict
+	} else if err != nil && !errors.Is(err, sqlite.ErrNotFound) {
+		return sqlite.MutationResult{}, err
+	}
+	change := sqlite.ThumbnailChange{}
+	if a.ThumbnailURL != current.ThumbnailURL || current.ThumbnailStatus != "stored" {
+		change = s.prepareThumbnail(ctx, a.ThumbnailURL)
+	}
+	return s.store.MutateArticle(ctx, p.Owner(), in.IdempotencyKey, "update_article", payload, a, in.ExpectedRevision, change)
 }
 
 func (s *Service) ListArticles(ctx context.Context, p identity.Principal, in ListInput) (Page, error) {
@@ -138,17 +179,17 @@ func (s *Service) ListArticles(ctx context.Context, p identity.Principal, in Lis
 	if in.Limit == 0 {
 		in.Limit = 20
 	}
-	if in.Limit < 1 || in.Limit > 50 || len(in.Cursor) > 256 {
+	if in.Limit < 1 || in.Limit > 50 || len(in.Cursor) > 256 || (in.Archived && in.Trashed) {
 		return Page{}, ErrInvalid
 	}
 	var cursor sqlite.Cursor
 	if in.Cursor != "" {
 		raw, err := base64.RawURLEncoding.DecodeString(in.Cursor)
-		if err != nil || json.Unmarshal(raw, &cursor) != nil || cursor.Timestamp < 1 || !boundedText(cursor.ID, 64) || cursor.Owner != p.Owner().ID() || cursor.Archived != in.Archived {
+		if err != nil || json.Unmarshal(raw, &cursor) != nil || cursor.Timestamp < 1 || !boundedText(cursor.ID, 64) || cursor.Owner != p.Owner().ID() || cursor.Archived != in.Archived || cursor.Trashed != in.Trashed {
 			return Page{}, ErrInvalid
 		}
 	}
-	cursor.Archived = in.Archived
+	cursor.Archived, cursor.Trashed = in.Archived, in.Trashed
 	articles, err := s.store.ListArticles(ctx, p.Owner(), cursor, in.Limit+1)
 	if err != nil {
 		return Page{}, err
@@ -161,20 +202,27 @@ func (s *Service) ListArticles(ctx context.Context, p identity.Principal, in Lis
 		if in.Archived {
 			timestamp = last.ArchivedAt
 		}
-		raw, _ := json.Marshal(sqlite.Cursor{Timestamp: timestamp, ID: last.ID, Owner: p.Owner().ID(), Archived: in.Archived})
+		if in.Trashed {
+			timestamp = last.TrashedAt
+		}
+		raw, _ := json.Marshal(sqlite.Cursor{Timestamp: timestamp, ID: last.ID, Owner: p.Owner().ID(), Archived: in.Archived, Trashed: in.Trashed})
 		page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
 	}
 	return page, nil
 }
 
 func (s *Service) GetArticle(ctx context.Context, p identity.Principal, id string) (sqlite.Article, error) {
+	return s.GetArticleInView(ctx, p, id, false)
+}
+
+func (s *Service) GetArticleInView(ctx context.Context, p identity.Principal, id string, trashed bool) (sqlite.Article, error) {
 	if err := s.authorize(ctx, p, identity.Read); err != nil {
 		return sqlite.Article{}, err
 	}
 	if !boundedText(id, 64) {
 		return sqlite.Article{}, ErrInvalid
 	}
-	return s.store.Article(ctx, p.Owner(), id)
+	return s.store.ArticleInView(ctx, p.Owner(), id, trashed)
 }
 
 func (s *Service) SetArchived(ctx context.Context, p identity.Principal, id string, archived bool) (sqlite.Article, error) {
@@ -185,6 +233,30 @@ func (s *Service) SetArchived(ctx context.Context, p identity.Principal, id stri
 		return sqlite.Article{}, ErrInvalid
 	}
 	return s.store.SetArchived(ctx, p.Owner(), id, archived)
+}
+
+func (s *Service) prepareThumbnail(ctx context.Context, raw string) sqlite.ThumbnailChange {
+	change := sqlite.ThumbnailChange{Replace: true}
+	if raw == "" {
+		return change
+	}
+	body, err := s.images.FetchThumbnail(ctx, raw)
+	if err != nil {
+		change.Status = "unavailable"
+	} else {
+		change.JPEG = body
+	}
+	return change
+}
+
+func (s *Service) Thumbnail(ctx context.Context, p identity.Principal, id string, trashed bool) ([]byte, error) {
+	if err := s.authorize(ctx, p, identity.Read); err != nil {
+		return nil, err
+	}
+	if !boundedText(id, 64) {
+		return nil, ErrInvalid
+	}
+	return s.store.Thumbnail(ctx, p.Owner(), id, trashed)
 }
 
 func SafeError(err error) string {
