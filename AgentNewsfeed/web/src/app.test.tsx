@@ -59,6 +59,10 @@ describe('private reading shelf', () => {
     await user.tab()
     expect(screen.getByRole('button', { name: 'Sign out' })).toHaveFocus()
     await user.tab()
+    expect(screen.getByRole('link', { name: 'News' })).toHaveFocus()
+    await user.tab()
+    expect(screen.getByRole('link', { name: 'Jobs & Internships' })).toHaveFocus()
+    await user.tab()
     expect(screen.getByRole('link', { name: article.title })).toHaveFocus()
   })
 
