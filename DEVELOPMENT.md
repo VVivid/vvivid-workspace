@@ -43,11 +43,13 @@ Use `make go-case-study-check`, `make go-case-study-test`, or `make go-case-stud
 
 ## Pull request checks
 
-The [website workflow](.github/workflows/website.yml) and dedicated [AgentNewsfeed workflow](.github/workflows/newsfeed.yml) are enabled. Other projects use manual root/project Make commands. Select the affected projects explicitly before a PR.
+The [website workflow](.github/workflows/website.yml), [AgentNewsfeed workflow](.github/workflows/newsfeed.yml) and [AgentShoppingList workflow](.github/workflows/shopping.yml) are enabled. Other projects use manual root/project Make commands. Select the affected projects explicitly before a PR.
 
 Website PR checks have read-only repository permissions and build both public base URLs without tailnet or publishing secrets. Main pushes run checks. After separate activation, `release/vvivid.dev/X.Y.Z` publishes staging artifacts and `vvivid.dev/vX.Y.Z` publishes production artifacts to private Zot, then records exact desired state in `VVivid/homelab-gitops`. Fleet reconciles only explicitly enabled website paths. The [publication contract](vvivid.dev/deploy/gitops/README.md) owns setup, credential boundaries and recovery; main and the old `release/vvivid-preview` branch never deploy automatically.
 
 AgentNewsfeed PR/main checks include frontend, Go/race/build, Compose, real Linux amd64 container and Helm/release policy tests. Only canonical `AgentNewsfeed/vX.Y.Z` production tags can publish after `NEWSFEED_GITOPS_ENABLED=true` and shared environment activation. Its [production contract](AgentNewsfeed/deploy/gitops/README.md) reuses the existing artifact-publication identity/App/lock; no website behavior changes.
+
+AgentShoppingList PR/main checks include browser sharing regressions, Go/race/build, real Linux amd64 container and Helm/release/publication tests. Only canonical `AgentShoppingList/vX.Y.Z` tags can publish after `SHOPPING_GITOPS_ENABLED=true` and shared environment activation. Its [production contract](AgentShoppingList/deploy/gitops/README.md) reuses the same identity/App/lock; data migration and live cutover remain separate.
 
 Account for path-filtered PR checks being skipped on unrelated changes before making them required globally. Future service CI must reuse the monorepo's shared artifact-publication environment and existing Tailscale CI trust; each app remains a separate release and adoption decision.
 

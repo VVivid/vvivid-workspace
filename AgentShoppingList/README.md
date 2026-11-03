@@ -16,7 +16,7 @@ The Go application serves four compact mobile views, a narrow browser API and16 
 
 ## Selected stack
 
-Go + `html/template` + Tailwind CSS + minimal JavaScript + SQLite. One Go application serves the mobile site, Web API, and MCP endpoint. Reuse existing Traefik and Keycloak. **No separate MCP gateway.**
+Go + `html/template` + Tailwind CSS + minimal JavaScript + SQLite. One Go application serves the mobile site, Web API, and MCP endpoint. Reuse existing Traefik and Keycloak. MCP supports standalone direct OIDC and private authentication through the existing shared R&D gateway; shopping tools execute in this application.
 
 ## Documents
 
@@ -70,9 +70,15 @@ The default development listener is local. The deployed beta uses `https://shopp
 | `/health/live` | 200 while HTTP is serving |
 | `/health/ready` | 200 for configured identity plus available DB/current complete migrations; otherwise503 |
 | `/auth/login`, `/auth/callback`, `/auth/logout` | Configured-only OIDC+PKCE and durable CSRF-protected sessions |
-| `/.well-known/oauth-protected-resource/mcp`, `.../api/v1` | Configured-only exact resource metadata |
+| `/.well-known/oauth-protected-resource/mcp`, `.../api/v1` | Configured-only exact resource metadata; MCP metadata is served only in direct mode |
 | `/api/v1/*`, `/mcp` | Configured-only shopping adapters; see DOMAIN.md for current routes/tools and validation |
+
+`SHOPPING_MCP_AUTH_MODE` defaults to `direct`. Gateway mode requires `SHOPPING_MCP_AUDIENCE=agent-shopping-list-mcp`, the exact HTTPS gateway issuer, a pinned public JWKS file and an explicit MCP client allowlist. The gateway's external resource (`https://mcp.rd.lab.vvivid.dev/agent-shopping-list/mcp`) is distinct from that backend audience. Verified gateway claims resolve the original OIDC issuer and subject to an existing active owner; authentication never creates an account. Browser login, API sessions, CSRF and domain permissions keep their existing behavior. See [gateway authentication and migration constraints](docs/AUTH.md#mcp-gateway-mode). Source support does not establish deployment or data/identity cutover.
 
 SQLite uses WAL, one writer, a bounded read-only pool and per-connection foreign keys. Embedded migrations reject altered/newer/gapped history and existing schemas without application history. No accounts are seeded; identity lookup never enrolls automatically. Fresh startup, enrollment and supported upgrades create no backup archive or backup scratch directory. Keep shopping data and runtime secrets on the server: no backups, snapshots, off-server copies, schedules or Mac recovery keys. Existing manual backup tools require a future explicit request and are not invoked by application paths. See [docs/RUNBOOK.md](docs/RUNBOOK.md). Data files are Git-ignored. Restricted local validation can use `GOMODCACHE=$PWD/.cache/go-mod GOCACHE=$PWD/.cache/go-build make check build`.
 
 The deployed beta enrolls only the owner and has separate Codex and ChatGPT OAuth clients. Example preferences are America/New_York, USD, Walmart, Monday week start; these are illustrative selections, not global defaults. A new deployment must provision its own private secrets, exact callbacks and explicitly enrolled subject; the repository contains no live credentials or database. Follow [authentication](docs/AUTH.md) and the [runbook](docs/RUNBOOK.md) for verification; keep active task progress in ignored local records.
+
+## R&D production delivery
+
+[Production Helm/Fleet and CI publication](deploy/gitops/README.md) prepares the retained Shopping deployment in `vvivid-rd`. PR/main checks are enabled; canonical project tags publish only after separate activation. Existing Shopping data and owner identity must be migrated deliberately; a published image is not cutover evidence.

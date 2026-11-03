@@ -43,7 +43,7 @@ MCP tools call the same domain services as the Web API. They do not automate the
 
 # Implementation stack and infrastructure
 
-The selected stack is Go, html/template, Tailwind CSS, a small JavaScript layer, and SQLite. One Go application serves mobile pages, the Web API, and the built-in MCP endpoint. No separate MCP gateway is deployed.
+The selected stack is Go, html/template, Tailwind CSS, a small JavaScript layer, and SQLite. One Go application serves mobile pages, the Web API, and the built-in MCP endpoint. Standalone deployments use direct OIDC; the R&D migration uses the existing shared MCP gateway for private authentication while tools execute in this application.
 
 Go templates own reusable page components. Preserve the accepted mobile design; the React/Radix reference demo is a visual and interaction reference, not the production frontend. Recreate equivalent accessible controls in semantic HTML, CSS, and small JavaScript. This is shadcn-inspired styling, not direct use of React shadcn components. Product dialogs need keyboard, focus, and screen-reader behavior.
 
@@ -228,7 +228,7 @@ Proposed integration:
 
 - Use authorization code flow with PKCE S256. MCP uses bearer access tokens over HTTPS; each request is authenticated. Verify signature, exact issuer, intended audience, expiry, and required scopes. ID tokens are not API access tokens.
 
-- Publish MCP protected-resource metadata and appropriate authentication challenges. Discover Keycloak endpoints from its OIDC metadata. These requirements follow the current [MCP authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization).
+- Direct mode publishes MCP protected-resource metadata and appropriate authentication challenges. Gateway mode delegates external discovery/challenges to the existing gateway and validates its short-lived signed identity against pinned public keys and the fixed backend audience. Both resolve the original OIDC issuer and subject to current local enrollment. Browser authentication stays direct OIDC. See [the gateway contract](docs/AUTH.md#mcp-gateway-mode). Discover Keycloak endpoints from its OIDC metadata. These requirements follow the current [MCP authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization).
 
 - The same Go application handles web login and a same-origin server-side session. Keep OAuth tokens server-side, use secure HttpOnly session cookies with an appropriate SameSite policy, protect mutations against CSRF, and restrict origins.
 
@@ -284,7 +284,7 @@ Connection loss must never display an unsaved checkbox as synced. V1 may require
 
 3. Choose app enrollment policy, default timezone/currency, and how receipts or user confirmations reach the agent.
 
-4. Pin the Go version, official MCP SDK, SQLite driver, Tailwind build tooling, and migration tool during CP01. Go + html/template + SQLite with one app behind existing Traefik and Keycloak is already selected; no separate MCP gateway.
+4. Pin the Go version, official MCP SDK, SQLite driver, Tailwind build tooling, and migration tool during CP01. Go + html/template + SQLite with one app behind existing Traefik and Keycloak is already selected; the R&D migration reuses its shared gateway.
 
 5. Keep stock tracking, shared households, automated Walmart imports, custom metrics, and offline writes out of v1 unless explicitly added.
 

@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "shopping.labels" . | nindent 4 }}
+spec:
+  replicas: {{ ternary 0 1 .Values.maintenance }}
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "shopping.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "shopping.labels" . | nindent 8 }}
+      annotations:
+        vvivid.dev/source-sha: {{ .Values.provenance.sourceSha | quote }}
+    spec:
+      serviceAccountName: {{ .Values.existingServiceAccountName }}
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: prepare-private-files
+          image: {{ .Values.initImage | quote }}
+          command: [/bin/sh, -ec]
+          args:
+            - |
+              umask 077
+              cp /seed/web-client-secret /run/identity/web-client-secret
+              cp /seed/session-keys.json /run/identity/session-keys.json
+              chmod 0600 /run/identity/web-client-secret /run/identity/session-keys.json
+              mkdir -p /data/sqlite
+              chmod 0700 /data/sqlite
+          securityContext:
+            {{- include "shopping.security" . | nindent 12 }}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          volumeMounts:
+            - {name: identity-seed, mountPath: /seed, readOnly: true}
+            - {name: identity, mountPath: /run/identity}
+            - {name: data, mountPath: /data}
+      containers:
+        - name: shopping
+          image: {{ printf "%s@%s" .Values.image.repository .Values.image.digest | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            {{- include "shopping.security" . | nindent 12 }}
+          ports:
+            - {name: http, containerPort: 8090}
+          env:
+            - {name: SHOPPING_HTTP_ADDR, value: ':8090'}
+            - {name: SHOPPING_DB_PATH, value: /data/sqlite/shopping.sqlite}
+            - {name: SHOPPING_ORIGIN, value: {{ printf "https://%s" .Values.hostname | quote }}}
+            - {name: SHOPPING_OIDC_ISSUER, value: {{ .Values.identity.issuer | quote }}}
+            - {name: SHOPPING_WEB_CLIENT_ID, value: {{ .Values.identity.webClientID | quote }}}
+            - {name: SHOPPING_WEB_CLIENT_SECRET_FILE, value: /run/identity/web-client-secret}
+            - {name: SHOPPING_SESSION_KEYS_FILE, value: /run/identity/session-keys.json}
+            - {name: SHOPPING_API_AUDIENCE, value: {{ printf "https://%s/api/v1" .Values.hostname | quote }}}
+            - {name: SHOPPING_MCP_AUTH_MODE, value: gateway}
+            - {name: SHOPPING_MCP_AUDIENCE, value: {{ .Values.identity.gatewayAudience | quote }}}
+            - {name: SHOPPING_MCP_GATEWAY_ISSUER, value: {{ .Values.identity.gatewayIssuer | quote }}}
+            - {name: SHOPPING_MCP_GATEWAY_JWKS_FILE, value: /etc/gateway/public.jwks.json}
+            - {name: SHOPPING_MCP_CLIENT_IDS, value: {{ .Values.identity.mcpClientIDs | quote }}}
+          startupProbe:
+            exec: {command: [/shopping, healthcheck, live]}
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            exec: {command: [/shopping, healthcheck, ready]}
+            periodSeconds: 10
+          livenessProbe:
+            exec: {command: [/shopping, healthcheck, live]}
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: identity, mountPath: /run/identity, readOnly: true}
+            - {name: gateway-jwks, mountPath: /etc/gateway, readOnly: true}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.claimName }}
+        # Only init sees the projected Secret. fsGroup projection is 0440;
+        # copying as UID65532 yields exact private 0600 application files.
+        - name: identity-seed
+          secret:
+            secretName: {{ .Values.identity.existingSecret }}
+            defaultMode: 0440
+            items:
+              - {key: web-client-secret, path: web-client-secret}
+              - {key: session-keys.json, path: session-keys.json}
+        - name: identity
+          emptyDir: {medium: Memory, sizeLimit: 1Mi}
+        - name: gateway-jwks
+          configMap:
+            name: {{ .Values.identity.existingGatewayJWKS }}
+            items:
+              - {key: public.jwks.json, path: public.jwks.json}
