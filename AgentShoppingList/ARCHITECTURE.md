@@ -1,6 +1,6 @@
 # Architecture and infrastructure
 
-Selected October 19, 2026. This is a design, not a deployed shopping service.
+Initial standalone design selected October 19, 2026. The optional shared-gateway mode supports the R&D migration; configuration support does not establish deployment or cutover.
 
 ## Runtime layout
 
@@ -8,6 +8,8 @@ Selected October 19, 2026. This is a design, not a deployed shopping service.
 flowchart TD
   Browser[Mobile browser] --> Proxy[Existing Traefik HTTPS]
   Agent[External AI MCP client] --> Proxy
+  Agent --> Gateway[Existing shared R&D gateway]
+  Gateway -->|Private signed MCP identity| App
   Proxy --> App[One Go application container]
   App --> Web[Templates and narrow Web API]
   App --> MCP[Built-in MCP endpoint]
@@ -19,7 +21,7 @@ flowchart TD
   App -. Discovery and token validation .-> KC
 ```
 
-No separate MCP gateway, frontend server, Redis, message broker, or in-app AI runtime is required. SSHMCP is a separate administration capability; shopping tools execute directly inside the shopping service.
+Standalone MCP uses direct OIDC; R&D MCP can use the existing shared gateway. No app-specific gateway, frontend server, Redis, message broker, or in-app AI runtime is required. SSHMCP is a separate administration capability; shopping tools execute directly inside the shopping service.
 
 ## Application organization
 
@@ -59,7 +61,7 @@ Reuse the existing Keycloak instance and initially its existing issuer; provisio
 
 Web login uses authorization code + PKCE, with an encrypted or otherwise securely protected persistent server-side session store and secure HttpOnly cookies, SameSite policy and CSRF protection. Keep encryption keys outside the image and database, in runtime secrets, stable across restarts.
 
-MCP bearer access tokens must have the correct issuer, signature, audience, time validity and scopes. The authenticated subject selects the data owner. No caller-supplied user ID or client ID can override identity. Shopping grants must not include SSH privileges.
+MCP bearer access tokens must have the correct issuer, signature, audience, time validity and scopes. Direct mode validates Keycloak access tokens; gateway mode validates the existing MCPGateway v1 contract with a fixed backend audience and startup-pinned public keys. Ownership always resolves the original `(OIDC issuer, subject)` against active local enrollment. No caller-supplied user ID, forwarded header or gateway issuer selects an owner. Browser sessions remain direct OIDC. Shopping grants must not include SSH privileges. See [authentication](docs/AUTH.md#mcp-gateway-mode) for exact claims and migration constraints.
 
 ## Deployment and operations
 

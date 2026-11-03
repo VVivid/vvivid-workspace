@@ -46,7 +46,9 @@ func (m *Manager) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /auth/login", m.login)
 	mux.HandleFunc("GET /auth/callback", m.callback)
 	mux.HandleFunc("POST /auth/logout", m.logout)
-	mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", m.resourceMetadata(m.cfg.MCPAudience))
+	if m.cfg.MCPAuthMode != "gateway" {
+		mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", m.resourceMetadata(m.cfg.MCPAudience))
+	}
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource/api/v1", m.resourceMetadata(m.cfg.APIAudience))
 }
 

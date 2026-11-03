@@ -1,0 +1,2 @@
+# Check tooling only; no Python runtime dependency in the application/image.
+PyYAML==6.0.3

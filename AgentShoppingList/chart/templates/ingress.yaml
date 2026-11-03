@@ -1,0 +1,64 @@
+# The shared gateway owns OAuth metadata. This new private route does not
+# transfer ownership of existing ingress or Demo A routes into this release.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-mcp
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: platform-tls
+    traefik.ingress.kubernetes.io/router.tls: 'true'
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [mcp.rd.lab.vvivid.dev]
+      secretName: {{ .Values.tls.privateSecretName }}
+  rules:
+    - host: mcp.rd.lab.vvivid.dev
+      http:
+        paths:
+          {{- range list "/agent-shopping-list/mcp" "/.well-known/oauth-protected-resource/agent-shopping-list/mcp" }}
+          - path: {{ . }}
+            pathType: Exact
+            backend:
+              service:
+                name: rd-gateway
+                port: {number: 8088}
+          {{- end }}
+{{- if .Values.ingress.enabled }}
+{{- if not .Values.tls.productionEnabled }}
+{{- fail "Public browser ingress requires tls.productionEnabled and observed trusted certificate readiness" }}
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-browser
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: 'true'
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [{{ .Values.hostname }}]
+      secretName: {{ .Release.Name }}-tls
+  rules:
+    - host: {{ .Values.hostname }}
+      http:
+        paths:
+          {{- range list "/" "/products" "/history" "/insights" "/auth/login" "/auth/callback" "/auth/logout" }}
+          - path: {{ . }}
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $.Release.Name }}
+                port: {number: 8090}
+          {{- end }}
+          {{- range list "/api/v1/" "/static/" "/s/" }}
+          - path: {{ . }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Release.Name }}
+                port: {number: 8090}
+          {{- end }}
+{{- end }}
