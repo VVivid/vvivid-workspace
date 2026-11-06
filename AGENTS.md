@@ -11,6 +11,7 @@
 
 | Area | Purpose | Start here |
 | --- | --- | --- |
+| `ArtificialMemory/` | Hosted MCP decision journal proof of concept; design prepared, implementation pending | [README](ArtificialMemory/README.md), [design](ArtificialMemory/DESIGN.md) |
 | `AgentShoppingList/` | Agent-managed mobile shopping app with built-in MCP | [README](AgentShoppingList/README.md), [local instructions](AgentShoppingList/AGENTS.md) |
 | `AgentNewsfeed/` | Private reading feed with browser Keycloak, direct/gateway MCP and production Helm | [README](AgentNewsfeed/README.md) |
 | `GoogleHealthMCP/` | Google Health / Fitbit importer with SQLite persistence | [README](GoogleHealthMCP/README.md) |

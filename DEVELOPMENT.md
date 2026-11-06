@@ -12,6 +12,7 @@ Before Go edits, use [Modern Go Guidelines](.agents/skills/use-modern-go/SKILL.m
 
 | Project | Purpose | Run instructions |
 | --- | --- | --- |
+| `ArtificialMemory` | Hosted MCP decision journal; design prepared, implementation pending | [Memory README](ArtificialMemory/README.md) |
 | `SSHMCP` | Authenticated MCP gateway and persistent SSH execution runner | [SSHMCP README](SSHMCP/README.md) |
 | `GoogleHealthMCP` | Google Health / Fitbit importer backed by SQLite | [Google Health README](GoogleHealthMCP/README.md) |
 | `AgentNewsfeed` | Private reading feed with browser OIDC and direct/gateway MCP | [Newsfeed README](AgentNewsfeed/README.md) |
