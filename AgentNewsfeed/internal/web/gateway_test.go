@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -22,7 +23,8 @@ import (
 	"github.com/go-jose/go-jose/v4"
 )
 
-func TestGatewayMCPPreservesToolsOwnershipScopesAndBrowserRecords(t *testing.T) {
+func gatewayApp(t *testing.T) (*testfixture.Identity, *feed.Service, http.Handler, func(string, string) string) {
+	t.Helper()
 	fixture := testfixture.New(t)
 	fixture.Enroll(t, "alice")
 	fixture.Enroll(t, "bob")
@@ -82,11 +84,16 @@ func TestGatewayMCPPreservesToolsOwnershipScopesAndBrowserRecords(t *testing.T) 
 		}
 		return raw
 	}
+	return fixture, service, handler, token
+}
+
+func TestGatewayMCPPreservesToolsOwnershipScopesAndBrowserRecords(t *testing.T) {
+	fixture, _, handler, token := gatewayApp(t)
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 	alice := client(t, server.URL, token("alice", allScopes))
 	tools, err := alice.ListTools(t.Context(), nil)
-	if err != nil || len(tools.Tools) != 16 {
+	if err != nil || len(tools.Tools) != 22 {
 		t.Fatalf("gateway tools: %v", err)
 	}
 	input := feed.AddInput{IdempotencyKey: "gateway-add", Article: feed.Content{URL: "https://example.com/gateway-story", Title: "Gateway story", Summary: "A sourced gateway test."}}
@@ -124,7 +131,7 @@ func TestGatewayMCPPreservesToolsOwnershipScopesAndBrowserRecords(t *testing.T) 
 	if response.Code != 200 || !strings.Contains(response.Body.String(), updated.Article.Title) {
 		t.Fatal("direct browser session did not see gateway-owned article")
 	}
-	for _, rejected := range []string{fixture.Bearer("alice", "newsfeed-chatgpt", cfg.MCPAudience, allScopes), token("unknown", allScopes), ""} {
+	for _, rejected := range []string{fixture.Bearer("alice", "newsfeed-chatgpt", "agent-newsfeed-mcp", allScopes), token("unknown", allScopes), ""} {
 		response := request(handler, "POST", "/mcp", nil, rejected)
 		if response.Code != 401 || response.Header().Get("WWW-Authenticate") != "" {
 			t.Fatal("gateway-mode MCP accepted external/unregistered identity or advertised direct OAuth")
