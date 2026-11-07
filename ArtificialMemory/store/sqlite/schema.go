@@ -82,7 +82,7 @@ func (s *Store) migrate(ctx context.Context) error {
 		if count != 0 {
 			return fmt.Errorf("refusing to adopt an existing non-journal database")
 		}
-	} else if appID != applicationID || version != 1 {
+	} else if appID != applicationID || version < 1 || version > 2 {
 		return fmt.Errorf("unsupported journal application/schema %x/%d", appID, version)
 	}
 	var mode string
@@ -110,6 +110,13 @@ func (s *Store) migrate(ctx context.Context) error {
 			}
 		}
 		if _, err := tx.ExecContext(ctx, "PRAGMA application_id=1095583053; PRAGMA user_version=1"); err != nil {
+			return err
+		}
+	}
+	if version < 2 {
+		// Enrollment is mutable administration. Never rewrite journal ownership,
+		// replay results, FTS projections or the persisted continuation key.
+		if _, err := tx.ExecContext(ctx, accountSchema+"PRAGMA user_version=2;"); err != nil {
 			return err
 		}
 	}

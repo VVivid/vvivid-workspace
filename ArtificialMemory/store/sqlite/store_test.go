@@ -512,7 +512,7 @@ func TestOpenPrivateDatabaseAndRejectForeignSchema(t *testing.T) {
 			t.Fatalf("accepted unsupported path %q", path)
 		}
 	}
-	if _, err := s.db.ExecContext(t.Context(), "PRAGMA user_version=2"); err != nil {
+	if _, err := s.db.ExecContext(t.Context(), "PRAGMA user_version=3"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {

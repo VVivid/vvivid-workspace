@@ -87,7 +87,7 @@ webhook-control-test:
 webhook-control-build:
 	$(MAKE) -C WebhookControl build
 
-.PHONY: artificial-memory-check artificial-memory-test artificial-memory-race artificial-memory-build
+.PHONY: artificial-memory-check artificial-memory-test artificial-memory-race artificial-memory-build artificial-memory-integration
 
 artificial-memory-check:
 	$(MAKE) -C ArtificialMemory check
@@ -100,3 +100,6 @@ artificial-memory-race:
 
 artificial-memory-build:
 	$(MAKE) -C ArtificialMemory build
+
+artificial-memory-integration:
+	$(MAKE) -C ArtificialMemory integration

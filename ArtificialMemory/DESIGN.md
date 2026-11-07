@@ -1,9 +1,10 @@
 # Artificial Memory design
 
-This specifies the first proof of concept. The indexed journal and bounded
-retrieval are implemented as a library; [README](README.md) documents their exact
-API, normalization, pagination, and limits. The MCP, identity, packaging and
-recovery sections remain implementation targets, not deployment evidence.
+This specifies the first proof of concept. The indexed journal, bounded
+retrieval, and gateway-authenticated MCP service are implemented;
+[README](README.md) documents exact normalization, pagination, receipts and limits.
+The [identity guide](docs/AUTH.md) covers implemented configuration and enrollment.
+Packaging and recovery remain implementation targets, not deployment evidence.
 
 ## Purpose and boundaries
 
@@ -113,7 +114,10 @@ Create a missing space on its first successful write. Commit records, catalog,
 registry, tags, links, search projection, and idempotency result atomically. Invalid
 input rolls back the complete batch, including newly created tables. Retrying the
 same account/key and equivalent input returns the original result; changed input
-with that key fails. Return generated IDs and server timestamps.
+with that key fails. Return a compact receipt with generated IDs, sequences and
+server/event timestamps. Retrieve the IDs to expand their data. Full records stay
+in durable adapter replay state; escaped source text cannot make a successful
+commit permanently unacknowledgeable.
 
 One request can save many nodes; one topic can span many requests. Request IDs
 identify write batches, not topics. Batch compaction must never discard source
@@ -155,6 +159,20 @@ exact issuer/audience/type/time, allowed clients, and operation permissions. Res
 original `(identity_issuer, sub)` against explicit active local enrollment on every
 request. Define `memory:read` and `memory:write`. All data remains account-owned even
 when only one person is enrolled.
+
+The implemented command binds loopback by default. Exact canonical Host/Origin,
+pinned compact RS256 public-key verification, caller allowlist, positive bounded
+60-second times, and active enrollment are checked before application work.
+Stateless MCP requests do not cache enrollment or operation scopes. Mutable
+versioned enrollment tables retain stable internal account IDs without rewriting
+the immutable journal. Local admin commands enroll/disable original identities;
+the memory tools cannot administer accounts. See [the guide](docs/AUTH.md).
+
+Live and ready probes are separate; readiness checks migrated storage without
+writing memories. Header/body/response/concurrency/time bounds and graceful
+SIGINT/SIGTERM shutdown are implemented. Only lifecycle events are logged. The
+official SDK HTTP suite and real production-process restart tests use synthetic
+gateway signatures; they do not provision or prove a real login integration.
 
 Prepare one k3s replica, Recreate strategy, retained persistent volume, private
 backend Service, probes, graceful shutdown, and a nonroot image with read-only root

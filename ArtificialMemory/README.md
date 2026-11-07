@@ -3,10 +3,11 @@
 A decision journal for agents. Preserve what was decided, why it was decided,
 which alternatives were rejected, and how the reasoning changed.
 
-The independent Go module implements the storage library: an account-owned,
-append-only SQLite journal with indexed, bounded retrieval. The authenticated MCP
-service, command, container, Helm chart, and recovery tooling are later milestones.
-There is no runnable network service yet.
+The independent Go module provides an authenticated Streamable HTTP MCP service
+and an account-owned, append-only SQLite journal with indexed, bounded retrieval.
+Its three tools are `remember`, `retrieve`, and `list_spaces`. The private service
+accepts only the existing MCPGateway v1 signed identity contract and explicitly
+enrolled accounts. Container, Helm, and recovery tooling remain planned.
 
 ## Build and test
 
@@ -15,39 +16,67 @@ pure Go; the race detector additionally requires a supported C compiler.
 
 ```sh
 cd ArtificialMemory
-make check test race build
+make check test race build integration
 ```
 
-`build` compiles library packages. Root delegation uses
-`make artificial-memory-check artificial-memory-test artificial-memory-race artificial-memory-build`.
-Tests use only synthetic records in temporary private databases.
+`build` writes `bin/artificial-memory`. Root delegation uses
+`make artificial-memory-check artificial-memory-test artificial-memory-race artificial-memory-build artificial-memory-integration`.
+Tests use only synthetic identities and records in temporary private databases.
+The official SDK tests perform discovery and calls over HTTP; `integration`
+starts the production binary, enrolls synthetic accounts, discards a write
+acknowledgment, signals graceful shutdown, and verifies durable replay and
+continuations after restart. These checks do not establish a live gateway login
+or deployment.
+
+## Run the private service
+
+Configure the exact gateway issuer, backend audience, original HTTPS OIDC issuer,
+pinned public gateway JWKS, allowed clients, and canonical backend origin. Enroll
+an original issuer/subject explicitly with the local operator command, then run
+`bin/artificial-memory serve`. Missing or partial trust configuration fails
+closed. Listening defaults to `127.0.0.1:8080`; there is no anonymous mode or
+production test-auth flag.
+
+See the [configuration and account operator guide](docs/AUTH.md) for exact
+environment variables, enrollment/disable commands, gateway alignment, health
+checks, key rotation, and safe errors. The gateway owns OAuth discovery and login;
+the backend exposes only private `/mcp`, `/health/live`, and `/health/ready`.
 
 ## Reading order
 
+- [Production command](cmd/artificial-memory/main.go),
+  [HTTP boundary](internal/service/handler.go),
+  [gateway verification](internal/identity/gateway.go), and
+  [MCP tools and receipts](internal/mcpserver/server.go).
 - [Public domain and storage interface](memory/memory.go): requests, records,
   response bounds and typed relationships.
 - [SQLite entry point](store/sqlite/store.go), [schema](store/sqlite/schema.go),
   [append transaction](store/sqlite/remember.go), and
   [retrieval](store/sqlite/retrieve.go).
-- [Behavioral tests](store/sqlite/store_test.go) and
-  [design and future MCP contract](DESIGN.md).
+- [Storage behavior](store/sqlite/store_test.go),
+  [SDK HTTP acceptance](internal/service/handler_test.go),
+  [production-process acceptance](tests/process_test.go), and [design](DESIGN.md).
 
 ## Storage contract
 
 `sqlite.Open(ctx, path)` opens a disk database, creates missing parent directories
 with mode 0700 and a new database with mode 0600, and refuses nonprivate files,
 symlink database files, SQLite URI/memory paths, unrelated schemas, and unsupported
-schema versions. Existing parent permissions are preserved. Use a dedicated
+schema versions. Schema v2 adds account/enrollment administration to a v1 journal
+without changing its records, full-text projection, replay results, or cursor
+key. Existing parent permissions are preserved. Use a dedicated
 private directory. It verifies WAL mode and enables foreign keys, full synchronous
 commits, a five-second busy wait, and one connection per store. A persisted
 application ID and `user_version` identify the schema. This is one writer process;
 multiple independently opened stores are not a coordinated write pool.
 
 The public adapter accepts **trusted internal account and client IDs** supplied by
-its caller. It is not an authentication boundary. The future service must verify
-the original issuer/subject and resolve explicit active local enrollment before
-calling this API; tool arguments must never choose an owner. Identity management
-is separate from immutable journal records.
+its caller. It is not an authentication boundary. The service verifies the
+original issuer/subject and resolves explicit active local enrollment on every
+HTTP request before calling this API; tool arguments cannot choose an owner.
+Identity management is separate from immutable journal records. Legacy trusted
+adapter IDs are preserved by migration and are never automatically bound to a
+provider identity.
 
 Every account-owned space has its own generated physical table in one database.
 Space names are data, including punctuation; they are never interpolated into
@@ -77,6 +106,13 @@ space-name surrounding whitespace, and tag/link ordering and duplicates. Numbers
 retain their exact JSON representation and precision (`1` and `1.0` differ).
 Ordered entries, sources, reasoning arrays, and local IDs remain significant.
 Omitted contemporary times are hashed before server time is assigned.
+
+The MCP `remember` result is a compact receipt: `topic_id` and `records` containing
+each `span_id`, `topic_id`, optional `parent_id`, `sequence`, `occurred_at` when
+known, and `recorded_at`. Retrieve these IDs to expand their payloads. The adapter
+persists its complete `RememberResult` internally and every equivalent MCP retry
+returns the same receipt. Source text cannot inflate a committed write's
+acknowledgment beyond the response limit.
 
 Kinds are `topic`, `context`, `proposal`, `decision`, `note`, and `retraction`.
 Versioned object payloads preserve additional fields. Every decision version
@@ -154,11 +190,19 @@ bytes; account/client IDs 256 and keys/space names 128. Oversized or malformed
 input returns `ErrInvalid`. Relation pagination prevents arbitrarily many later
 corrections from expanding one result without limit.
 
+HTTP requests are additionally limited to 4 MiB, so fewer than 100 large entries
+may fit in one batch. A complete MCP tool response, including its text copy, is
+limited to 16 MiB. A retrieve that exceeds that limit returns `result_too_large`
+without a partial page; start a fresh query without a cursor and with smaller
+match/context/link limits. Unknown or
+duplicate envelope fields, trailing JSON, explicit null envelope fields, and
+owner inputs are rejected. Omit optional fields instead. Payloads are objects
+whose nested values may include nulls and arbitrary domain fields. Their numbers
+retain exact JSON precision through the wire, journal and replay comparison.
+
 ## Remaining milestones
 
-1. Authenticated Streamable HTTP MCP tools (`remember`, `retrieve`, `list_spaces`)
-   and production command using the existing MCPGateway identity contract.
-2. Container/k3s packaging, supported backup/isolated restore, and a runnable
+1. Container/k3s packaging, supported backup/isolated restore, and a runnable
    synthetic agent example.
 
 Development follows [root instructions](../AGENTS.md) and the
