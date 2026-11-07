@@ -1,11 +1,8 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"slices"
 
 	"agentnewsfeed/internal/feed"
@@ -40,67 +37,14 @@ func validateOpportunityRequest(next sdk.MethodHandler) sdk.MethodHandler {
 		if method == "tools/call" && ok && isOpportunityTool(params.Name) {
 			// The SDK's schema normalization would erase duplicate object keys.
 			// Inspect the original JSON, including nested content and patch objects.
-			if err := uniqueOpportunityFields(params.Arguments); err != nil {
+			if err := validateArgumentObject(params.Arguments); err != nil {
 				var result sdk.CallToolResult
-				result.SetError(errors.New(feed.OpportunitySafeError(err)))
+				result.SetError(errors.New(feed.OpportunitySafeError(feed.ErrInvalidOpportunity)))
 				return &result, nil
 			}
 		}
 		return next(ctx, method, request)
 	}
-}
-
-func uniqueOpportunityFields(body []byte) error {
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	if err := checkOpportunityJSONValue(decoder, 0); err != nil {
-		return err
-	}
-	if _, err := decoder.Token(); err != io.EOF {
-		return feed.ErrInvalidOpportunity
-	}
-	return nil
-}
-
-func checkOpportunityJSONValue(decoder *json.Decoder, depth int) error {
-	// Inputs have only two object levels and one tags array. Bound recursion
-	// before the SDK validates types, without risking the goroutine stack.
-	if depth > 8 {
-		return feed.ErrInvalidOpportunity
-	}
-	token, err := decoder.Token()
-	if err != nil {
-		return feed.ErrInvalidOpportunity
-	}
-	switch token {
-	case json.Delim('{'):
-		seen := make(map[string]bool)
-		for decoder.More() {
-			key, err := decoder.Token()
-			name, ok := key.(string)
-			if err != nil || !ok || seen[name] {
-				return feed.ErrInvalidOpportunity
-			}
-			seen[name] = true
-			if err := checkOpportunityJSONValue(decoder, depth+1); err != nil {
-				return err
-			}
-		}
-		if closing, err := decoder.Token(); err != nil || closing != json.Delim('}') {
-			return feed.ErrInvalidOpportunity
-		}
-	case json.Delim('['):
-		for decoder.More() {
-			if err := checkOpportunityJSONValue(decoder, depth+1); err != nil {
-				return err
-			}
-		}
-		if closing, err := decoder.Token(); err != nil || closing != json.Delim(']') {
-			return feed.ErrInvalidOpportunity
-		}
-	case json.Delim('}'), json.Delim(']'):
-		return feed.ErrInvalidOpportunity
-	}
-	return nil
 }
 
 func boundOpportunitySchema(s *jsonschema.Schema, name string, seen map[*jsonschema.Schema]bool) {

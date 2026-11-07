@@ -62,8 +62,8 @@ func TestOfficialMCPOpportunitiesInitializeSchemaCallsAndScopes(t *testing.T) {
 			t.Fatalf("MCP did not advertise %s", name)
 		}
 	}
-	if len(schemas) != 16 {
-		t.Fatalf("expected News plus eight opportunity tools, got %d", len(schemas))
+	if len(schemas) != 22 {
+		t.Fatalf("expected News, opportunities and six To-do tools, got %d", len(schemas))
 	}
 	// Validate the exact schema delivered by tools/list, as well as actual calls.
 	for _, input := range []struct {

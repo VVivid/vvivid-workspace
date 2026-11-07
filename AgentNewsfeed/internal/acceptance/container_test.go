@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"syscall"
 	"testing"
 	"time"
@@ -27,12 +28,29 @@ const database = "/data/newsfeed.sqlite"
 const expectedFile = "/data/container-expected.json"
 
 type persistenceExpected struct {
-	Retry          sqlite.MutationResult `json:"retry"`
-	Current        sqlite.Article        `json:"current"`
-	Trashed        sqlite.Article        `json:"trashed"`
-	ThumbnailPatch sqlite.MutationResult `json:"thumbnail_patch"`
-	TrashRetry     sqlite.MutationResult `json:"trash_retry"`
-	RestoreRetry   sqlite.MutationResult `json:"restore_retry"`
+	Retry          sqlite.MutationResult   `json:"retry"`
+	Current        sqlite.Article          `json:"current"`
+	Trashed        sqlite.Article          `json:"trashed"`
+	ThumbnailPatch sqlite.MutationResult   `json:"thumbnail_patch"`
+	TrashRetry     sqlite.MutationResult   `json:"trash_retry"`
+	RestoreRetry   sqlite.MutationResult   `json:"restore_retry"`
+	Todos          todoPersistenceExpected `json:"todos"`
+}
+
+type todoPersistenceExpected struct {
+	Open      sqlite.TodoTask           `json:"open"`
+	Completed sqlite.TodoTask           `json:"completed"`
+	Undo      sqlite.TodoTask           `json:"undo"`
+	Mutations []todoPersistenceMutation `json:"mutations"`
+}
+
+type todoPersistenceMutation struct {
+	Key              string                    `json:"key"`
+	Operation        string                    `json:"operation"`
+	InputTask        sqlite.TodoTask           `json:"task"`
+	ExpectedRevision int64                     `json:"expected_revision"`
+	Completed        bool                      `json:"completed"`
+	ResultSnapshot   sqlite.TodoMutationResult `json:"result"`
 }
 
 var syntheticIdentity = sqlite.ExternalIdentity{Issuer: "https://issuer.example.com/realms/container-test", Subject: "synthetic-container-owner"}
@@ -125,10 +143,11 @@ func TestContainerProcessAndPrivatePersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	todos := seedTodoPersistence(t, store, owner)
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
-	raw, _ := json.Marshal(persistenceExpected{Retry: expected, Current: restored.Article, Trashed: trashed.Article, ThumbnailPatch: thumbnailPatch, TrashRetry: trash, RestoreRetry: restored})
+	raw, _ := json.Marshal(persistenceExpected{Retry: expected, Current: restored.Article, Trashed: trashed.Article, ThumbnailPatch: thumbnailPatch, TrashRetry: trash, RestoreRetry: restored, Todos: todos})
 	if err := os.WriteFile(expectedFile, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -147,6 +166,28 @@ func TestContainerPersistedFixture(t *testing.T) {
 	}
 	assertFailClosed(t)
 	verifyPersistence(t)
+}
+
+func TestTodoPersistenceFixtureReopensLocalDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "todo-fixture.sqlite")
+	store, err := sqlite.Open(t.Context(), path, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	owner, err := store.EnrollAccount(t.Context(), syntheticIdentity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := seedTodoPersistence(t, store, owner)
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = sqlite.Open(t.Context(), path, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifyTodoPersistence(t, store, owner, expected)
 }
 
 func startApplication(t *testing.T) func() {
@@ -223,7 +264,7 @@ func assertFailClosed(t *testing.T) {
 	}
 	client := &http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{Proxy: nil}}
 	defer client.CloseIdleConnections()
-	for _, path := range []string{"/", "/archive", "/trash", "/articles/synthetic", "/thumbnails/synthetic", "/health/ready", "/api/v1/articles", "/api/v1/articles/synthetic", "/mcp"} {
+	for _, path := range []string{"/", "/archive", "/trash", "/articles/synthetic", "/thumbnails/synthetic", "/health/ready", "/api/v1/articles", "/api/v1/articles/synthetic", "/todo", "/api/v1/todos", "/mcp"} {
 		request, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1:8091"+path, nil)
 		response, err := client.Do(request)
 		if err != nil {
@@ -322,6 +363,7 @@ func verifyPersistence(t *testing.T) {
 	if err != nil || replay != expected.Retry {
 		t.Fatalf("durable retry result changed: %#v %v", replay, err)
 	}
+	verifyTodoPersistence(t, store, owner, expected.Todos)
 }
 
 func containerThumbnail(t *testing.T) []byte {
@@ -331,4 +373,70 @@ func containerThumbnail(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	return output.Bytes()
+}
+
+func seedTodoPersistence(t *testing.T, store *sqlite.Store, owner sqlite.Owner) todoPersistenceExpected {
+	t.Helper()
+	var expected todoPersistenceExpected
+	mutate := func(key, operation string, task sqlite.TodoTask, revision int64, completed bool) sqlite.TodoTask {
+		t.Helper()
+		// Synthetic stable payloads exercise the same durable storage boundary;
+		// host SDK tests separately prove normalization and authentication.
+		result, err := store.MutateTodo(t.Context(), owner, key, operation, []byte(key), task, revision, completed)
+		if err != nil {
+			t.Fatalf("To-do persistence fixture %s: %v", key, err)
+		}
+		expected.Mutations = append(expected.Mutations, todoPersistenceMutation{
+			Key: key, Operation: operation, InputTask: task,
+			ExpectedRevision: revision, Completed: completed, ResultSnapshot: result,
+		})
+		return result.Task
+	}
+	open := mutate("container-todo-add", "add_todo", sqlite.TodoTask{Title: "Synthetic open task", Tags: []string{"Container", "Reading"}, EstimateMinutes: 120}, 0, false)
+	completed := mutate("container-todo-complete", "set_todo_completed", sqlite.TodoTask{ID: open.ID}, open.Revision, true)
+	if err := store.ChangeTodoState(t.Context(), owner, completed.ID, completed.Revision, sqlite.TodoReopen); err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.Todo(t.Context(), owner, open.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	removed := mutate("container-todo-remove", "remove_todo", sqlite.TodoTask{ID: current.ID}, current.Revision, false)
+	expected.Open = mutate("container-todo-undo", "undo_todo_removal", sqlite.TodoTask{ID: removed.ID}, removed.Revision, false)
+	finished := mutate("container-todo-finished-add", "add_todo", sqlite.TodoTask{Title: "Synthetic finished task", Tags: []string{"Container"}, EstimateMinutes: 30}, 0, false)
+	expected.Completed = mutate("container-todo-finished", "set_todo_completed", sqlite.TodoTask{ID: finished.ID}, finished.Revision, true)
+	pending := mutate("container-todo-pending-add", "add_todo", sqlite.TodoTask{Title: "Synthetic latest Undo", Tags: []string{"Container"}, EstimateMinutes: 15}, 0, false)
+	pending = mutate("container-todo-pending-complete", "set_todo_completed", sqlite.TodoTask{ID: pending.ID}, pending.Revision, true)
+	expected.Undo = mutate("container-todo-pending-remove", "remove_todo", sqlite.TodoTask{ID: pending.ID}, pending.Revision, false)
+	return expected
+}
+
+func verifyTodoPersistence(t *testing.T, store *sqlite.Store, owner sqlite.Owner, expected todoPersistenceExpected) {
+	t.Helper()
+	want := sqlite.TodoList{Tasks: []sqlite.TodoTask{expected.Completed, expected.Open}, Undo: &expected.Undo}
+	assertCurrent := func() {
+		t.Helper()
+		list, err := store.ListTodo(t.Context(), owner)
+		if err != nil || !reflect.DeepEqual(list, want) || list.Tasks[0].CompletedAt == 0 || list.Tasks[1].CompletedAt != 0 || list.Undo.CompletedAt == 0 {
+			t.Fatalf("open/completed/latest Undo did not persist: %#v %v", list, err)
+		}
+		for _, task := range []sqlite.TodoTask{expected.Open, expected.Completed} {
+			if current, err := store.Todo(t.Context(), owner, task.ID, false); err != nil || !reflect.DeepEqual(current, task) {
+				t.Fatal("visible task detail did not persist")
+			}
+		}
+		if undo, err := store.Todo(t.Context(), owner, expected.Undo.ID, true); err != nil || !reflect.DeepEqual(undo, expected.Undo) {
+			t.Fatal("explicit latest Undo detail did not persist")
+		}
+	}
+	assertCurrent()
+	for _, mutation := range expected.Mutations {
+		replay, err := store.MutateTodo(t.Context(), owner, mutation.Key, mutation.Operation, []byte(mutation.Key), mutation.InputTask, mutation.ExpectedRevision, mutation.Completed)
+		if err != nil || !reflect.DeepEqual(replay, mutation.ResultSnapshot) {
+			t.Fatalf("To-do historical %s snapshot changed after restart: %v", mutation.Operation, err)
+		}
+	}
+	// Old complete/remove/Undo results remain historical even after the
+	// browser reopened the task and a different removal became the latest Undo.
+	assertCurrent()
 }
