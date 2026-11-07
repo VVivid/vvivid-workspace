@@ -49,6 +49,7 @@ type Cursor struct {
 	Owner     string `json:"owner"`
 	Archived  bool   `json:"archived,omitzero"`
 	Trashed   bool   `json:"trashed,omitzero"`
+	Before    bool   `json:"-"`
 }
 
 const articleFrom = ` FROM articles a
@@ -97,24 +98,24 @@ func (s *Store) ArticleForURL(ctx context.Context, owner Owner, canonical string
   WHERE a.owner_id=? AND a.canonical_url=? AND a.owner_id IN (SELECT id FROM accounts WHERE disabled_at IS NULL)`, owner.id, canonical))
 }
 
-func (s *Store) ListArticles(ctx context.Context, owner Owner, after Cursor, limit int) ([]Article, error) {
+func (s *Store) ListArticles(ctx context.Context, owner Owner, cursor Cursor, limit int) ([]Article, error) {
 	if owner.id == "" {
 		return nil, ErrOwnerRequired
 	}
-	if limit < 1 || limit > 51 || (after.Archived && after.Trashed) {
+	if limit < 1 || limit > 51 || (cursor.Archived && cursor.Trashed) {
 		return nil, ErrLimit
 	}
 	// The summary selection excludes both Markdown and JPEG payloads.
 	filter, order := "a.trashed_at IS NULL AND a.archived_at IS NULL", "a.created_at"
-	if after.Trashed {
+	if cursor.Trashed {
 		filter, order = "a.trashed_at IS NOT NULL", "a.trashed_at"
-	} else if after.Archived {
+	} else if cursor.Archived {
 		filter, order = "a.trashed_at IS NULL AND a.archived_at IS NOT NULL", "a.archived_at"
 	}
+	pageSQL, args := pageRange(order, "a.id", cursor.Timestamp, cursor.ID, cursor.Before, limit)
 	rows, err := s.read.QueryContext(ctx, "SELECT "+articleSummaryColumns+", ''"+articleFrom+
-		"WHERE a.owner_id = ? AND a.owner_id IN (SELECT id FROM accounts WHERE disabled_at IS NULL) AND "+filter+
-		" AND (? = 0 OR "+order+" < ? OR ("+order+" = ? AND a.id < ?)) ORDER BY "+order+" DESC, a.id DESC LIMIT ?",
-		owner.id, after.Timestamp, after.Timestamp, after.Timestamp, after.ID, limit)
+		"WHERE a.owner_id = ? AND a.owner_id IN (SELECT id FROM accounts WHERE disabled_at IS NULL) AND "+filter+pageSQL,
+		append([]any{owner.id}, args...)...)
 	if err != nil {
 		return nil, err
 	}

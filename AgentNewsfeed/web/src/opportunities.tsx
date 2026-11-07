@@ -1,7 +1,10 @@
+import type { ReactNode } from 'react'
 import { Arrow } from '@/components/arrow'
 import { Leaf } from '@/components/leaf'
 import { ArticleMarkdown } from '@/components/markdown'
+import { Pagination } from '@/components/pagination'
 import { Button } from '@/components/ui/button'
+import { urlWithPagePosition } from '@/pagination'
 import type { Bootstrap, Opportunity } from '@/types'
 
 const workplaceLabels = { remote: 'Remote', hybrid: 'Hybrid', on_site: 'On-site' }
@@ -18,14 +21,8 @@ function viewPath(view: Bootstrap['view']) {
   return view === 'archive' ? '/jobs/archive' : view === 'trash' ? '/jobs/trash' : '/jobs'
 }
 
-function listURL(data: Bootstrap) {
-  return viewPath(data.view) + (data.cursor ? `?cursor=${encodeURIComponent(data.cursor)}` : '')
-}
-
 function detailURL(data: Bootstrap, id: string) {
-  const query = new URLSearchParams({ from: data.view })
-  if (data.cursor) query.set('cursor', data.cursor)
-  return `/jobs/${encodeURIComponent(id)}?${query}#opportunity-detail`
+  return `${urlWithPagePosition(`/jobs/${encodeURIComponent(id)}`, data, data.view)}#opportunity-detail`
 }
 
 function sourceURL(value: string) {
@@ -43,23 +40,27 @@ function Tags({ tags }: { tags?: string[] }) {
   </ul> : null
 }
 
-function StateForm({ data, opportunity, action, children }: {
-  data: Bootstrap; opportunity: Opportunity; action: 'archive' | 'unarchive' | 'trash' | 'restore'; children: string
+function StateForm({ data, opportunity, action, disabled, children }: {
+  data: Bootstrap; opportunity: Opportunity; action: 'archive' | 'unarchive' | 'trash' | 'restore'; disabled: boolean; children: string
 }) {
   return <form method="post" action={`/api/v1/opportunities/${encodeURIComponent(opportunity.id)}/${action}`}>
     <input type="hidden" name="csrf_token" value={data.csrf} />
     <input type="hidden" name="expected_revision" value={opportunity.revision} />
     <input type="hidden" name="idempotency_key" value={data.mutation_key ? `${data.mutation_key}:${action}` : ''} />
-    <Button variant="link" type="submit" disabled={!data.can_write}>{children}</Button>
+    <Button variant="link" type="submit" disabled={disabled}>{children}</Button>
   </form>
 }
 
-function Detail({ data, opportunity }: { data: Bootstrap; opportunity: Opportunity }) {
+function Detail({ data, opportunity, actionsPending, saveNotice }: {
+  data: Bootstrap; opportunity: Opportunity; actionsPending: boolean; saveNotice?: ReactNode
+}) {
   const original = sourceURL(opportunity.url)
   const archived = Boolean(opportunity.archived_at)
   const trashed = Boolean(opportunity.trashed_at)
+  const actionsDisabled = !data.can_write || actionsPending
   return <article id="opportunity-detail" className="opportunity-detail" tabIndex={-1} aria-label="Selected listing">
-    <a className="back-link listing-back" href={`${listURL(data)}#opportunity-list`}><Arrow direction="left" /> Back to listings</a>
+    {saveNotice}
+    <a className="back-link listing-back" href={`${urlWithPagePosition(viewPath(data.view), data)}#opportunity-list`}><Arrow direction="left" /> Back to listings</a>
     <header>
       <p className="opportunity-company">{opportunity.company}</p>
       <p className="article-meta">Saved <time dateTime={new Date(opportunity.created_at).toISOString()}>{formatDate(opportunity.created_at)}</time></p>
@@ -96,20 +97,27 @@ function Detail({ data, opportunity }: { data: Bootstrap; opportunity: Opportuni
     {trashed ? <p className="archive-note">In Trash since {formatDate(opportunity.trashed_at!)}. Restore to {archived ? 'Archive' : 'Active'} whenever you are ready.</p>
       : archived && <p className="archive-note">Archived {formatDate(opportunity.archived_at!)}. Kept for another day.</p>}
     <div className="opportunity-actions">
-      {trashed ? <StateForm data={data} opportunity={opportunity} action="restore">{archived ? 'Restore to archive' : 'Restore to active'}</StateForm> : <>
-        <StateForm data={data} opportunity={opportunity} action={archived ? 'unarchive' : 'archive'}>{archived ? 'Restore to active' : 'Archive listing'}</StateForm>
-        <StateForm data={data} opportunity={opportunity} action="trash">Move to Trash</StateForm>
+      {trashed ? <StateForm data={data} opportunity={opportunity} disabled={actionsDisabled} action="restore">{archived ? 'Restore to archive' : 'Restore to active'}</StateForm> : <>
+        <StateForm data={data} opportunity={opportunity} disabled={actionsDisabled} action={archived ? 'unarchive' : 'archive'}>{archived ? 'Restore to active' : 'Archive listing'}</StateForm>
+        <StateForm data={data} opportunity={opportunity} disabled={actionsDisabled} action="trash">Move to Trash</StateForm>
       </>}
     </div>
     {!data.can_write && <p className="permission-note" role="status">Listing actions are unavailable with this sign-in. You can still read your saved listings.</p>}
   </article>
 }
 
-export function Opportunities({ data }: { data: Bootstrap }) {
+export function Opportunities({ data, actionsPending, saveNotice, focusHash }: {
+  data: Bootstrap; actionsPending: boolean; saveNotice?: ReactNode; focusHash?: string
+}) {
   const opportunities = data.opportunities_page?.opportunities ?? []
   const archived = data.view === 'archive'
   const trashed = data.view === 'trash'
-  return <main id="main" className="jobs">
+  const stalePage = opportunities.length === 0 && Boolean(data.cursor || data.before)
+  const noticeInDetail = focusHash === '#opportunity-detail' && Boolean(data.opportunity)
+  // A selected detail hides the list on narrow screens.
+  const noticeInList = focusHash === '#opportunity-list' && !data.detail_selected
+  return <main id="main" tabIndex={-1} className="jobs">
+    {!noticeInDetail && !noticeInList && saveNotice}
     <header className="jobs-heading">
       <p className="eyebrow">Jobs &amp; Internships</p>
       <h1>Your next chapter.</h1>
@@ -125,6 +133,7 @@ export function Opportunities({ data }: { data: Bootstrap }) {
     </div>
     <div className={`jobs-workspace${data.detail_selected ? ' detail-selected' : ''}`}>
       <section id="opportunity-list" className="opportunity-list" aria-label="Saved listings" tabIndex={-1}>
+        {noticeInList && saveNotice}
         {opportunities.length ? <>
           <p className="listing-order">{trashed ? 'Newest trashed first' : archived ? 'Newest archived first' : 'Newest saved first'}</p>
           <ul className="listing-rows">
@@ -139,15 +148,13 @@ export function Opportunities({ data }: { data: Bootstrap }) {
           </ul>
         </> : <div className="empty-shelf jobs-empty">
           <Leaf />
-          <h2>{trashed ? 'Nothing in the trash.' : archived ? 'A little room for later.' : data.cursor ? 'You have reached the end.' : 'Room for the next find.'}</h2>
-          <p>{trashed ? 'Listings moved to Trash remain recoverable.' : archived ? 'Archived listings stay here until you restore them.' : data.cursor ? 'Return to the start to see your most recently saved listings.' : 'Listings saved by your connected agent will appear here.'}</p>
+          <h2>{stalePage ? 'This page is empty.' : trashed ? 'Nothing in the trash.' : archived ? 'A little room for later.' : 'Room for the next find.'}</h2>
+          <p>{stalePage ? 'Return to the start to see the current list.' : trashed ? 'Listings moved to Trash remain recoverable.' : archived ? 'Archived listings stay here until you restore them.' : 'Listings saved by your connected agent will appear here.'}</p>
         </div>}
-        <div className="jobs-pagination">
-          {data.cursor && <a href={viewPath(data.view)}>Start of list</a>}
-          {data.opportunities_page?.next_cursor && <a className="reading-link" href={`${viewPath(data.view)}?cursor=${encodeURIComponent(data.opportunities_page.next_cursor)}`}>Earlier listings <Arrow /></a>}
-        </div>
+        <Pagination path={viewPath(data.view)} page={data.opportunities_page} stale={stalePage} />
       </section>
-      {data.opportunity && <Detail data={data} opportunity={data.opportunity} />}
+      {data.opportunity && <Detail data={data} opportunity={data.opportunity} actionsPending={actionsPending}
+        saveNotice={noticeInDetail ? saveNotice : undefined} />}
     </div>
   </main>
 }

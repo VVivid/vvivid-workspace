@@ -45,7 +45,7 @@ spec:
     - host: {{ .Values.hostname }}
       http:
         paths:
-          {{- range list "/" "/archive" "/trash" "/jobs" "/auth/login" "/auth/callback" "/auth/logout" }}
+          {{- range list "/" "/archive" "/trash" "/jobs" "/todo" "/api/v1/todos" "/auth/login" "/auth/callback" "/auth/logout" }}
           - path: {{ . }}
             pathType: Exact
             backend:

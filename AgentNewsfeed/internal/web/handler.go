@@ -72,6 +72,7 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 	mux.HandleFunc("GET /jobs/archive", h.jobs)
 	mux.HandleFunc("GET /jobs/trash", h.jobs)
 	mux.HandleFunc("GET /jobs/{id}", h.jobs)
+	mux.HandleFunc("GET /todo", h.todo)
 	if auth != nil {
 		auth.Register(mux)
 		mux.Handle("GET /api/v1/articles", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.list)))
@@ -85,6 +86,7 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 		for _, action := range []string{"archive", "unarchive", "trash", "restore"} {
 			mux.Handle("POST /api/v1/opportunities/{id}/"+action, auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.opportunityState(action)))
 		}
+		mux.Handle("POST /api/v1/todos", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, http.HandlerFunc(h.todoForm)))
 		mux.Handle("GET /thumbnails/{id}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.image)))
 		mux.Handle("GET /thumbnails/{id}/content/{image}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.image)))
 		mux.Handle("/mcp", auth.BearerMiddleware(auth.MCPAudience(), nil, feedmcp.NewHandler(service, logger)))
@@ -125,36 +127,42 @@ func headers(next http.Handler, auth *identity.Manager) http.Handler {
 	})
 }
 
+const browserMediaType = "application/vnd.agentnewsfeed.browser+json"
+
 type bootstrap struct {
-	Configured        bool                    `json:"configured"`
-	Authenticated     bool                    `json:"authenticated"`
-	CanWrite          bool                    `json:"can_write"`
-	CSRF              string                  `json:"csrf"`
-	View              string                  `json:"view"`
-	FromArchive       bool                    `json:"from_archive"`
-	FromTrash         bool                    `json:"from_trash"`
-	MutationKey       string                  `json:"mutation_key,omitempty"`
-	SignInURL         string                  `json:"sign_in_url"`
-	Page              *feed.Page              `json:"page,omitempty"`
-	Article           *sqlite.Article         `json:"article,omitempty"`
-	ContentImages     map[string]string       `json:"content_images,omitempty"`
-	Section           string                  `json:"section"`
-	Cursor            string                  `json:"cursor,omitempty"`
-	DetailSelected    bool                    `json:"detail_selected"`
-	OpportunitiesPage *feed.OpportunitiesPage `json:"opportunities_page,omitempty"`
-	Opportunity       *sqlite.Opportunity     `json:"opportunity,omitempty"`
+	Configured        bool                           `json:"configured"`
+	Authenticated     bool                           `json:"authenticated"`
+	CanWrite          bool                           `json:"can_write"`
+	CSRF              string                         `json:"csrf"`
+	View              string                         `json:"view"`
+	FromArchive       bool                           `json:"from_archive"`
+	FromTrash         bool                           `json:"from_trash"`
+	MutationKey       string                         `json:"mutation_key,omitempty"`
+	SignInURL         string                         `json:"sign_in_url"`
+	Page              *feed.BrowserArticlesPage      `json:"page,omitempty"`
+	Article           *sqlite.Article                `json:"article,omitempty"`
+	ContentImages     map[string]string              `json:"content_images,omitempty"`
+	Section           string                         `json:"section"`
+	Cursor            string                         `json:"cursor,omitempty"`
+	Before            string                         `json:"before,omitempty"`
+	PageSize          int                            `json:"page_size,omitzero"`
+	DetailSelected    bool                           `json:"detail_selected"`
+	OpportunitiesPage *feed.BrowserOpportunitiesPage `json:"opportunities_page,omitempty"`
+	Opportunity       *sqlite.Opportunity            `json:"opportunity,omitempty"`
+	Todo              *sqlite.TodoList               `json:"todo,omitempty"`
 }
 
 func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 	data := bootstrap{Configured: h.auth != nil, Section: "news", View: "feed", SignInURL: "/auth/login?return_to=" + url.QueryEscape(r.URL.RequestURI())}
+	query, queryErr := url.ParseQuery(r.URL.RawQuery)
 	if r.URL.Path == "/archive" {
 		data.View = "archive"
 	} else if r.URL.Path == "/trash" {
 		data.View = "trash"
 	} else if r.PathValue("id") != "" {
 		data.View = "reader"
-		data.FromArchive = r.URL.Query().Get("from") == "archive"
-		data.FromTrash = r.URL.Query().Get("from") == "trash"
+		data.FromArchive = query.Get("from") == "archive"
+		data.FromTrash = query.Get("from") == "trash"
 	}
 	status := http.StatusOK
 	if h.auth == nil {
@@ -164,7 +172,17 @@ func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 			writeError(w, err)
 			return
 		}
+		if queryErr != nil || data.readPagePosition(query) != nil {
+			writeError(w, feed.ErrInvalid)
+			return
+		}
+		cursor, before := data.pageBoundary()
+		in := feed.ListInput{Cursor: cursor, Archived: data.View == "archive" || data.FromArchive, Trashed: data.View == "trash" || data.FromTrash}
 		if data.View == "reader" {
+			if err := in.ValidateCursor(p.Owner()); err != nil {
+				writeError(w, err)
+				return
+			}
 			a, err := h.service.GetArticleInView(r.Context(), p, r.PathValue("id"), data.FromTrash)
 			if err != nil {
 				writeError(w, err)
@@ -179,19 +197,31 @@ func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 			}
 			data.MutationKey = rand.Text()
 		} else {
-			page, err := h.service.ListArticles(r.Context(), p, feed.ListInput{Cursor: r.URL.Query().Get("cursor"), Archived: data.View == "archive", Trashed: data.View == "trash"})
+			data.PageSize = browserPageSize(r)
+			in.Limit = data.PageSize
+			page, err := h.service.BrowseArticles(r.Context(), p, in, before)
 			if err != nil {
 				writeError(w, err)
 				return
 			}
-			data.Page = &page
+			data.Page = new(page)
 		}
 		data.Authenticated, data.CSRF, data.CanWrite = true, csrf, p.Allows(identity.ArticlesWrite)
 	}
-	h.renderShell(w, status, data)
+	h.renderPage(w, r, status, data)
 }
 
-func (h *handler) renderShell(w http.ResponseWriter, status int, data bootstrap) {
+func (h *handler) renderPage(w http.ResponseWriter, r *http.Request, status int, data bootstrap) {
+	w.Header().Add("Vary", "Accept")
+	if r.Header.Get("Accept") == browserMediaType {
+		if data.PageSize != 0 {
+			w.Header().Add("Vary", pageSizeHeader)
+		}
+		w.Header().Set("Content-Type", browserMediaType)
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(data)
+		return
+	}
 	body, err := json.Marshal(data)
 	if err != nil {
 		writeError(w, err)
@@ -266,7 +296,7 @@ func (h *handler) archive(archived bool) http.Handler {
 		if archived {
 			from = "archive"
 		}
-		http.Redirect(w, r, "/articles/"+url.PathEscape(a.ID)+"?from="+from, http.StatusSeeOther)
+		respondToStateForm(w, r, "/articles/"+url.PathEscape(a.ID)+"?from="+from)
 	})
 }
 
@@ -358,8 +388,22 @@ func (h *handler) trash(restore bool) http.Handler {
 				from = "archive"
 			}
 		}
-		http.Redirect(w, r, "/articles/"+url.PathEscape(out.Article.ID)+"?from="+from, http.StatusSeeOther)
+		respondToStateForm(w, r, "/articles/"+url.PathEscape(out.Article.ID)+"?from="+from)
 	})
+}
+
+// Return the same destination to native forms and fetch requests. The latter
+// load the new page separately, so a failed page read never repeats the write.
+func respondToStateForm(w http.ResponseWriter, r *http.Request, location string) {
+	w.Header().Add("Vary", "Accept")
+	if r.Header.Get("Accept") == browserMediaType {
+		w.Header().Set("Content-Type", browserMediaType)
+		_ = json.NewEncoder(w).Encode(struct {
+			Location string `json:"location"`
+		}{Location: location})
+		return
+	}
+	http.Redirect(w, r, location, http.StatusSeeOther)
 }
 
 func contentImageID(imageURL string) string {

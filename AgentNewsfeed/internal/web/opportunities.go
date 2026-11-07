@@ -32,7 +32,7 @@ func (h *handler) jobs(w http.ResponseWriter, r *http.Request) {
 		}
 		id := r.PathValue("id")
 		for name := range query {
-			if name != "cursor" && (name != "from" || id == "") {
+			if name != "cursor" && name != "before" && (name != "from" || id == "") {
 				writeOpportunityError(w, feed.ErrInvalidOpportunity)
 				return
 			}
@@ -54,15 +54,20 @@ func (h *handler) jobs(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		data.Cursor = query.Get("cursor")
-		page, err := h.service.ListOpportunities(r.Context(), p, feed.ListOpportunitiesInput{
-			Cursor: data.Cursor, Archived: data.View == "archive", Trashed: data.View == "trash",
-		})
+		if err := data.readPagePosition(query); err != nil {
+			writeOpportunityError(w, err)
+			return
+		}
+		cursor, before := data.pageBoundary()
+		data.PageSize = browserPageSize(r)
+		page, err := h.service.BrowseOpportunities(r.Context(), p, feed.ListOpportunitiesInput{
+			Limit: data.PageSize, Cursor: cursor, Archived: data.View == "archive", Trashed: data.View == "trash",
+		}, before)
 		if err != nil {
 			writeOpportunityError(w, err)
 			return
 		}
-		data.OpportunitiesPage = &page
+		data.OpportunitiesPage = new(page)
 		data.DetailSelected = id != ""
 		if id == "" && len(page.Opportunities) != 0 {
 			id = page.Opportunities[0].ID
@@ -78,7 +83,7 @@ func (h *handler) jobs(w http.ResponseWriter, r *http.Request) {
 		}
 		data.Authenticated, data.CSRF, data.CanWrite = true, csrf, p.Allows(identity.ArticlesWrite)
 	}
-	h.renderShell(w, status, data)
+	h.renderPage(w, r, status, data)
 }
 
 func (h *handler) listOpportunities(w http.ResponseWriter, r *http.Request) {
@@ -202,7 +207,7 @@ func (h *handler) opportunityState(action string) http.Handler {
 		} else if o.ArchivedAt != 0 {
 			view = "archive"
 		}
-		http.Redirect(w, r, "/jobs/"+url.PathEscape(o.ID)+"?from="+view+"#opportunity-detail", http.StatusSeeOther)
+		respondToStateForm(w, r, "/jobs/"+url.PathEscape(o.ID)+"?from="+view+"#opportunity-detail")
 	})
 }
 

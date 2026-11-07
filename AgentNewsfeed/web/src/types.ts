@@ -17,9 +17,13 @@ export interface Article {
   thumbnail_bytes?: number
 }
 
-export interface Page {
-  articles: Article[]
+export interface PageLinks {
+  previous_cursor?: string
   next_cursor?: string
+}
+
+export interface Page extends PageLinks {
+  articles: Article[]
 }
 
 export interface Opportunity {
@@ -44,9 +48,22 @@ export interface Opportunity {
   trashed_at?: number
 }
 
-export interface OpportunitiesPage {
+export interface OpportunitiesPage extends PageLinks {
   opportunities: Opportunity[]
-  next_cursor?: string
+}
+
+export interface TodoTask {
+  id: string
+  title: string
+  tags?: string[]
+  estimate_minutes?: number
+  revision: number
+  completed_at?: number
+}
+
+export interface TodoList {
+  tasks: TodoTask[]
+  undo?: TodoTask
 }
 
 export interface Bootstrap {
@@ -62,9 +79,12 @@ export interface Bootstrap {
   page?: Page
   article?: Article
   content_images?: Record<string, string>
-  section?: 'news' | 'jobs'
+  section?: 'news' | 'jobs' | 'todo'
   cursor?: string
+  before?: string
+  page_size?: number
   detail_selected?: boolean
   opportunities_page?: OpportunitiesPage
   opportunity?: Opportunity
+  todo?: TodoList
 }

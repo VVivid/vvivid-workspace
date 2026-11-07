@@ -19,12 +19,12 @@ const jobs: Bootstrap = {
   configured: true, authenticated: true, can_write: true, csrf: 'synthetic-csrf',
   section: 'jobs', view: 'feed', from_archive: false, mutation_key: 'synthetic-intent',
   sign_in_url: '/auth/login?return_to=%2Fjobs', detail_selected: true,
-  opportunities_page: { opportunities: [listing], next_cursor: 'next+/=' }, opportunity: listing,
+  opportunities_page: { opportunities: [listing], next_cursor: 'next+/=', previous_cursor: 'prev+/=' }, opportunity: listing,
 }
 
 describe('Jobs & Internships', () => {
   it('has fixed section navigation and separate view, page and selected-detail links', () => {
-    render(<App data={{ ...jobs, view: 'archive', cursor: 'current+/=' }} />)
+    render(<App data={{ ...jobs, view: 'archive', before: 'current+/=' }} />)
     const sections = screen.getByRole('navigation', { name: 'Sections' })
     expect(within(sections).getByRole('link', { name: 'News' })).toHaveAttribute('href', '/')
     expect(within(sections).getByRole('link', { name: 'Jobs & Internships' })).toHaveAttribute('aria-current', 'page')
@@ -32,10 +32,10 @@ describe('Jobs & Internships', () => {
     expect(within(views).getByRole('link', { name: 'Active' })).toHaveAttribute('href', '/jobs')
     expect(within(views).getByRole('link', { name: 'Archive' })).toHaveAttribute('aria-current', 'page')
     expect(within(views).getByRole('link', { name: 'Trash' })).toHaveAttribute('href', '/jobs/trash')
-    expect(screen.getByRole('link', { name: `View ${listing.title} at ${listing.company}` })).toHaveAttribute('href', '/jobs/synthetic-owned-opportunity?from=archive&cursor=current%2B%2F%3D#opportunity-detail')
-    expect(screen.getByRole('link', { name: 'Earlier listings' })).toHaveAttribute('href', '/jobs/archive?cursor=next%2B%2F%3D')
-    expect(screen.getByRole('link', { name: 'Back to listings' })).toHaveAttribute('href', '/jobs/archive?cursor=current%2B%2F%3D#opportunity-list')
-    expect(screen.getByRole('link', { name: 'Start of list' })).toHaveAttribute('href', '/jobs/archive')
+    expect(screen.getByRole('link', { name: `View ${listing.title} at ${listing.company}` })).toHaveAttribute('href', '/jobs/synthetic-owned-opportunity?from=archive&before=current%2B%2F%3D#opportunity-detail')
+    expect(screen.getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/jobs/archive?cursor=next%2B%2F%3D')
+    expect(screen.getByRole('link', { name: 'Previous' })).toHaveAttribute('href', '/jobs/archive?before=prev%2B%2F%3D')
+    expect(screen.getByRole('link', { name: 'Back to listings' })).toHaveAttribute('href', '/jobs/archive?before=current%2B%2F%3D#opportunity-list')
     expect(screen.getByRole('article', { name: 'Selected listing' })).toHaveAttribute('id', 'opportunity-detail')
     expect(screen.queryByRole('navigation', { name: 'Library' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /add|match|apply|schedule/i })).not.toBeInTheDocument()
@@ -139,7 +139,8 @@ describe('Jobs & Internships', () => {
     for (const target of [
       screen.getByRole('link', { name: 'Skip to reading' }), screen.getByRole('link', { name: 'Newsfeed home' }),
       screen.getByRole('button', { name: 'Sign out' }), screen.getByRole('link', { name: 'News' }),
-      screen.getByRole('link', { name: 'Jobs & Internships' }), screen.getByRole('link', { name: 'Active' }),
+      screen.getByRole('link', { name: 'Jobs & Internships' }), screen.getByRole('link', { name: 'To-do' }),
+      screen.getByRole('link', { name: 'Active' }),
       screen.getByRole('link', { name: 'Archive' }), screen.getByRole('link', { name: 'Trash' }),
       screen.getByRole('link', { name: `View ${listing.title} at ${listing.company}` }),
     ]) {

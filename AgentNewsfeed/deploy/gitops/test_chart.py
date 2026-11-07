@@ -115,7 +115,7 @@ class ChartTests(unittest.TestCase):
                 # Traefik does not admit /jobs through the trailing-slash prefix alone.
                 self.assertIn(("/jobs", "Exact"), allowed)
                 self.assertIn(("/jobs/", "Prefix"), allowed)
-                self.assertEqual(allowed, {(p, "Exact") for p in ("/", "/archive", "/trash", "/jobs", "/auth/login", "/auth/callback", "/auth/logout")} |
+                self.assertEqual(allowed, {(p, "Exact") for p in ("/", "/archive", "/trash", "/jobs", "/todo", "/api/v1/todos", "/auth/login", "/auth/callback", "/auth/logout")} |
                                  {(p, "Prefix") for p in ("/articles/", "/api/v1/articles", "/jobs/", "/api/v1/opportunities", "/static/assets/", "/thumbnails/")})
                 def matches(request):
                     for path, kind in allowed:
@@ -129,11 +129,12 @@ class ChartTests(unittest.TestCase):
                 for path in ("/", "/auth/callback", "/archive", "/trash", "/api/v1/articles/abc/archive", "/articles/abc",
                              "/jobs", "/jobs/", "/jobs/archive", "/jobs/trash", "/jobs/abc", "/api/v1/opportunities", "/api/v1/opportunities/abc",
                              "/api/v1/opportunities/abc/archive", "/api/v1/opportunities/abc/unarchive", "/api/v1/opportunities/abc/trash", "/api/v1/opportunities/abc/restore",
-                             "/static/assets/app.js", "/thumbnails/abc", "/thumbnails/abc/content/" + "a" * 64):
+                             "/todo", "/api/v1/todos", "/static/assets/app.js", "/thumbnails/abc", "/thumbnails/abc/content/" + "a" * 64):
                     self.assertTrue(matches(path), path)
                 for path in ("/mcp", "/mcp/", "/health/live", "/health/ready", "/.well-known/oauth-protected-resource/mcp",
                              "/.well-known/oauth-protected-resource/api/v1", "/api/admin", "/api/v1/articles-evil", "/auth/admin",
-                             "/jobs-evil", "/jobsearch", "/api/v1/opportunities-evil", "/api/v1/opportunity"):
+                             "/jobs-evil", "/jobsearch", "/api/v1/opportunities-evil", "/api/v1/opportunity",
+                             "/todo/", "/todo/history", "/todo-evil", "/api/v1/todos/anything", "/api/v1/todos-evil"):
                     self.assertFalse(matches(path), path)
                 self.assertTrue(all(p["backend"]["service"]["name"] == "agent-newsfeed" for p in paths))
         self.assertEqual(len([d for d in documents if d["kind"] == "Certificate"]), 2)

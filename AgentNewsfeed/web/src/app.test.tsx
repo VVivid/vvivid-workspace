@@ -37,7 +37,8 @@ describe('private reading shelf', () => {
     expect(screen.getByText(article.summary)).toBeVisible()
     expect(screen.getByRole('link', { name: article.title })).toHaveAttribute('href', '/articles/synthetic-owned-article?from=feed')
     expect(screen.getByRole('link', { name: 'Read article' })).toHaveAttribute('href', '/articles/synthetic-owned-article?from=feed')
-    expect(screen.getByRole('link', { name: 'Older articles' })).toHaveAttribute('href', '/?cursor=opaque-cursor')
+    expect(screen.getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/?cursor=opaque-cursor')
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled()
     expect(screen.getByRole('navigation', { name: 'Library' })).toHaveTextContent('FeedArchiveTrash')
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
@@ -63,6 +64,8 @@ describe('private reading shelf', () => {
     await user.tab()
     expect(screen.getByRole('link', { name: 'Jobs & Internships' })).toHaveFocus()
     await user.tab()
+    expect(screen.getByRole('link', { name: 'To-do' })).toHaveFocus()
+    await user.tab()
     expect(screen.getByRole('link', { name: article.title })).toHaveFocus()
   })
 
@@ -84,10 +87,25 @@ describe('private reading shelf', () => {
   })
 
   it('shows archive timestamps and keeps pagination and reader back links in the archive', () => {
-    render(<App data={{ ...shelf, view: 'archive', page: { articles: [{ ...article, archived_at: 1793232000000 }], next_cursor: 'archive-cursor' } }} />)
+    const archived = { ...article, archived_at: 1793232000000 }
+    const { rerender } = render(<App data={{ ...shelf, view: 'archive', cursor: 'current', page: {
+      articles: [archived], next_cursor: 'archive-cursor', previous_cursor: 'newer-archive',
+    } }} />)
     expect(screen.getByText(/Archived/, { selector: '.article-meta span' })).toHaveTextContent('Archived Oct 29, 2026')
-    expect(screen.getByRole('link', { name: 'Read article' })).toHaveAttribute('href', '/articles/synthetic-owned-article?from=archive')
-    expect(screen.getByRole('link', { name: 'Earlier archived articles' })).toHaveAttribute('href', '/archive?cursor=archive-cursor')
+    expect(screen.getByRole('link', { name: 'Read article' })).toHaveAttribute('href', '/articles/synthetic-owned-article?from=archive&cursor=current')
+    expect(screen.getByRole('link', { name: 'Previous' })).toHaveAttribute('href', '/archive?before=newer-archive')
+    expect(screen.getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/archive?cursor=archive-cursor')
+
+    rerender(<App data={reader({ from_archive: true, cursor: 'current', article: archived })} />)
+    expect(screen.getByRole('link', { name: 'Back to archive' })).toHaveAttribute('href', '/archive?cursor=current')
+  })
+
+  it('offers a restart from a stale page and hides the pager for a complete single page', () => {
+    const { rerender } = render(<App data={{ ...shelf, page: { articles: [article] } }} />)
+    expect(screen.queryByRole('navigation', { name: 'Pagination' })).not.toBeInTheDocument()
+    rerender(<App data={{ ...shelf, view: 'trash', before: 'stale', page: { articles: [] } }} />)
+    expect(screen.getByRole('heading', { name: 'This page is empty.' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Start of list' })).toHaveAttribute('href', '/trash')
   })
 })
 
@@ -215,7 +233,7 @@ describe('recoverable Trash', () => {
     expect(screen.getByRole('link', { name: 'Trash' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'Feed' })).not.toHaveAttribute('aria-current')
     expect(screen.getByRole('link', { name: 'Read article' })).toHaveAttribute('href', '/articles/synthetic-owned-article?from=trash')
-    expect(screen.getByRole('link', { name: 'Earlier trashed articles' })).toHaveAttribute('href', '/trash?cursor=trash-cursor')
+    expect(screen.getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/trash?cursor=trash-cursor')
     expect(screen.getByText('Newest trashed first')).toBeVisible()
   })
 

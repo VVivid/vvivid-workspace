@@ -51,6 +51,7 @@ type OpportunityCursor struct {
 	View       string `json:"view"`
 	Timestamp  int64  `json:"before_time"`
 	ID         string `json:"before_id"`
+	Before     bool   `json:"-"`
 }
 
 const opportunitySummaryColumns = `id, canonical_url, kind, title, company, location, workplace,
@@ -109,10 +110,10 @@ func (s *Store) ListOpportunities(ctx context.Context, owner Owner, cursor Oppor
 	}
 	// Empty detail columns let the shared scanner serve list results without
 	// loading the long source description or the agent note from storage.
+	pageSQL, args := pageRange(timestampColumn, "id", cursor.Timestamp, cursor.ID, cursor.Before, limit)
 	rows, err := s.read.QueryContext(ctx, "SELECT "+opportunitySummaryColumns+`, '', '' FROM opportunities
- WHERE owner_id=? AND owner_id IN (SELECT id FROM accounts WHERE disabled_at IS NULL) AND `+viewFilter+
-		" AND (?=0 OR "+timestampColumn+"<? OR ("+timestampColumn+"=? AND id<?)) ORDER BY "+timestampColumn+" DESC, id DESC LIMIT ?",
-		owner.id, cursor.Timestamp, cursor.Timestamp, cursor.Timestamp, cursor.ID, limit)
+ WHERE owner_id=? AND owner_id IN (SELECT id FROM accounts WHERE disabled_at IS NULL) AND `+viewFilter+pageSQL,
+		append([]any{owner.id}, args...)...)
 	if err != nil {
 		return nil, err
 	}
