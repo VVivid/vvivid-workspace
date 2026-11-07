@@ -7,7 +7,8 @@ The independent Go module provides an authenticated Streamable HTTP MCP service
 and an account-owned, append-only SQLite journal with indexed, bounded retrieval.
 Its three tools are `remember`, `retrieve`, and `list_spaces`. The private service
 accepts only the existing MCPGateway v1 signed identity contract and explicitly
-enrolled accounts. Container, Helm, and recovery tooling remain planned.
+enrolled accounts. Project-only container/Helm packaging, consistent SQLite
+backup/isolated restore, and a runnable synthetic agent example are included.
 
 ## Build and test
 
@@ -16,17 +17,26 @@ pure Go; the race detector additionally requires a supported C compiler.
 
 ```sh
 cd ArtificialMemory
-make check test race build integration
+make check test race build integration demo chart-test
+make container-build container-test
 ```
 
 `build` writes `bin/artificial-memory`. Root delegation uses
-`make artificial-memory-check artificial-memory-test artificial-memory-race artificial-memory-build artificial-memory-integration`.
+`make artificial-memory-check artificial-memory-test artificial-memory-race artificial-memory-build artificial-memory-integration artificial-memory-demo artificial-memory-chart-test artificial-memory-container-build artificial-memory-container-test`.
 Tests use only synthetic identities and records in temporary private databases.
 The official SDK tests perform discovery and calls over HTTP; `integration`
 starts the production binary, enrolls synthetic accounts, discards a write
 acknowledgment, signals graceful shutdown, and verifies durable replay and
 continuations after restart. These checks do not establish a live gateway login
-or deployment.
+or deployment. Helm/Python dependencies, managed build CA input, single-writer
+hosting, storage-driver requirements and recovery are in the [operator runbook](docs/RUNBOOK.md).
+
+`make demo` runs invented GuestUp/PAYM-123 Go and SQLite choices, rejected
+PostgreSQL reasons, PAYM-1234 reuse and later replacement through the official
+SDK and the real signed-identity HTTP boundary. It prints synthetic source/record
+citations and cleans up its temporary private database, key and listener.
+`container-test` exercises the actual nonroot image with read-only root, signed
+SDK calls, scope rejection and recreation on the same owned named volume.
 
 ## Run the private service
 
@@ -55,7 +65,12 @@ the backend exposes only private `/mcp`, `/health/live`, and `/health/ready`.
   [retrieval](store/sqlite/retrieve.go).
 - [Storage behavior](store/sqlite/store_test.go),
   [SDK HTTP acceptance](internal/service/handler_test.go),
-  [production-process acceptance](tests/process_test.go), and [design](DESIGN.md).
+  [production-process acceptance](tests/process_test.go),
+  [real-container acceptance](tests/container_test.go), and [design](DESIGN.md).
+- [Recovery implementation](store/sqlite/recovery.go),
+  [live-WAL recovery acceptance](store/sqlite/recovery_test.go),
+  [synthetic SDK scenario](examples/agent/scenario.go), and
+  [hosting/recovery runbook](docs/RUNBOOK.md).
 
 ## Storage contract
 
@@ -66,7 +81,9 @@ schema versions. Schema v2 adds account/enrollment administration to a v1 journa
 without changing its records, full-text projection, replay results, or cursor
 key. Existing parent permissions are preserved. Use a dedicated
 private directory. It verifies WAL mode and enables foreign keys, full synchronous
-commits, a five-second busy wait, and one connection per store. A persisted
+commits, a five-second busy wait, and one connection per store. Explicit
+`temp_store=MEMORY` keeps temporary sorts compatible with a read-only root
+filesystem; container scratch paths stay inside the private data directory. A persisted
 application ID and `user_version` identify the schema. This is one writer process;
 multiple independently opened stores are not a coordinated write pool.
 
@@ -200,10 +217,20 @@ owner inputs are rejected. Omit optional fields instead. Payloads are objects
 whose nested values may include nulls and arbitrary domain fields. Their numbers
 retain exact JSON precision through the wire, journal and replay comparison.
 
-## Remaining milestones
+## Hosting and recovery
 
-1. Container/k3s packaging, supported backup/isolated restore, and a runnable
-   synthetic agent example.
+The [pinned image](Dockerfile) builds only this project and runs UID 65532. The
+[chart](deploy/helm/artificial-memory/Chart.yaml) accepts one writer (zero during
+maintenance), uses Recreate and a retained PVC, and exposes only a ClusterIP
+backend. Operators supply existing namespace/gateway/identity/JWKS, image digest,
+node and compatible storage inputs; no shared infrastructure is created.
+
+`admin backup --database EXISTING --output NEW` uses `VACUUM INTO` for a consistent
+snapshot including live WAL commits. `admin restore --backup EXISTING --database NEW`
+verifies integrity/application/schema and creates a new private isolated path.
+Neither command overwrites an existing destination or initializes a missing
+source. The [runbook](docs/RUNBOOK.md) covers retention, restore verification,
+fresh-PVC cutover, and actual local proof boundaries.
 
 Development follows [root instructions](../AGENTS.md) and the
 [shared workflow](../docs/DEVELOPMENT-WORKFLOW.md). Publication, identity

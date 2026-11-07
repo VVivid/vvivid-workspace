@@ -9,3 +9,4 @@
 *.sqlite3-*
 /gateway-public.jwks
 /subject.txt
+__pycache__/

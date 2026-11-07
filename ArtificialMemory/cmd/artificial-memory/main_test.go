@@ -67,3 +67,33 @@ func TestUnconfiguredCommandFailsAndAdminIsExplicit(t *testing.T) {
 		t.Fatal("symlink subject file accepted")
 	}
 }
+
+func TestOperatorBackupAndIsolatedRestoreCommands(t *testing.T) {
+	var out, log bytes.Buffer
+	private := t.TempDir()
+	database := filepath.Join(private, "source.db")
+	subject := filepath.Join(private, "subject")
+	if err := os.WriteFile(subject, []byte("synthetic-backup-subject"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	call := func(args []string, want int) {
+		t.Helper()
+		out.Reset()
+		log.Reset()
+		if code := run(t.Context(), args, func(string) string { return "" }, &out, &log); code != want {
+			t.Fatalf("exit %d want %d: %s", code, want, log.String())
+		}
+		if strings.Contains(out.String()+log.String(), private) {
+			t.Fatal("snapshot command exposed private paths")
+		}
+	}
+	call([]string{"admin", "enroll", "--database", database, "--issuer", "https://identity.example", "--subject-file", subject}, 0)
+	backup := filepath.Join(private, "backup.db")
+	restored := filepath.Join(private, "restored.db")
+	call([]string{"admin", "backup", "--database", database, "--output", backup}, 0)
+	call([]string{"admin", "restore", "--backup", backup, "--database", restored}, 0)
+	call([]string{"admin", "restore", "--backup", backup, "--database", restored}, 1)
+	call([]string{"admin", "backup", "--database", filepath.Join(private, "absent"), "--output", filepath.Join(private, "new")}, 1)
+	call([]string{"admin", "backup", "--database", database}, 2)
+	call([]string{"admin", "restore", "--backup", backup, "--database", filepath.Join(private, "new"), "--timeout", "0"}, 2)
+}

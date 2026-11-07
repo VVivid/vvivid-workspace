@@ -168,9 +168,16 @@ JSON are rejected. Omitted nondecision payload defaults to `{}`, omitted/zero
 schema version defaults to 1, and nested payload nulls/arbitrary fields remain
 data. Exact JSON numeric values survive MCP, persistence, retrieval and replay.
 
-`make check test race build integration` exercises synthetic RSA identities,
+`make check test race build integration demo chart-test container-build container-test` exercises synthetic RSA identities,
 two-owner isolation, operation scopes, topic/reuse reasoning, strict input and
 time checks, exact large numbers, v1 migration, safe errors, large escaped-source
 receipts, and the real command through graceful restart. It does not validate a
 real Keycloak login, provision an identity, publish a route, or deploy anything.
-Container, Helm, backup/restore, and a runnable synthetic example remain planned.
+The [operator runbook](RUNBOOK.md) covers the project-only pinned image, private
+Helm chart and existing JWKS ConfigMap, storage permissions, supported consistent
+SQLite backup/isolated restore and runnable synthetic example. Container tests
+use the default nonroot UID and read-only root, reject anonymous/read-only writes,
+and recreate the service on the same owned temporary volume. No signer or demo
+package enters the production image. These are local synthetic checks; actual
+gateway route, provider/client configuration, filesystem-driver behavior and
+live deployment require their own operator verification.

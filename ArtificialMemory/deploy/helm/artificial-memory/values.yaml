@@ -1,0 +1,32 @@
+# Operator input is required. See ../../examples/values.yaml; these empty
+# values deliberately cannot install an accidentally trusted/public service.
+replicaCount: 1
+image:
+  repository: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+service:
+  port: 8080
+trust:
+  backendOrigin: ""
+  gatewayIssuer: ""
+  audience: artificial-memory-mcp
+  identityIssuer: ""
+  allowedClientIDs: []
+  jwksConfigMap: ""
+  jwksKey: gateway-public.jwks
+persistence:
+  existingClaim: ""
+  storageClass: ""
+  size: 1Gi
+nodeSelector: {}
+tolerations: []
+affinity: {}
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi

@@ -1,0 +1,11 @@
+{
+  "name": "artificial-memory",
+  "path": "/artificial-memory/mcp",
+  "upstream": "http://artificial-memory.memory.svc.cluster.local:8080/mcp",
+  "upstream_host": "artificial-memory.memory.svc.cluster.local:8080",
+  "audience": "artificial-memory-mcp",
+  "max_token_lifetime_seconds": 300,
+  "required_scopes": ["memory:read"],
+  "forward_scopes": ["memory:read", "memory:write"],
+  "client_ids": ["coding-agent"]
+}

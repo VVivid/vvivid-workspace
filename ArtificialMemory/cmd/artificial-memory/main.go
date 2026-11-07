@@ -32,11 +32,48 @@ func run(ctx context.Context, args []string, getenv func(string) string, out, er
 	if len(args) == 0 || len(args) == 1 && args[0] == "serve" {
 		return serve(ctx, getenv, errOut)
 	}
+	if len(args) == 2 && args[0] == "healthcheck" {
+		return healthcheck(ctx, args[1], getenv, errOut)
+	}
+	if len(args) >= 2 && args[0] == "admin" && (args[1] == "backup" || args[1] == "restore") {
+		return recoverJournal(ctx, args[1], args[2:], out, errOut)
+	}
 	if len(args) >= 2 && args[0] == "admin" && (args[1] == "enroll" || args[1] == "disable") {
 		return administer(ctx, args[1], args[2:], out, errOut)
 	}
-	fmt.Fprintln(errOut, "Usage: artificial-memory [serve] | admin enroll|disable --database PATH --issuer HTTPS_ISSUER --subject-file PATH")
+	fmt.Fprintln(errOut, "Usage: artificial-memory [serve] | healthcheck live|ready | admin enroll|disable --database PATH --issuer HTTPS_ISSUER --subject-file PATH | admin backup --database PATH --output NEW_PATH | admin restore --backup PATH --database NEW_PATH")
 	return 2
+}
+
+func recoverJournal(ctx context.Context, operation string, args []string, out, errOut io.Writer) int {
+	flags := flag.NewFlagSet(operation, flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	database := flags.String("database", "", "journal path")
+	var source, destination *string
+	if operation == "backup" {
+		source = database
+		destination = flags.String("output", "", "new private snapshot path")
+	} else {
+		source = flags.String("backup", "", "existing private snapshot path")
+		destination = database
+	}
+	timeout := flags.Duration("timeout", 5*time.Minute, "snapshot deadline")
+	if flags.Parse(args) != nil || flags.NArg() != 0 || *source == "" || *destination == "" || *timeout <= 0 {
+		fmt.Fprintln(errOut, "Backup/restore requires a source and a new destination; see usage.")
+		return 2
+	}
+	ctx, cancel := context.WithTimeout(ctx, *timeout)
+	defer cancel()
+	copySnapshot := sqlite.Backup
+	if operation == "restore" {
+		copySnapshot = sqlite.Restore
+	}
+	if err := copySnapshot(ctx, *source, *destination); err != nil {
+		fmt.Fprintln(errOut, "Journal snapshot failed; source must exist and destination must be new and private.")
+		return 1
+	}
+	fmt.Fprintln(out, `{"snapshot":"complete"}`)
+	return 0
 }
 
 func serve(ctx context.Context, getenv func(string) string, errOut io.Writer) int {

@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["replicaCount", "image", "imagePullSecrets", "service", "trust", "persistence", "nodeSelector", "tolerations", "affinity", "resources"],
+  "properties": {
+    "replicaCount": {"type": "integer", "enum": [0, 1]},
+    "image": {
+      "type": "object", "additionalProperties": false,
+      "required": ["repository", "digest", "pullPolicy"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1, "pattern": "^[a-zA-Z0-9][a-zA-Z0-9./:_-]*$"},
+        "digest": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "pullPolicy": {"type": "string", "enum": ["IfNotPresent", "Always", "Never"]}
+      }
+    },
+    "imagePullSecrets": {
+      "type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["name"], "properties": {"name": {"$ref": "#/definitions/resourceName"}}}
+    },
+    "service": {
+      "type": "object", "additionalProperties": false, "required": ["port"],
+      "properties": {"port": {"type": "integer", "minimum": 1, "maximum": 65535}}
+    },
+    "trust": {
+      "type": "object", "additionalProperties": false,
+      "required": ["backendOrigin", "gatewayIssuer", "audience", "identityIssuer", "allowedClientIDs", "jwksConfigMap", "jwksKey"],
+      "properties": {
+        "backendOrigin": {"type": "string", "pattern": "^https?://[a-z0-9][a-z0-9.-]*(:[0-9]+)?$"},
+        "gatewayIssuer": {"type": "string", "pattern": "^https://[^ /?#]+$"},
+        "audience": {"type": "string", "const": "artificial-memory-mcp"},
+        "identityIssuer": {"type": "string", "pattern": "^https://[^ ?#]+$"},
+        "allowedClientIDs": {"type": "array", "minItems": 1, "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[^,\\s]+$"}},
+        "jwksConfigMap": {"$ref": "#/definitions/resourceName"},
+        "jwksKey": {"type": "string", "minLength": 1, "pattern": "^[a-zA-Z0-9._-]+$"}
+      }
+    },
+    "persistence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["existingClaim", "storageClass", "size"],
+      "properties": {
+        "existingClaim": {"type": "string", "pattern": "^$|^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$"},
+        "storageClass": {"$ref": "#/definitions/resourceName"},
+        "size": {"type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi|Ti)$"}
+      }
+    },
+    "nodeSelector": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string", "minLength": 1}},
+    "tolerations": {"type": "array", "items": {"type": "object"}},
+    "affinity": {"type": "object"},
+    "resources": {
+      "type": "object", "additionalProperties": false, "required": ["requests", "limits"],
+      "properties": {"requests": {"$ref": "#/definitions/resourceQuantities"}, "limits": {"$ref": "#/definitions/resourceQuantities"}}
+    }
+  },
+  "definitions": {
+    "resourceName": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$"},
+    "resourceQuantities": {
+      "type": "object", "additionalProperties": false, "required": ["cpu", "memory"],
+      "properties": {"cpu": {"type": "string", "pattern": "^[1-9][0-9]*m?$"}, "memory": {"type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi)$"}}
+    }
+  }
+}

@@ -56,7 +56,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	}
 	u := url.URL{Scheme: "file", Path: abs}
 	q := u.Query()
-	for _, pragma := range []string{"foreign_keys(1)", "recursive_triggers(1)", "busy_timeout(5000)", "synchronous(FULL)"} {
+	for _, pragma := range []string{"foreign_keys(1)", "recursive_triggers(1)", "busy_timeout(5000)", "synchronous(FULL)", "temp_store(MEMORY)"} {
 		q.Add("_pragma", pragma)
 	}
 	u.RawQuery = q.Encode()

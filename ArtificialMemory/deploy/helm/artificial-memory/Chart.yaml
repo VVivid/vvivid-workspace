@@ -1,0 +1,6 @@
+apiVersion: v2
+name: artificial-memory
+description: Private gateway-authenticated single-writer SQLite MCP journal
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

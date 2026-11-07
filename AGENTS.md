@@ -11,7 +11,7 @@
 
 | Area | Purpose | Start here |
 | --- | --- | --- |
-| `ArtificialMemory/` | Gateway-authenticated MCP decision journal with append-only SQLite; deployment planned | [README](ArtificialMemory/README.md), [design](ArtificialMemory/DESIGN.md), [identity guide](ArtificialMemory/docs/AUTH.md) |
+| `ArtificialMemory/` | Private MCP decision journal with append-only SQLite, recovery, container/Helm and synthetic proof | [README](ArtificialMemory/README.md), [design](ArtificialMemory/DESIGN.md), [identity guide](ArtificialMemory/docs/AUTH.md), [runbook](ArtificialMemory/docs/RUNBOOK.md) |
 | `AgentShoppingList/` | Agent-managed mobile shopping app with built-in MCP | [README](AgentShoppingList/README.md), [local instructions](AgentShoppingList/AGENTS.md) |
 | `AgentNewsfeed/` | Private reading feed with browser Keycloak, direct/gateway MCP and production Helm | [README](AgentNewsfeed/README.md) |
 | `GoogleHealthMCP/` | Google Health / Fitbit importer with SQLite persistence | [README](GoogleHealthMCP/README.md) |

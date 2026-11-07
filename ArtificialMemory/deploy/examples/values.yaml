@@ -1,0 +1,15 @@
+# ILLUSTRATIVE ONLY. Replace image digest, existing identity/gateway inputs,
+# node and storage class with operator-verified local values before any install.
+image:
+  repository: registry.example.test/private/artificial-memory
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+trust:
+  backendOrigin: http://artificial-memory.memory.svc.cluster.local:8080
+  gatewayIssuer: https://mcp.example.test
+  identityIssuer: https://identity.example.test/realms/agents
+  allowedClientIDs: [coding-agent]
+  jwksConfigMap: existing-gateway-public-jwks
+persistence:
+  storageClass: operator-supplied-local-block
+nodeSelector:
+  kubernetes.io/hostname: operator-selected-node

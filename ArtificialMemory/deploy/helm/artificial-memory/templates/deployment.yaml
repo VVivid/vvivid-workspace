@@ -1,0 +1,115 @@
+{{- if or (lt (int .Values.replicaCount) 0) (gt (int .Values.replicaCount) 1) }}
+{{- fail "SQLite requires exactly one writer, or zero replicas for maintenance" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "memory.name" . }}
+  labels:
+    {{- include "memory.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      {{- include "memory.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "memory.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 15
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: memory
+          image: {{ printf "%s@%s" (required "image.repository is required" .Values.image.repository) (required "image.digest is required" .Values.image.digest) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve"]
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: MEMORY_LISTEN
+              value: {{ printf ":%v" .Values.service.port | quote }}
+            - name: MEMORY_DATABASE
+              value: /data/sqlite/memory.db
+            - name: TMPDIR
+              value: /data/sqlite
+            - name: SQLITE_TMPDIR
+              value: /data/sqlite
+            - name: MEMORY_BACKEND_ORIGIN
+              value: {{ required "trust.backendOrigin is required" .Values.trust.backendOrigin | quote }}
+            - name: MEMORY_GATEWAY_ISSUER
+              value: {{ required "trust.gatewayIssuer is required" .Values.trust.gatewayIssuer | quote }}
+            - name: MEMORY_AUDIENCE
+              value: {{ .Values.trust.audience | quote }}
+            - name: MEMORY_IDENTITY_ISSUER
+              value: {{ required "trust.identityIssuer is required" .Values.trust.identityIssuer | quote }}
+            - name: MEMORY_GATEWAY_JWKS_FILE
+              value: /etc/artificial-memory/gateway-public.jwks
+            - name: MEMORY_ALLOWED_CLIENT_IDS
+              value: {{ join "," .Values.trust.allowedClientIDs | quote }}
+          startupProbe:
+            exec:
+              command: ["/artificial-memory", "healthcheck", "ready"]
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            exec:
+              command: ["/artificial-memory", "healthcheck", "ready"]
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: ["/artificial-memory", "healthcheck", "live"]
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: journal
+              mountPath: /data
+            - name: gateway-public
+              mountPath: /etc/artificial-memory
+              readOnly: true
+      volumes:
+        - name: journal
+          persistentVolumeClaim:
+            claimName: {{ default (include "memory.name" .) .Values.persistence.existingClaim }}
+        - name: gateway-public
+          configMap:
+            name: {{ required "trust.jwksConfigMap is required" .Values.trust.jwksConfigMap }}
+            defaultMode: 0444
+            items:
+              - key: {{ .Values.trust.jwksKey }}
+                path: gateway-public.jwks

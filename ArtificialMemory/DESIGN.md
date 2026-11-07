@@ -4,7 +4,9 @@ This specifies the first proof of concept. The indexed journal, bounded
 retrieval, and gateway-authenticated MCP service are implemented;
 [README](README.md) documents exact normalization, pagination, receipts and limits.
 The [identity guide](docs/AUTH.md) covers implemented configuration and enrollment.
-Packaging and recovery remain implementation targets, not deployment evidence.
+Project-local container/Helm packaging and consistent backup/isolated restore
+are implemented; [the runbook](docs/RUNBOOK.md) distinguishes local synthetic
+verification from real login, publication and deployment.
 
 ## Purpose and boundaries
 
@@ -174,15 +176,23 @@ SIGINT/SIGTERM shutdown are implemented. Only lifecycle events are logged. The
 official SDK HTTP suite and real production-process restart tests use synthetic
 gateway signatures; they do not provision or prove a real login integration.
 
-Prepare one k3s replica, Recreate strategy, retained persistent volume, private
-backend Service, probes, graceful shutdown, and a nonroot image with read-only root
-filesystem. SQLite uses WAL, foreign keys, and bounded lock waits. Multiple
+The chart prepares one k3s replica (zero for maintenance), Recreate strategy,
+retained persistent volume, private ClusterIP Service, executable probes,
+graceful shutdown, and a nonroot image with read-only root filesystem. It reuses
+operator-provided namespace/gateway/identity/public JWKS and requires an image
+digest plus explicit node/storage inputs. SQLite uses WAL, foreign keys, bounded
+lock waits and in-memory temporary sorts. Private 0700 `/data/sqlite` and
+OnRootMismatch volume ownership handling preserve 0600 database permissions;
+operators must verify compatible CSI/provisioner behavior. Multiple
 SQLite-owning replicas must not share the volume.
 
-Backups use a supported consistent SQLite snapshot mechanism or quiesce the writer
-before copying. Verify isolated restore of records, links, search, and idempotency.
-Copying a live main database file alone is not a backup procedure. Publication,
-actual client login setup, enrollment, and deployment remain separate actions.
+Operator backup and restore use SQLite `VACUUM INTO`, private new destinations,
+and integrity/application/schema validation. A live WAL snapshot and isolated
+reopened restore test preserve records, exact JSON, rejected reasons, links,
+search, enrollment, idempotency and cursor signing state. Copying a live main
+database file alone is not a backup procedure. Cutover quiesces the writer and
+selects a fresh verified volume, retaining the original. Publication, actual
+client login setup, enrollment, and deployment remain separate actions.
 
 ## Acceptance scenarios
 
