@@ -29,6 +29,7 @@ type jobsShell struct {
 	Section           string                  `json:"section"`
 	View              string                  `json:"view"`
 	Cursor            string                  `json:"cursor"`
+	PageSize          int                     `json:"page_size"`
 	DetailSelected    bool                    `json:"detail_selected"`
 	MutationKey       string                  `json:"mutation_key"`
 	SignInURL         string                  `json:"sign_in_url"`
@@ -95,7 +96,8 @@ func TestJobsBrowserSharesPersistedListingsWithoutChangingNews(t *testing.T) {
 	response := request(h, "GET", "/jobs", cookie, "")
 	initial := readJobsShell(t, response)
 	if response.Code != 200 || initial.Section != "jobs" || initial.View != "feed" || !initial.Authenticated || !initial.CanWrite || initial.CSRF == "" || initial.DetailSelected ||
-		initial.Opportunity == nil || initial.Opportunity.ID != page.Opportunities[0].ID || !reflect.DeepEqual(initial.OpportunitiesPage, new(page)) || len(initial.MutationKey) < 26 {
+		initial.Opportunity == nil || initial.Opportunity.ID != page.Opportunities[0].ID || initial.PageSize != 3 || initial.OpportunitiesPage == nil ||
+		!reflect.DeepEqual(initial.OpportunitiesPage.Opportunities, page.Opportunities[:3]) || initial.OpportunitiesPage.NextCursor == "" || len(initial.MutationKey) < 26 {
 		t.Fatal("Jobs bootstrap did not select first saved listing or preserve page/session")
 	}
 	if initial.Opportunity.SourceDescription != browserOpportunity("unused").SourceDescription || initial.Opportunity.AgentNote == "" || strings.Contains(response.Body.String(), "<script>untrusted()") {
@@ -374,5 +376,125 @@ func TestJobsSignInReturnPathAndRequiredReadScope(t *testing.T) {
 				t.Fatal("missing-read login created a session")
 			}
 		}
+	}
+}
+
+const browserMediaType = "application/vnd.agentnewsfeed.browser+json"
+
+func browserJSONRequest(h http.Handler, path string, cookie *http.Cookie, form url.Values, origin string) *httptest.ResponseRecorder {
+	method := http.MethodGet
+	if form != nil {
+		method = http.MethodPost
+	}
+	r := httptest.NewRequest(method, testfixture.Origin+path, strings.NewReader(form.Encode()))
+	r.Header.Set("Accept", browserMediaType)
+	if form != nil {
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+	if origin != "" {
+		r.Header.Set("Origin", origin)
+	}
+	if cookie != nil {
+		r.AddCookie(cookie)
+	}
+	response := httptest.NewRecorder()
+	h.ServeHTTP(response, r)
+	return response
+}
+
+func readBrowserJSON[T any](t *testing.T, response *httptest.ResponseRecorder) T {
+	t.Helper()
+	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != browserMediaType ||
+		response.Header().Get("Vary") != "Accept" || response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("invalid browser representation: status %d, headers %v", response.Code, response.Header())
+	}
+	var result T
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func TestBrowserJSONPageAndStateForms(t *testing.T) {
+	f, s, h := app(t)
+	p := f.Principal(t, "alice", allScopes)
+	cookie := f.CookieWithScopes(t, "alice", allScopes)
+	_, csrf := f.BrowserPrincipal(t, cookie)
+	o := saveBrowserOpportunity(t, s, p, "json-job")
+	a, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: "json-article", Article: feed.Content{
+		URL: "https://example.com/story", Title: "Saved article", Summary: "Introduction",
+		ContentMarkdown: "# Source\n\n<script>untrusted()</script>\n\n![Figure](https://images.example.com/figure.png)",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listingPath := "/jobs/" + o.ID + "?from=feed"
+	native := readJobsShell(t, request(h, http.MethodGet, listingPath, cookie, ""))
+	negotiated := readBrowserJSON[jobsShell](t, browserJSONRequest(h, listingPath, cookie, nil, ""))
+	if negotiated.MutationKey == "" || negotiated.CSRF != csrf {
+		t.Fatal("JSON page omitted the state form credentials")
+	}
+	native.MutationKey, negotiated.MutationKey = "", ""
+	if !reflect.DeepEqual(native, negotiated) {
+		t.Fatal("HTML and JSON pages selected different data")
+	}
+	gate := readBrowserJSON[jobsShell](t, browserJSONRequest(h, listingPath, nil, nil, ""))
+	if gate.Authenticated || gate.Opportunity != nil || gate.OpportunitiesPage != nil || gate.CSRF != "" ||
+		gate.SignInURL != "/auth/login?return_to="+url.QueryEscape(listingPath) {
+		t.Fatal("JSON sign-in gate lost the return path or exposed private data")
+	}
+	if response := browserJSONRequest(h, listingPath, f.Cookie(t, "bob"), nil, ""); response.Code != http.StatusNotFound {
+		t.Fatalf("foreign detail HTTP %d", response.Code)
+	}
+
+	type destination struct {
+		Location string `json:"location"`
+	}
+	articlePath := "/articles/" + a.Article.ID
+	articleForm := url.Values{"csrf_token": {csrf}}
+	archive := browserJSONRequest(h, "/api/v1"+articlePath+"/archive", cookie, articleForm, testfixture.Origin)
+	if got := readBrowserJSON[destination](t, archive).Location; got != articlePath+"?from=archive" {
+		t.Fatalf("article archive destination %q", got)
+	}
+	type newsPage struct {
+		Article       sqlite.Article    `json:"article"`
+		FromTrash     bool              `json:"from_trash"`
+		ContentImages map[string]string `json:"content_images"`
+	}
+	trashedArticle := url.Values{"csrf_token": {csrf}, "idempotency_key": {"json-trash"}, "expected_revision": {"2"}}
+	trash := browserJSONRequest(h, "/api/v1"+articlePath+"/trash", cookie, trashedArticle, testfixture.Origin)
+	trashPath := readBrowserJSON[destination](t, trash).Location
+	if trashPath != articlePath+"?from=trash" {
+		t.Fatalf("article Trash destination %q", trashPath)
+	}
+	pageResponse := browserJSONRequest(h, trashPath, cookie, nil, "")
+	page := readBrowserJSON[newsPage](t, pageResponse)
+	image := page.ContentImages["https://images.example.com/figure.png"]
+	if !page.FromTrash || page.Article.ArchivedAt == 0 || page.Article.TrashedAt == 0 || page.Article.ContentMarkdown != a.Article.ContentMarkdown ||
+		!strings.HasPrefix(image, "/thumbnails/"+a.Article.ID+"/content/") || !strings.HasSuffix(image, "?trashed=true") ||
+		strings.Contains(pageResponse.Body.String(), "<script>") {
+		t.Fatal("JSON Trash reader lost state, protected images, or escaping")
+	}
+
+	jobsArchive := "/api/v1/opportunities/" + o.ID + "/archive"
+	listingForm := url.Values{"csrf_token": {csrf}, "idempotency_key": {"json-archive"}, "expected_revision": {"1"}}
+	for _, origin := range []string{"", "https://attacker.example"} {
+		if response := browserJSONRequest(h, jobsArchive, cookie, listingForm, origin); response.Code != http.StatusForbidden {
+			t.Fatalf("JSON mutation accepted unsafe origin %q", origin)
+		}
+	}
+	for range 2 {
+		archived := browserJSONRequest(h, jobsArchive, cookie, listingForm, testfixture.Origin)
+		if got := readBrowserJSON[destination](t, archived).Location; got != "/jobs/"+o.ID+"?from=archive#opportunity-detail" {
+			t.Fatalf("listing archive destination %q", got)
+		}
+	}
+	listingForm.Set("idempotency_key", "stale")
+	if response := browserJSONRequest(h, "/api/v1/opportunities/"+o.ID+"/unarchive", cookie, listingForm, testfixture.Origin); response.Code != http.StatusConflict {
+		t.Fatalf("stale JSON mutation HTTP %d", response.Code)
+	}
+	current, err := s.GetOpportunity(t.Context(), p, feed.GetOpportunityInput{OpportunityID: o.ID})
+	if err != nil || current.Revision != 2 || current.ArchivedAt == 0 {
+		t.Fatalf("JSON archive replay or stale write changed state: revision %d, error %v", current.Revision, err)
 	}
 }

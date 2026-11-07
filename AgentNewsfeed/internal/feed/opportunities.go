@@ -55,6 +55,11 @@ type OpportunitiesPage struct {
 	NextCursor    string               `json:"next_cursor,omitempty"`
 }
 
+type BrowserOpportunitiesPage struct {
+	OpportunitiesPage
+	PreviousCursor string `json:"previous_cursor,omitempty"`
+}
+
 func optionalOpportunityText(value string, max int) bool {
 	return value == "" || boundedText(value, max)
 }
@@ -134,14 +139,27 @@ func (s *Service) GetOpportunity(ctx context.Context, p identity.Principal, in G
 }
 
 func (s *Service) ListOpportunities(ctx context.Context, p identity.Principal, in ListOpportunitiesInput) (OpportunitiesPage, error) {
+	page, err := s.listOpportunities(ctx, p, in, forwardOnly)
+	return OpportunitiesPage{Opportunities: page.rows, NextCursor: page.next}, err
+}
+
+func (s *Service) BrowseOpportunities(ctx context.Context, p identity.Principal, in ListOpportunitiesInput, before bool) (BrowserOpportunitiesPage, error) {
+	page, err := s.listOpportunities(ctx, p, in, browseMode(before))
+	return BrowserOpportunitiesPage{
+		OpportunitiesPage: OpportunitiesPage{Opportunities: page.rows, NextCursor: page.next},
+		PreviousCursor:    page.previous,
+	}, err
+}
+
+func (s *Service) listOpportunities(ctx context.Context, p identity.Principal, in ListOpportunitiesInput, mode pageMode) (listPage[sqlite.Opportunity], error) {
 	if err := s.authorize(ctx, p, identity.Read); err != nil {
-		return OpportunitiesPage{}, err
+		return listPage[sqlite.Opportunity]{}, err
 	}
 	if in.Limit == 0 {
 		in.Limit = 20
 	}
 	if in.Limit < 1 || in.Limit > 50 || len(in.Cursor) > MaxOpportunityCursorBytes || (in.Archived && in.Trashed) {
-		return OpportunitiesPage{}, ErrInvalidOpportunity
+		return listPage[sqlite.Opportunity]{}, ErrInvalidOpportunity
 	}
 	view := "active"
 	if in.Archived {
@@ -149,41 +167,38 @@ func (s *Service) ListOpportunities(ctx context.Context, p identity.Principal, i
 	} else if in.Trashed {
 		view = "trash"
 	}
-	cursor := sqlite.OpportunityCursor{Collection: OpportunityCollection, Owner: p.Owner().ID(), View: view}
+	owner := p.Owner()
+	cursor := sqlite.OpportunityCursor{Collection: OpportunityCollection, Owner: owner.ID(), View: view}
 	if in.Cursor != "" {
 		raw, err := base64.RawURLEncoding.DecodeString(in.Cursor)
 		if err != nil {
-			return OpportunitiesPage{}, ErrInvalidOpportunity
+			return listPage[sqlite.Opportunity]{}, ErrInvalidOpportunity
 		}
 		decoder := json.NewDecoder(bytes.NewReader(raw))
 		decoder.DisallowUnknownFields()
 		cursor = sqlite.OpportunityCursor{}
-		if err := decoder.Decode(&cursor); err != nil || cursor.Collection != OpportunityCollection || cursor.Owner != p.Owner().ID() ||
+		if err := decoder.Decode(&cursor); err != nil || cursor.Collection != OpportunityCollection || cursor.Owner != owner.ID() ||
 			cursor.View != view || cursor.Timestamp < 1 || !boundedText(cursor.ID, 64) {
-			return OpportunitiesPage{}, ErrInvalidOpportunity
+			return listPage[sqlite.Opportunity]{}, ErrInvalidOpportunity
 		}
 		if _, err := decoder.Token(); err != io.EOF {
-			return OpportunitiesPage{}, ErrInvalidOpportunity
+			return listPage[sqlite.Opportunity]{}, ErrInvalidOpportunity
 		}
 	}
-	opportunities, err := s.store.ListOpportunities(ctx, p.Owner(), cursor, in.Limit+1)
-	if err != nil {
-		return OpportunitiesPage{}, err
-	}
-	page := OpportunitiesPage{Opportunities: opportunities}
-	if len(opportunities) > in.Limit {
-		page.Opportunities = opportunities[:in.Limit]
-		last := page.Opportunities[len(page.Opportunities)-1]
-		cursor.ID, cursor.Timestamp = last.ID, last.CreatedAt
-		if in.Archived {
-			cursor.Timestamp = last.ArchivedAt
-		} else if in.Trashed {
-			cursor.Timestamp = last.TrashedAt
-		}
-		raw, _ := json.Marshal(cursor)
-		page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
-	}
-	return page, nil
+	return loadPage(in.Limit, mode, in.Cursor != "", cursor,
+		func(boundary sqlite.OpportunityCursor, before bool, limit int) ([]sqlite.Opportunity, error) {
+			boundary.Before = before
+			return s.store.ListOpportunities(ctx, owner, boundary, limit)
+		},
+		func(opportunity sqlite.Opportunity) sqlite.OpportunityCursor {
+			timestamp := opportunity.CreatedAt
+			if in.Archived {
+				timestamp = opportunity.ArchivedAt
+			} else if in.Trashed {
+				timestamp = opportunity.TrashedAt
+			}
+			return sqlite.OpportunityCursor{Collection: OpportunityCollection, Owner: owner.ID(), View: view, Timestamp: timestamp, ID: opportunity.ID}
+		})
 }
 
 type OpportunityStateInput struct {

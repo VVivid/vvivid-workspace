@@ -70,6 +70,11 @@ type Page struct {
 	NextCursor string           `json:"next_cursor,omitempty"`
 }
 
+type BrowserArticlesPage struct {
+	Page
+	PreviousCursor string `json:"previous_cursor,omitempty"`
+}
+
 func boundedText(value string, max int) bool {
 	return value != "" && len(value) <= max && utf8.ValidString(value) && strings.TrimSpace(value) == value && !strings.ContainsFunc(value, unicode.IsControl)
 }
@@ -173,42 +178,69 @@ func (s *Service) UpdateArticle(ctx context.Context, p identity.Principal, in Up
 }
 
 func (s *Service) ListArticles(ctx context.Context, p identity.Principal, in ListInput) (Page, error) {
+	page, err := s.listArticles(ctx, p, in, forwardOnly)
+	return Page{Articles: page.rows, NextCursor: page.next}, err
+}
+
+func (s *Service) BrowseArticles(ctx context.Context, p identity.Principal, in ListInput, before bool) (BrowserArticlesPage, error) {
+	page, err := s.listArticles(ctx, p, in, browseMode(before))
+	return BrowserArticlesPage{
+		Page:           Page{Articles: page.rows, NextCursor: page.next},
+		PreviousCursor: page.previous,
+	}, err
+}
+
+func (s *Service) listArticles(ctx context.Context, p identity.Principal, in ListInput, mode pageMode) (listPage[sqlite.Article], error) {
 	if err := s.authorize(ctx, p, identity.Read); err != nil {
-		return Page{}, err
+		return listPage[sqlite.Article]{}, err
 	}
 	if in.Limit == 0 {
 		in.Limit = 20
 	}
-	if in.Limit < 1 || in.Limit > 50 || len(in.Cursor) > 256 || (in.Archived && in.Trashed) {
-		return Page{}, ErrInvalid
+	if in.Limit < 1 || in.Limit > 50 {
+		return listPage[sqlite.Article]{}, ErrInvalid
+	}
+	owner := p.Owner()
+	cursor, err := in.articleCursor(owner)
+	if err != nil {
+		return listPage[sqlite.Article]{}, err
+	}
+	return loadPage(in.Limit, mode, in.Cursor != "", cursor,
+		func(boundary sqlite.Cursor, before bool, limit int) ([]sqlite.Article, error) {
+			boundary.Before = before
+			return s.store.ListArticles(ctx, owner, boundary, limit)
+		},
+		func(article sqlite.Article) sqlite.Cursor {
+			timestamp := article.CreatedAt
+			if in.Archived {
+				timestamp = article.ArchivedAt
+			} else if in.Trashed {
+				timestamp = article.TrashedAt
+			}
+			return sqlite.Cursor{Timestamp: timestamp, ID: article.ID, Owner: owner.ID(), Archived: in.Archived, Trashed: in.Trashed}
+		})
+}
+
+// ValidateCursor checks a reader's return position without loading its list.
+func (in ListInput) ValidateCursor(owner sqlite.Owner) error {
+	_, err := in.articleCursor(owner)
+	return err
+}
+
+func (in ListInput) articleCursor(owner sqlite.Owner) (sqlite.Cursor, error) {
+	if len(in.Cursor) > 256 || (in.Archived && in.Trashed) {
+		return sqlite.Cursor{}, ErrInvalid
+	}
+	if in.Cursor == "" {
+		return sqlite.Cursor{Owner: owner.ID(), Archived: in.Archived, Trashed: in.Trashed}, nil
 	}
 	var cursor sqlite.Cursor
-	if in.Cursor != "" {
-		raw, err := base64.RawURLEncoding.DecodeString(in.Cursor)
-		if err != nil || json.Unmarshal(raw, &cursor) != nil || cursor.Timestamp < 1 || !boundedText(cursor.ID, 64) || cursor.Owner != p.Owner().ID() || cursor.Archived != in.Archived || cursor.Trashed != in.Trashed {
-			return Page{}, ErrInvalid
-		}
+	raw, err := base64.RawURLEncoding.DecodeString(in.Cursor)
+	if err != nil || json.Unmarshal(raw, &cursor) != nil || cursor.Timestamp < 1 || !boundedText(cursor.ID, 64) ||
+		cursor.Owner != owner.ID() || cursor.Archived != in.Archived || cursor.Trashed != in.Trashed {
+		return sqlite.Cursor{}, ErrInvalid
 	}
-	cursor.Archived, cursor.Trashed = in.Archived, in.Trashed
-	articles, err := s.store.ListArticles(ctx, p.Owner(), cursor, in.Limit+1)
-	if err != nil {
-		return Page{}, err
-	}
-	page := Page{Articles: articles}
-	if len(articles) > in.Limit {
-		page.Articles = articles[:in.Limit]
-		last := page.Articles[len(page.Articles)-1]
-		timestamp := last.CreatedAt
-		if in.Archived {
-			timestamp = last.ArchivedAt
-		}
-		if in.Trashed {
-			timestamp = last.TrashedAt
-		}
-		raw, _ := json.Marshal(sqlite.Cursor{Timestamp: timestamp, ID: last.ID, Owner: p.Owner().ID(), Archived: in.Archived, Trashed: in.Trashed})
-		page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
-	}
-	return page, nil
+	return cursor, nil
 }
 
 func (s *Service) GetArticle(ctx context.Context, p identity.Principal, id string) (sqlite.Article, error) {

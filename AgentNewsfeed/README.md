@@ -145,11 +145,13 @@ Migration `0002_reader_archive.sql` adds bounded `content_markdown` and nullable
 | `/api/v1/articles/{article_id}` | Browser session + read permission; full owned article including optional Markdown; `trashed=true` is required for Trash |
 | `POST /api/v1/articles/{article_id}/archive` and `.../restore` | Browser session + read **and** write permission; bounded URL-encoded form with one `csrf_token`, exact Origin; redirects to the updated reader |
 | `POST /api/v1/articles/{article_id}/trash` and `.../restore-trash` | Browser read + write; CSRF/Origin-protected native form with `expected_revision` and `idempotency_key`; redirects to the corresponding reader |
-| `/jobs`, `/jobs/archive`, `/jobs/trash` | Sign-in gate or the owned opportunity list and first listing's full detail; 20 per page with view-bound `cursor` |
-| `/jobs/{opportunity_id}?from=feed\|archive\|trash&cursor=...` | Selected full owned listing beside the requested list page; explicit Trash view; mobile opens the selected detail with a back-to-list link |
+| `/jobs`, `/jobs/archive`, `/jobs/trash` | Sign-in gate or the owned opportunity list and first listing's full detail. Pages show up to three on narrow screens and five on wider screens. |
+| `/jobs/{opportunity_id}?from=feed\|archive\|trash&cursor=...` | Selected full owned listing beside its list page. A view-bound `cursor` or `before` keeps that position. On mobile the detail has a link back to the list. |
 | `/api/v1/opportunities?limit=20&cursor=...&archived=true` | Browser read permission; active by default; mutually exclusive Archive/Trash selection; no source descriptions or agent notes in lists |
 | `/api/v1/opportunities/{opportunity_id}` | Browser read permission; full owned listing; `trashed=true` explicitly selects Trash |
 | `POST /api/v1/opportunities/{opportunity_id}/archive`, `.../unarchive`, `.../trash`, `.../restore` | Browser read **and** write; bounded native form with one `csrf_token`, `expected_revision` and `idempotency_key`, exact Origin; redirects to current listing state |
+| `/todo` | Sign-in gate or the owner's checklist, today's completions, and history |
+| `POST /api/v1/todos` | Browser read **and** write; bounded URL-encoded form with one `csrf_token`, exact Origin, and an `action` and `task_id`. Add accepts `title`, `tags` and `estimate_minutes`. Complete, reopen, remove and undo require `expected_revision`. |
 | `/thumbnails/{article_id}` | Browser session + read permission and owned article; saved JPEG bytes, or legacy protected proxy; `trashed=true` explicitly selects Trash; no URL fetch argument |
 | `/thumbnails/{article_id}/content/{image_id}` | Same authorization; opaque image ID must match a Markdown image in the current persisted article, with no URL fetch argument |
 | `/auth/login`, `/auth/callback`, `/auth/logout` | Direct OIDC flow; logout is a CSRF-protected POST |
@@ -158,6 +160,8 @@ Migration `0002_reader_archive.sql` adds bounded `content_markdown` and nullable
 | `/health/live`, `/health/ready` | Separate liveness/readiness |
 
 Private/auth responses use `Cache-Control: no-store`, a restrictive CSP (`script-src`, `style-src`, `connect-src` and `img-src` limited to self), and `Referrer-Policy: same-origin`. There are no inline executable scripts, unsafe-inline/eval allowances or third-party browser loads. Same-origin referrer policy lets native archive/restore/logout POST navigations retain their exact Origin for CSRF validation while withholding all cross-origin referrers. External article links additionally use `noreferrer`. The server places escaped JSON in the shell's `data-bootstrap` attribute, including the session CSRF token and actual write capability; article content remains untrusted display data.
+
+To-do stores tasks in SQLite with migration `0005_todo_tasks.sql`. Completion records a UTC timestamp. The collapsed Completed disclosure groups finished tasks by date in America/New_York. Open tasks carry forward. The most recent removal per owner remains undoable across reloads until it is undone or another task is removed. Repeating Add with the same task ID and content keeps its current state. The browser uses the existing read and write grants, and To-do is browser-only.
 
 The MCP adapter advertises version `0.2.0`, these eight News tools and [eight separate opportunity tools](docs/OPPORTUNITIES.md#mcp-operations):
 

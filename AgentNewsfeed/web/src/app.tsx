@@ -1,10 +1,15 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Leaf } from '@/components/leaf'
 import { Arrow } from '@/components/arrow'
 import { ArticleMarkdown } from '@/components/markdown'
+import { Pagination } from '@/components/pagination'
+import { urlWithPagePosition } from '@/pagination'
 import { Opportunities } from '@/opportunities'
+import { Todo } from '@/todo'
+import type { TodoComposer } from '@/todo'
 import type { Article, Bootstrap } from '@/types'
 
 function formatDate(timestamp: number) {
@@ -18,17 +23,18 @@ function sourceHostname(url: string) {
 }
 
 function Thumbnail({ article }: { article: Article }) {
-  const [failed, setFailed] = useState(false)
+  // A fresh article can retry even when the proxy URL is unchanged.
+  const [failedArticle, setFailedArticle] = useState<Article | null>(null)
   return (
     <div className="article-thumbnail">
-      {article.thumbnail_url && !['unavailable', 'budget_exceeded'].includes(article.thumbnail_status ?? '') && !failed ? (
+      {article.thumbnail_url && !['unavailable', 'budget_exceeded'].includes(article.thumbnail_status ?? '') && failedArticle !== article ? (
         <img
           src={`/thumbnails/${encodeURIComponent(article.id)}${article.trashed_at ? '?trashed=true' : ''}`}
           alt=""
           loading="lazy"
           width="312"
           height="184"
-          onError={() => setFailed(true)}
+          onError={() => setFailedArticle(article)}
         />
       ) : (
         <div className="thumbnail-placeholder">
@@ -42,6 +48,7 @@ function Thumbnail({ article }: { article: Article }) {
 function Header({ data }: { data: Bootstrap }) {
   const readerShelf = data.from_trash ? 'trash' : data.from_archive ? 'archive' : 'feed'
   const selectedShelf = data.view === 'reader' ? readerShelf : data.view
+  const isNews = !data.section || data.section === 'news'
   return (
     <header className="site-header">
       <div className="header-inner">
@@ -49,12 +56,12 @@ function Header({ data }: { data: Bootstrap }) {
         <span className="private-label">Private</span>
         {data.authenticated && (
           <>
-            {data.section !== 'jobs' && <nav aria-label="Library">
+            {isNews && <nav aria-label="Library">
               <a href="/" aria-current={selectedShelf === 'feed' ? 'page' : undefined}>Feed</a>
               <a href="/archive" aria-current={selectedShelf === 'archive' ? 'page' : undefined}>Archive</a>
               <a href="/trash" aria-current={selectedShelf === 'trash' ? 'page' : undefined}>Trash</a>
             </nav>}
-            <form method="post" action="/auth/logout" className={data.section === 'jobs' ? 'header-signout' : undefined}>
+            <form method="post" action="/auth/logout" className={isNews ? undefined : 'header-signout'}>
               <input type="hidden" name="csrf_token" value={data.csrf} />
               <Button variant="outline" type="submit" size="sm">Sign out</Button>
             </form>
@@ -70,20 +77,28 @@ function Sections({ data }: { data: Bootstrap }) {
     <aside className="section-sidebar">
       <p className="eyebrow">Your sections</p>
       <nav aria-label="Sections">
-        <a href="/" aria-current={data.section !== 'jobs' ? 'page' : undefined}><Leaf /><span>News</span></a>
+        <a href="/" aria-current={!data.section || data.section === 'news' ? 'page' : undefined}><Leaf /><span>News</span></a>
         <a href="/jobs" aria-current={data.section === 'jobs' ? 'page' : undefined}><Arrow direction="up-right" /><span>Jobs &amp; Internships</span></a>
+        <a href="/todo" aria-current={data.section === 'todo' ? 'page' : undefined}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m3 6 2 2 4-4M12 6h9M12 17h9M3 14h6v6H3z" />
+          </svg>
+          <span>To-do</span>
+        </a>
       </nav>
     </aside>
   )
 }
 
-function Shelf({ data }: { data: Bootstrap }) {
+function Shelf({ data, saveNotice }: { data: Bootstrap; saveNotice?: ReactNode }) {
   const archived = data.view === 'archive'
   const trashed = data.view === 'trash'
   const articles = data.page?.articles ?? []
   const shelfPath = trashed ? '/trash' : archived ? '/archive' : '/'
+  const stalePage = articles.length === 0 && Boolean(data.cursor || data.before)
   return (
-    <main id="main" className="shelf page-width">
+    <main id="main" tabIndex={-1} className="shelf page-width">
+      {saveNotice}
       <div className="shelf-intro">
         <p className="eyebrow">{trashed ? 'Room to reconsider' : archived ? 'Kept for another day' : 'Your private collection'}</p>
         <h1>{trashed ? 'Your trash' : archived ? 'Your archive' : 'Your reading shelf'}</h1>
@@ -97,7 +112,7 @@ function Shelf({ data }: { data: Bootstrap }) {
       {articles.length > 0 ? (
         <div className="article-list">
           {articles.map(article => {
-            const readerURL = `/articles/${encodeURIComponent(article.id)}?from=${trashed ? 'trash' : archived ? 'archive' : 'feed'}`
+            const readerURL = urlWithPagePosition(`/articles/${encodeURIComponent(article.id)}`, data, data.view)
             const timestamp = trashed ? article.trashed_at! : archived ? article.archived_at! : article.created_at
             return (
               <article className="feed-row" key={article.id}>
@@ -124,25 +139,19 @@ function Shelf({ data }: { data: Bootstrap }) {
       ) : (
         <div className="empty-shelf">
           <Leaf />
-          <h2>{trashed ? 'Nothing in the trash.' : archived ? 'Room for stories you have read.' : 'A little space for a good story.'}</h2>
-          <p>{trashed ? 'Trashed articles stay recoverable, with their original content and images. Nothing is permanently deleted.' : archived ? 'Articles you archive will be waiting here. Restore one whenever you want to return to it.' : 'Save a sourced article with your connected agent, then settle in here when you have a moment.'}</p>
-          {(archived || trashed) && <a className="reading-link" href="/">Back to your feed <Arrow /></a>}
+          <h2>{stalePage ? 'This page is empty.' : trashed ? 'Nothing in the trash.' : archived ? 'Room for stories you have read.' : 'A little space for a good story.'}</h2>
+          <p>{stalePage ? 'Return to the start to see the current list.' : trashed ? 'Trashed articles stay recoverable, with their original content and images. Nothing is permanently deleted.' : archived ? 'Articles you archive will be waiting here. Restore one whenever you want to return to it.' : 'Save a sourced article with your connected agent, then settle in here when you have a moment.'}</p>
+          {!stalePage && (archived || trashed) && <a className="reading-link" href="/">Back to your feed <Arrow /></a>}
         </div>
       )}
-      {data.page?.next_cursor && (
-        <div className="pagination">
-          <Button asChild variant="outline">
-            <a href={`${shelfPath}?cursor=${encodeURIComponent(data.page.next_cursor)}`}>
-              {trashed ? 'Earlier trashed articles' : archived ? 'Earlier archived articles' : 'Older articles'} <Arrow />
-            </a>
-          </Button>
-        </div>
-      )}
+      <Pagination path={shelfPath} page={data.page} stale={stalePage} />
     </main>
   )
 }
 
-function Reader({ data, article }: { data: Bootstrap; article: Article }) {
+function Reader({ data, article, actionsPending, saveNotice }: {
+  data: Bootstrap; article: Article; actionsPending: boolean; saveNotice?: ReactNode
+}) {
   const archived = Boolean(article.archived_at)
   const trashed = Boolean(article.trashed_at)
   const action = trashed ? 'restore-trash' : archived ? 'restore' : 'archive'
@@ -151,8 +160,9 @@ function Reader({ data, article }: { data: Bootstrap; article: Article }) {
     : archived ? 'Restore to feed' : 'Archive article'
   const back = data.from_trash ? 'trash' : data.from_archive ? 'archive' : 'feed'
   return (
-    <main id="main" className="reader page-width">
-      <a className="back-link" href={back === 'feed' ? '/' : `/${back}`}>
+    <main id="main" tabIndex={-1} className="reader page-width">
+      {saveNotice}
+      <a className="back-link" href={urlWithPagePosition(back === 'feed' ? '/' : `/${back}`, data)}>
         <Arrow direction="left" /> Back to {back}
       </a>
       <article className="reader-article">
@@ -197,7 +207,7 @@ function Reader({ data, article }: { data: Bootstrap; article: Article }) {
                 <input type="hidden" name="expected_revision" value={article.revision} />
                 <input type="hidden" name="idempotency_key" value={data.mutation_key ?? ''} />
               </>}
-              <Button variant="outline" type="submit" disabled={!data.can_write}>
+              <Button variant="outline" type="submit" disabled={!data.can_write || actionsPending}>
                 {actionLabel}
               </Button>
             </form>
@@ -208,7 +218,7 @@ function Reader({ data, article }: { data: Bootstrap; article: Article }) {
               <input type="hidden" name="csrf_token" value={data.csrf} />
               <input type="hidden" name="expected_revision" value={article.revision} />
               <input type="hidden" name="idempotency_key" value={data.mutation_key ?? ''} />
-              <Button variant="outline" type="submit" disabled={!data.can_write}>Move to Trash</Button>
+              <Button variant="outline" type="submit" disabled={!data.can_write || actionsPending}>Move to Trash</Button>
             </form>
           </div>}
           {!data.can_write && (
@@ -220,15 +230,19 @@ function Reader({ data, article }: { data: Bootstrap; article: Article }) {
   )
 }
 
-function Gate({ data }: { data: Bootstrap }) {
+function Gate({ data, saveNotice }: { data: Bootstrap; saveNotice?: ReactNode }) {
+  const todo = data.section === 'todo'
   return (
-    <main id="main" className="gate page-width">
+    <main id="main" tabIndex={-1} className="gate page-width">
+      {saveNotice}
       <p className="eyebrow">A quiet corner of the internet</p>
-      <h1>Your reading shelf</h1>
-      <p className="subtitle">Good stories, saved for a slower moment.</p>
+      <h1>{todo ? 'To-do' : 'Your reading shelf'}</h1>
+      <p className="subtitle">{todo ? 'Your private checklist.' : 'Good stories, saved for a slower moment.'}</p>
       <Separator />
       <h2>{data.configured ? 'Make yourself at home.' : 'Your shelf is being prepared.'}</h2>
-      <p>{data.configured ? 'Sign in to read your private collection of stories, ideas, and things worth keeping.' : 'Newsfeed identity is not configured. Your account administrator can finish the setup.'}</p>
+      {data.configured
+        ? <p>{todo ? 'Sign in to view your tasks.' : 'Sign in to read your private collection of stories, ideas, and things worth keeping.'}</p>
+        : <p>Newsfeed identity is not configured. Your account administrator can finish the setup.</p>}
       {data.configured && (
         <Button asChild><a href={data.sign_in_url}>Sign in <Arrow /></a></Button>
       )}
@@ -236,20 +250,27 @@ function Gate({ data }: { data: Bootstrap }) {
   )
 }
 
-export function App({ data }: { data: Bootstrap }) {
+export function App({ data, actionsPending = false, saveNotice, focusHash, todoComposer }: {
+  data: Bootstrap; actionsPending?: boolean; saveNotice?: ReactNode; focusHash?: string; todoComposer?: TodoComposer
+}) {
   return (
     <>
-      <a className="skip-link" href="#main">Skip to reading</a>
+      <a className="skip-link" href="#main">{data.section === 'todo' ? 'Skip to tasks' : 'Skip to reading'}</a>
       <Header data={data} />
       {!data.authenticated ? (
-        <Gate data={data} />
+        <Gate data={data} saveNotice={saveNotice} />
       ) : (
         <div className="library-layout">
           <Sections data={data} />
           <div className="library-content">
-            {data.section === 'jobs' ? <Opportunities data={data} /> : data.view === 'reader' && data.article
-              ? <Reader data={data} article={data.article} />
-              : <Shelf data={data} />}
+            {data.section === 'todo'
+              ? data.todo && <Todo list={data.todo} csrf={data.csrf} canWrite={data.can_write}
+                pending={actionsPending} composer={todoComposer} saveNotice={saveNotice} />
+              : data.section === 'jobs'
+                ? <Opportunities data={data} actionsPending={actionsPending} saveNotice={saveNotice} focusHash={focusHash} />
+                : data.view === 'reader' && data.article
+                  ? <Reader data={data} article={data.article} actionsPending={actionsPending} saveNotice={saveNotice} />
+                  : <Shelf data={data} saveNotice={saveNotice} />}
           </div>
         </div>
       )}
