@@ -1,10 +1,10 @@
 .PHONY: check test build xtrace-check xtrace-test xtrace-build website-check website-test website-build go-case-study-check go-case-study-test go-case-study-build
 
-check: xtrace-check sshmcp-check google-health-check shopping-check newsfeed-check website-check webhook-control-check go-case-study-check
+check: xtrace-check sshmcp-check google-health-check shopping-check newsfeed-check website-check webhook-control-check go-case-study-check artificial-memory-check
 
-test: xtrace-test sshmcp-test google-health-test shopping-test newsfeed-test website-test webhook-control-test go-case-study-test
+test: xtrace-test sshmcp-test google-health-test shopping-test newsfeed-test website-test webhook-control-test go-case-study-test artificial-memory-test
 
-build: xtrace-build sshmcp-build google-health-build shopping-build newsfeed-build website-build webhook-control-build go-case-study-build
+build: xtrace-build sshmcp-build google-health-build shopping-build newsfeed-build website-build webhook-control-build go-case-study-build artificial-memory-build
 
 go-case-study-check:
 	$(MAKE) -C examples/go-lang-case-study check
@@ -86,3 +86,17 @@ webhook-control-test:
 
 webhook-control-build:
 	$(MAKE) -C WebhookControl build
+
+.PHONY: artificial-memory-check artificial-memory-test artificial-memory-race artificial-memory-build
+
+artificial-memory-check:
+	$(MAKE) -C ArtificialMemory check
+
+artificial-memory-test:
+	$(MAKE) -C ArtificialMemory test
+
+artificial-memory-race:
+	$(MAKE) -C ArtificialMemory race
+
+artificial-memory-build:
+	$(MAKE) -C ArtificialMemory build

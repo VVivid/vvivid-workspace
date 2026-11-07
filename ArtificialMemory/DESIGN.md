@@ -1,7 +1,9 @@
 # Artificial Memory design
 
-This specifies the first proof of concept. It is an implementation target, not
-evidence that a service, database, identity registration, or deployment exists.
+This specifies the first proof of concept. The indexed journal and bounded
+retrieval are implemented as a library; [README](README.md) documents their exact
+API, normalization, pagination, and limits. The MCP, identity, packaging and
+recovery sections remain implementation targets, not deployment evidence.
 
 ## Purpose and boundaries
 

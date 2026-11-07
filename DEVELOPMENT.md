@@ -12,7 +12,7 @@ Before Go edits, use [Modern Go Guidelines](.agents/skills/use-modern-go/SKILL.m
 
 | Project | Purpose | Run instructions |
 | --- | --- | --- |
-| `ArtificialMemory` | Hosted MCP decision journal; design prepared, implementation pending | [Memory README](ArtificialMemory/README.md) |
+| `ArtificialMemory` | Indexed, append-only SQLite decision journal library; hosted MCP planned | [Memory README](ArtificialMemory/README.md) |
 | `SSHMCP` | Authenticated MCP gateway and persistent SSH execution runner | [SSHMCP README](SSHMCP/README.md) |
 | `GoogleHealthMCP` | Google Health / Fitbit importer backed by SQLite | [Google Health README](GoogleHealthMCP/README.md) |
 | `AgentNewsfeed` | Private reading feed with browser OIDC and direct/gateway MCP | [Newsfeed README](AgentNewsfeed/README.md) |
@@ -26,7 +26,7 @@ Each project owns its dependencies, build configuration, and tests. The root Mak
 
 ## Build and check
 
-Run `make sshmcp-check`, `make google-health-check`, `make shopping-check`, or `make webhook-control-check` for an application. Each also has matching `-test` and `-build` targets. Use `make website-check`, `make website-test`, or `make website-build` for the personal website; each renders and validates the production Hugo output. Install the pinned Hugo Extended version from `vvivid.dev/.hugo-version` or set `HUGO=/absolute/path/to/hugo`; the [website README](vvivid.dev/README.md) covers installation and Docker alternatives. `make check`, `make test`, and `make build` cover all projects. Each project remains independently runnable; Docker builds use its directory as the build context.
+Run `make sshmcp-check`, `make google-health-check`, `make shopping-check`, `make webhook-control-check`, or `make artificial-memory-check` for an application. Each also has matching `-test` and `-build` targets. Artificial Memory additionally delegates `make artificial-memory-race`; its build currently compiles library packages. Use `make website-check`, `make website-test`, or `make website-build` for the personal website; each renders and validates the production Hugo output. Install the pinned Hugo Extended version from `vvivid.dev/.hugo-version` or set `HUGO=/absolute/path/to/hugo`; the [website README](vvivid.dev/README.md) covers installation and Docker alternatives. `make check`, `make test`, and `make build` cover all projects. Each project remains independently runnable; Docker builds use its directory as the build context.
 
 For XTrace, install Make, Go 1.26 or newer, a C compiler for SQLite and the race detector, and Docker with the Compose plugin. Run from the repository root:
 
