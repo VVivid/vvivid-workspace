@@ -45,8 +45,8 @@ func todoSchemas(t *testing.T, c *sdk.ClientSession) map[string]*jsonschema.Reso
 		t.Fatal("initialize omitted To-do version, trust or retry contract")
 	}
 	tools, err := c.ListTools(t.Context(), nil)
-	if err != nil || len(tools.Tools) != 22 {
-		t.Fatalf("expected 22 tools: %v", err)
+	if err != nil || len(tools.Tools) != 14 {
+		t.Fatalf("expected 14 tools: %v", err)
 	}
 	out := make(map[string]*jsonschema.Resolved)
 	for _, tool := range tools.Tools {
@@ -528,7 +528,6 @@ func TestTodoMCPPaginationDefaultsAndCursorIsolation(t *testing.T) {
 			requireToolError(t, call(t, bob, "list_todos", feed.ListTodosInput{Cursor: page.NextCursor}))
 			requireToolError(t, call(t, alice, "list_todos", feed.ListTodosInput{Cursor: page.NextCursor, Status: "completed"}))
 			requireToolError(t, call(t, alice, "list_articles", feed.ListInput{Cursor: page.NextCursor}))
-			requireToolError(t, call(t, alice, "list_opportunities", feed.ListOpportunitiesInput{Cursor: page.NextCursor}))
 			raw, err := base64.RawURLEncoding.DecodeString(page.NextCursor)
 			if err != nil {
 				t.Fatal(err)

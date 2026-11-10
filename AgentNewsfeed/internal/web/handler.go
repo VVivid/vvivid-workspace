@@ -68,10 +68,6 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 	mux.HandleFunc("GET /archive", h.index)
 	mux.HandleFunc("GET /trash", h.index)
 	mux.HandleFunc("GET /articles/{id}", h.index)
-	mux.HandleFunc("GET /jobs", h.jobs)
-	mux.HandleFunc("GET /jobs/archive", h.jobs)
-	mux.HandleFunc("GET /jobs/trash", h.jobs)
-	mux.HandleFunc("GET /jobs/{id}", h.jobs)
 	mux.HandleFunc("GET /todo", h.todo)
 	if auth != nil {
 		auth.Register(mux)
@@ -81,18 +77,16 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 		mux.Handle("POST /api/v1/articles/{id}/restore", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.archive(false)))
 		mux.Handle("POST /api/v1/articles/{id}/trash", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.trash(false)))
 		mux.Handle("POST /api/v1/articles/{id}/restore-trash", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.trash(true)))
-		mux.Handle("GET /api/v1/opportunities", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.listOpportunities)))
-		mux.Handle("GET /api/v1/opportunities/{id}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.opportunityDetail)))
-		for _, action := range []string{"archive", "unarchive", "trash", "restore"} {
-			mux.Handle("POST /api/v1/opportunities/{id}/"+action, auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.opportunityState(action)))
-		}
 		mux.Handle("POST /api/v1/todos", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, http.HandlerFunc(h.todoForm)))
 		mux.Handle("GET /thumbnails/{id}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.image)))
 		mux.Handle("GET /thumbnails/{id}/content/{image}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.image)))
 		mux.Handle("/mcp", auth.BearerMiddleware(auth.MCPAudience(), nil, feedmcp.NewHandler(service, logger)))
 	} else {
 		mux.HandleFunc("/mcp", unconfigured)
-		mux.HandleFunc("/api/", unconfigured)
+		// Limit setup responses to the active API families so retired paths return 404.
+		mux.HandleFunc("/api/v1/articles", unconfigured)
+		mux.HandleFunc("/api/v1/articles/", unconfigured)
+		mux.HandleFunc("/api/v1/todos", unconfigured)
 		mux.HandleFunc("/auth/", unconfigured)
 		mux.HandleFunc("/thumbnails/", unconfigured)
 	}
@@ -130,26 +124,23 @@ func headers(next http.Handler, auth *identity.Manager) http.Handler {
 const browserMediaType = "application/vnd.agentnewsfeed.browser+json"
 
 type bootstrap struct {
-	Configured        bool                           `json:"configured"`
-	Authenticated     bool                           `json:"authenticated"`
-	CanWrite          bool                           `json:"can_write"`
-	CSRF              string                         `json:"csrf"`
-	View              string                         `json:"view"`
-	FromArchive       bool                           `json:"from_archive"`
-	FromTrash         bool                           `json:"from_trash"`
-	MutationKey       string                         `json:"mutation_key,omitempty"`
-	SignInURL         string                         `json:"sign_in_url"`
-	Page              *feed.BrowserArticlesPage      `json:"page,omitempty"`
-	Article           *sqlite.Article                `json:"article,omitempty"`
-	ContentImages     map[string]string              `json:"content_images,omitempty"`
-	Section           string                         `json:"section"`
-	Cursor            string                         `json:"cursor,omitempty"`
-	Before            string                         `json:"before,omitempty"`
-	PageSize          int                            `json:"page_size,omitzero"`
-	DetailSelected    bool                           `json:"detail_selected"`
-	OpportunitiesPage *feed.BrowserOpportunitiesPage `json:"opportunities_page,omitempty"`
-	Opportunity       *sqlite.Opportunity            `json:"opportunity,omitempty"`
-	Todo              *sqlite.TodoList               `json:"todo,omitempty"`
+	Configured    bool                      `json:"configured"`
+	Authenticated bool                      `json:"authenticated"`
+	CanWrite      bool                      `json:"can_write"`
+	CSRF          string                    `json:"csrf"`
+	View          string                    `json:"view"`
+	FromArchive   bool                      `json:"from_archive"`
+	FromTrash     bool                      `json:"from_trash"`
+	MutationKey   string                    `json:"mutation_key,omitempty"`
+	SignInURL     string                    `json:"sign_in_url"`
+	Page          *feed.BrowserArticlesPage `json:"page,omitempty"`
+	Article       *sqlite.Article           `json:"article,omitempty"`
+	ContentImages map[string]string         `json:"content_images,omitempty"`
+	Section       string                    `json:"section"`
+	Cursor        string                    `json:"cursor,omitempty"`
+	Before        string                    `json:"before,omitempty"`
+	PageSize      int                       `json:"page_size,omitzero"`
+	Todo          *sqlite.TodoList          `json:"todo,omitempty"`
 }
 
 func (h *handler) index(w http.ResponseWriter, r *http.Request) {
@@ -426,7 +417,7 @@ func writeError(w http.ResponseWriter, err error) {
 func writeSafeError(w http.ResponseWriter, err error, message string) {
 	status := http.StatusServiceUnavailable
 	switch {
-	case errors.Is(err, feed.ErrInvalid), errors.Is(err, feed.ErrInvalidOpportunity):
+	case errors.Is(err, feed.ErrInvalid):
 		status = http.StatusBadRequest
 	case errors.Is(err, identity.ErrForbidden):
 		status = http.StatusForbidden

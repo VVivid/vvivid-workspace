@@ -26,32 +26,6 @@ export interface Page extends PageLinks {
   articles: Article[]
 }
 
-export interface Opportunity {
-  id: string
-  kind: 'job' | 'internship'
-  url: string
-  title: string
-  company: string
-  location?: string
-  workplace?: 'remote' | 'hybrid' | 'on_site'
-  employment_type?: 'full_time' | 'part_time' | 'contract' | 'temporary' | 'seasonal' | 'other'
-  employment_period?: string
-  compensation?: string
-  deadline?: string
-  tags?: string[]
-  source_description?: string
-  agent_note?: string
-  revision: number
-  created_at: number
-  updated_at: number
-  archived_at?: number
-  trashed_at?: number
-}
-
-export interface OpportunitiesPage extends PageLinks {
-  opportunities: Opportunity[]
-}
-
 export interface TodoTask {
   id: string
   title: string
@@ -79,12 +53,9 @@ export interface Bootstrap {
   page?: Page
   article?: Article
   content_images?: Record<string, string>
-  section?: 'news' | 'jobs' | 'todo'
+  section?: 'news' | 'todo'
   cursor?: string
   before?: string
   page_size?: number
-  detail_selected?: boolean
-  opportunities_page?: OpportunitiesPage
-  opportunity?: Opportunity
   todo?: TodoList
 }

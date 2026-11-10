@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from '@/app'
@@ -40,6 +40,10 @@ describe('private reading shelf', () => {
     expect(screen.getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/?cursor=opaque-cursor')
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled()
     expect(screen.getByRole('navigation', { name: 'Library' })).toHaveTextContent('FeedArchiveTrash')
+    const sections = within(screen.getByRole('navigation', { name: 'Sections' }))
+    expect(sections.getAllByRole('link')).toHaveLength(2)
+    expect(sections.getByRole('link', { name: 'News', current: 'page' })).toHaveAttribute('href', '/')
+    expect(sections.getByRole('link', { name: 'To-do' })).toHaveAttribute('href', '/todo')
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
@@ -61,8 +65,6 @@ describe('private reading shelf', () => {
     expect(screen.getByRole('button', { name: 'Sign out' })).toHaveFocus()
     await user.tab()
     expect(screen.getByRole('link', { name: 'News' })).toHaveFocus()
-    await user.tab()
-    expect(screen.getByRole('link', { name: 'Jobs & Internships' })).toHaveFocus()
     await user.tab()
     expect(screen.getByRole('link', { name: 'To-do' })).toHaveFocus()
     await user.tab()

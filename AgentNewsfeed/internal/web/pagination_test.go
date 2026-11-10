@@ -21,33 +21,16 @@ type paginationRecord struct {
 
 type paginationList struct {
 	Articles       []paginationRecord `json:"articles"`
-	Opportunities  []paginationRecord `json:"opportunities"`
 	PreviousCursor string             `json:"previous_cursor"`
 	NextCursor     string             `json:"next_cursor"`
 }
 
-func (p paginationList) records() []paginationRecord {
-	if p.Articles != nil {
-		return p.Articles
-	}
-	return p.Opportunities
-}
-
 type paginationShell struct {
-	Cursor            string            `json:"cursor"`
-	Before            string            `json:"before"`
-	PageSize          int               `json:"page_size"`
-	Section           string            `json:"section"`
-	Page              paginationList    `json:"page"`
-	OpportunitiesPage paginationList    `json:"opportunities_page"`
-	Article           *paginationRecord `json:"article"`
-}
-
-func (p paginationShell) list() paginationList {
-	if p.Section == "jobs" {
-		return p.OpportunitiesPage
-	}
-	return p.Page
+	Cursor   string            `json:"cursor"`
+	Before   string            `json:"before"`
+	PageSize int               `json:"page_size"`
+	Page     paginationList    `json:"page"`
+	Article  *paginationRecord `json:"article"`
 }
 
 func listBrowserRequest(h http.Handler, path string, cookie *http.Cookie, pageSize string) *httptest.ResponseRecorder {
@@ -70,25 +53,14 @@ func seedPaginationView(t *testing.T, s *feed.Service, p identity.Principal, vie
 		if err != nil {
 			t.Fatal(err)
 		}
-		job := saveBrowserOpportunity(t, s, p, key)
 		switch view {
 		case "archive":
 			if _, err := s.SetArchived(t.Context(), p, article.Article.ID, true); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := s.SetOpportunityArchived(t.Context(), p, feed.ArchiveOpportunityInput{
-				OpportunityID: job.ID, ExpectedRevision: job.Revision, Archived: true, IdempotencyKey: "archive-" + key,
-			}); err != nil {
-				t.Fatal(err)
-			}
 		case "trash":
 			if _, err := s.TrashArticle(t.Context(), p, feed.StateInput{
 				ArticleID: article.Article.ID, ExpectedRevision: article.Article.Revision, IdempotencyKey: "trash-" + key,
-			}); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := s.TrashOpportunity(t.Context(), p, feed.OpportunityStateInput{
-				OpportunityID: job.ID, ExpectedRevision: job.Revision, IdempotencyKey: "trash-" + key,
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -109,36 +81,31 @@ func TestResponsiveBrowserPagination(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	for _, table := range []string{"articles", "opportunities"} {
-		if _, err := db.ExecContext(t.Context(), "UPDATE "+table+` SET created_at=1,
-			archived_at=CASE WHEN archived_at IS NOT NULL THEN 2 END,
-			trashed_at=CASE WHEN trashed_at IS NOT NULL THEN 3 END`); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := db.ExecContext(t.Context(), `UPDATE articles SET created_at=1,
+		archived_at=CASE WHEN archived_at IS NOT NULL THEN 2 END,
+		trashed_at=CASE WHEN trashed_at IS NOT NULL THEN 3 END`); err != nil {
+		t.Fatal(err)
 	}
 
 	var stalePath string
 	var staleRecords []paginationRecord
-	for _, tc := range []struct{ path, api, otherView, otherCollection string }{
-		{"/", "/api/v1/articles", "/archive", "/jobs"},
-		{"/archive", "/api/v1/articles?archived=true", "/trash", "/jobs/archive"},
-		{"/trash", "/api/v1/articles?trashed=true", "/archive", "/jobs/trash"},
-		{"/jobs", "/api/v1/opportunities", "/jobs/archive", "/"},
-		{"/jobs/archive", "/api/v1/opportunities?archived=true", "/jobs/trash", "/archive"},
-		{"/jobs/trash", "/api/v1/opportunities?trashed=true", "/jobs/archive", "/trash"},
+	for _, tc := range []struct{ path, api, otherView string }{
+		{"/", "/api/v1/articles", "/archive"},
+		{"/archive", "/api/v1/articles?archived=true", "/trash"},
+		{"/trash", "/api/v1/articles?trashed=true", "/archive"},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
 			var api paginationList
 			response := listBrowserRequest(h, tc.api, cookie, "5")
-			if err := json.Unmarshal(response.Body.Bytes(), &api); err != nil || response.Code != 200 || len(api.records()) != 8 || api.PreviousCursor != "" || api.NextCursor != "" {
+			if err := json.Unmarshal(response.Body.Bytes(), &api); err != nil || response.Code != 200 || len(api.Articles) != 8 || api.PreviousCursor != "" || api.NextCursor != "" {
 				t.Fatalf("browser page size affected the API: %d, %v", response.Code, err)
 			}
-			want := api.records()
+			want := api.Articles
 			check := func(path, header string, size int, expected []paginationRecord, previous, next bool) paginationList {
 				t.Helper()
 				page := readBrowserJSON[paginationShell](t, listBrowserRequest(h, path, cookie, header))
-				list := page.list()
-				if page.PageSize != size || !slices.Equal(list.records(), expected) || (list.PreviousCursor != "") != previous || (list.NextCursor != "") != next {
+				list := page.Page
+				if page.PageSize != size || !slices.Equal(list.Articles, expected) || (list.PreviousCursor != "") != previous || (list.NextCursor != "") != next {
 					t.Fatalf("unexpected page at %s with size %s: %+v", path, header, page)
 				}
 				return list
@@ -160,7 +127,7 @@ func TestResponsiveBrowserPagination(t *testing.T) {
 				path   string
 				cookie *http.Cookie
 			}{
-				{previousPath, bob}, {tc.otherView + beforeQuery, cookie}, {tc.otherCollection + beforeQuery, cookie},
+				{previousPath, bob}, {tc.otherView + beforeQuery, cookie},
 				{previousPath + "&cursor=" + url.QueryEscape(first.NextCursor), cookie},
 			} {
 				if response := listBrowserRequest(h, invalid.path, invalid.cookie, "3"); response.Code != 400 {
@@ -183,7 +150,7 @@ func TestResponsiveBrowserPagination(t *testing.T) {
 		}
 	}
 	stale := readBrowserJSON[paginationShell](t, listBrowserRequest(h, stalePath, cookie, "3"))
-	if stale.Cursor == "" || len(stale.Page.records()) != 0 || stale.Page.PreviousCursor != "" || stale.Page.NextCursor != "" {
+	if stale.Cursor == "" || len(stale.Page.Articles) != 0 || stale.Page.PreviousCursor != "" || stale.Page.NextCursor != "" {
 		t.Fatal("stale cursor did not return a recoverable empty page")
 	}
 }

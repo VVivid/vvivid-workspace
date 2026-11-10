@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -38,14 +37,27 @@ func TestTodoMigrationPreservesExistingContentAndPersistsTasks(t *testing.T) {
 	}
 	jpeg := thumbnailJPEG(t, 150)
 	article := storeArticle(t, legacy, owner, "old-article", jpeg).Article
-	content := OpportunityContent{Kind: "internship", URL: "https://jobs.example/old", Title: "A role", Company: "Example", Tags: []string{"Go"}}
-	payload, err := json.Marshal(content)
-	if err != nil {
+	// Create a retired listing and retry record as they would appear in a v4 database.
+	const listingID = "legacy-listing"
+	type listingSnapshot struct {
+		title, tags, description, note  string
+		revision, archivedAt, trashedAt int64
+	}
+	wantListing := listingSnapshot{
+		title: "A role", tags: `["Go"]`, description: "Source description", note: "Agent note",
+		revision: 3, archivedAt: 200, trashedAt: 300,
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO opportunities
+		(owner_id,id,canonical_url,kind,title,company,tags_json,source_description,agent_note,revision,created_at,updated_at,archived_at,trashed_at)
+		VALUES (?,?,'https://jobs.example/old','internship',?,'Example',?,?,?,?,100,300,?,?)`,
+		owner.id, listingID, wantListing.title, wantListing.tags, wantListing.description, wantListing.note,
+		wantListing.revision, wantListing.archivedAt, wantListing.trashedAt); err != nil {
 		t.Fatal(err)
 	}
-	const opportunityKey = "old-job"
-	saved, err := legacy.MutateOpportunity(ctx, owner, opportunityKey, "add_opportunity", payload, Opportunity{OpportunityContent: content}, 0, false)
-	if err != nil {
+	retryHash := sha256.Sum256([]byte("prior listing intent"))
+	retryResult := []byte(`{"opportunity":{"id":"legacy-listing","revision":1},"created":true}`)
+	if _, err := db.ExecContext(ctx, `INSERT INTO opportunity_idempotency_results (owner_id,key,operation,payload_hash,result,created_at)
+		VALUES (?,'old-job','add_opportunity',?,?,100)`, owner.id, retryHash[:], retryResult); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
@@ -69,11 +81,23 @@ func TestTodoMigrationPreservesExistingContentAndPersistsTasks(t *testing.T) {
 	if image, err := store.Thumbnail(ctx, owner, article.ID, false); err != nil || !bytes.Equal(image, jpeg) {
 		t.Fatal("migration changed the thumbnail")
 	}
-	if got, err := store.OpportunityInView(ctx, owner, saved.Opportunity.ID, false); err != nil || !reflect.DeepEqual(got, saved.Opportunity) {
-		t.Fatalf("migration changed Jobs: %#v %v", got, err)
+	var gotListing listingSnapshot
+	if err := store.read.QueryRowContext(ctx, `SELECT title,tags_json,source_description,agent_note,revision,archived_at,trashed_at
+		FROM opportunities WHERE owner_id=? AND id=?`, owner.id, listingID).
+		Scan(&gotListing.title, &gotListing.tags, &gotListing.description, &gotListing.note,
+			&gotListing.revision, &gotListing.archivedAt, &gotListing.trashedAt); err != nil {
+		t.Fatalf("read the retained listing: %v", err)
 	}
-	if got, found, err := store.ReplayOpportunityMutation(ctx, owner, opportunityKey, "add_opportunity", payload); err != nil || !found || !reflect.DeepEqual(got, saved) {
-		t.Fatal("migration changed the Jobs retry result")
+	if gotListing != wantListing {
+		t.Fatalf("retained listing changed: got %+v, want %+v", gotListing, wantListing)
+	}
+	var storedHash, storedResult []byte
+	if err := store.read.QueryRowContext(ctx, `SELECT payload_hash,result FROM opportunity_idempotency_results
+		WHERE owner_id=? AND key='old-job'`, owner.id).Scan(&storedHash, &storedResult); err != nil {
+		t.Fatalf("read the retained listing retry record: %v", err)
+	}
+	if !bytes.Equal(storedHash, retryHash[:]) || !bytes.Equal(storedResult, retryResult) {
+		t.Fatal("migration changed the retained listing retry bytes")
 	}
 	if list, err := store.ListTodo(ctx, owner); err != nil || len(list.Tasks) != 0 || list.Undo != nil {
 		t.Fatalf("migration did not leave a new owner checklist: %#v %v", list, err)

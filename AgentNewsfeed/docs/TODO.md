@@ -30,7 +30,7 @@ Every call resolves the authenticated issuer and subject to a currently active e
 | `remove_todo` | `idempotency_key`, `task_id`, `expected_revision`. Removes a visible task, preserving its completion state, and replaces this owner's single pending Undo. |
 | `undo_todo_removal` | Same state fields, naming the exact latest pending removal and its current revision. Restores that task with its previous completion state. |
 
-Agent lists order visible tasks by immutable creation time and ID descending in every status view. `undo` is independent of status, appears on every page and does not consume the task limit. Page rows and Undo share one read snapshot. Pass cursors back unchanged: they are at most 1024 bytes and bind the To-do collection, owner and status. News/Jobs cursors and another owner's or status's cursor are invalid. Pagination traverses current data; concurrent changes can affect later pages.
+Agent lists order visible tasks by immutable creation time and ID descending in every status view. `undo` is independent of status, appears on every page and does not consume the task limit. Page rows and Undo share one read snapshot. Pass cursors back unchanged: they are at most 1024 bytes and bind the To-do collection, owner and status. Cursors from another collection, owner or status are invalid. Pagination traverses current data; concurrent changes can affect later pages.
 
 Only the latest pending removal is readable with `removed:true` and eligible for Undo. Another removal supersedes the prior Undo. Superseded removals cannot be read or restored through these tools. Ordinary `get_todo` excludes every removed task. Missing and foreign IDs have the same safe error.
 
@@ -51,7 +51,7 @@ Save the returned `task.id` and `task.revision`. Before a new state change, read
 
 If a response is lost, retry the exact successful input with its original key. A successful retry returns its **historical result**, including the original revision and completion/removal state, even after browser changes, later MCP calls or restarts. It does not repeat the action or replace the current Undo. Use a fresh read to inspect current state. A different intent or operation with a previously successful key conflicts. For a revision conflict, read the current task or Undo, decide whether the action is still intended, and send a new intent key with that current revision. Validation, permission, owner, state, revision and storage failures reserve no key.
 
-Successful task changes and retry snapshots commit together. Real completion/reopen/remove/Undo transitions increment revision once. Retry records have no automatic expiry and use a separate namespace from News and Jobs.
+Successful task changes and retry snapshots commit together. Real completion/reopen/remove/Undo transitions increment revision once. Retry records have no automatic expiry and use a separate namespace from News.
 
 ## Browser and completion history
 
@@ -61,7 +61,7 @@ Browser and MCP changes are visible through the same stored rows and single late
 
 ## Persistence and recovery
 
-Migration `0005_todo_tasks.sql` owns the original browser checklist. Additive migration `0006_todo_idempotency.sql` adds the owner-scoped To-do retry table and visible creation-order index. The first five migrations remain unchanged. Existing tasks, browser draft IDs, News/Jobs retry bytes, article/opportunity rows and image data are preserved. No seed, backfill, URL fetch, identity change or new runtime configuration is required.
+Migration `0005_todo_tasks.sql` owns the original browser checklist. Additive migration `0006_todo_idempotency.sql` adds the owner-scoped To-do retry table and visible creation-order index. The first five migrations remain unchanged. Existing tasks, browser draft IDs, article rows, News retry bytes, legacy opportunity rows and retry bytes, and image data are preserved. No seed, backfill, URL fetch, identity change or new runtime configuration is required.
 
 Startup applies the versioned migration to the existing SQLite database. Before a separately authorized deployment, take a consistent SQLite backup using the existing deployment procedure. Older binaries reject the newer migration history; schema recovery requires the previous image and its corresponding consistent pre-migration database backup, including WAL state where applicable. Do not edit migration history or remove the retry table to force a rollback.
 
