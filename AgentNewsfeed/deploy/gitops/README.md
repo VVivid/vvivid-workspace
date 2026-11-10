@@ -99,13 +99,11 @@ Only `/data` is writable by the main container. Keep session keys stable. Set op
 The chart requests staging DNS-01 first with public ingress absent; enable
 production issuance only after observed staging readiness, then enable browser
 ingress only after observed trusted production TLS. Values cannot establish
-actual certificate readiness. Public ingress permits only `/`, archive, Trash, exact
-login/callback/logout, article API/reader, the `/jobs` browser namespace and
-`/api/v1/opportunities` read/state API namespace, static assets and thumbnails. It
-excludes `/mcp`, all MCP discovery and health. Canonical Host is preserved.
-Prefix matches use path segments: lookalikes such as `/jobs-evil` and
-`/api/v1/opportunities-evil` remain excluded. The Jobs route additions are
-prepared configuration and require a separately authorized release/deployment.
+actual certificate readiness. Public ingress allows the News feed, archive,
+Trash, article API and reader, `/todo`, `/api/v1/todos`, the exact login, callback
+and logout paths, static assets and thumbnails. It excludes `/mcp`, discovery,
+health and the retired Jobs routes. Prefix matches use path segments, and
+Traefik preserves the canonical Host.
 Private exact `/agent-newsfeed/mcp` and its protected-resource metadata go to
 `rd-gateway` on `platform-tls` with existing private TLS.
 

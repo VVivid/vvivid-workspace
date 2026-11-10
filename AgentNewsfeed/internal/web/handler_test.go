@@ -24,6 +24,7 @@ import (
 	"agentnewsfeed/internal/testfixture"
 	"agentnewsfeed/internal/thumbnail"
 	"agentnewsfeed/internal/web"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -115,8 +116,21 @@ func TestOfficialMCPAddListUpdateAndBrowserSharePrivateRecords(t *testing.T) {
 		}
 	}
 	slices.Sort(names)
-	if strings.Join(names, ",") != "add_article,add_opportunity,add_todo,get_article,get_opportunity,get_todo,list_articles,list_opportunities,list_todos,patch_article,patch_opportunity,remove_todo,restore_article,restore_opportunity,set_article_archived,set_opportunity_archived,set_todo_completed,trash_article,trash_opportunity,undo_todo_removal,update_article,update_opportunity" {
+	if strings.Join(names, ",") != "add_article,add_todo,get_article,get_todo,list_articles,list_todos,patch_article,remove_todo,restore_article,set_article_archived,set_todo_completed,trash_article,undo_todo_removal,update_article" {
 		t.Fatalf("unexpected tools %v", names)
+	}
+	if init := c.InitializeResult(); init == nil || strings.Contains(init.Instructions, "Jobs & Internships") || strings.Contains(init.Instructions, "_opportunit") {
+		t.Fatal("MCP initialize advertises a retired feature or is missing")
+	}
+	for _, name := range []string{
+		"add_opportunity", "list_opportunities", "get_opportunity", "update_opportunity",
+		"patch_opportunity", "set_opportunity_archived", "trash_opportunity", "restore_opportunity",
+	} {
+		result, err := c.CallTool(t.Context(), &sdk.CallToolParams{Name: name, Arguments: map[string]any{}})
+		rpcErr, ok := errors.AsType[*jsonrpc.Error](err)
+		if !ok || rpcErr.Code != jsonrpc.CodeInvalidParams || !strings.Contains(rpcErr.Message, "unknown tool") || result != nil {
+			t.Fatalf("retired tool %s did not return an unknown-tool error: %v", name, err)
+		}
 	}
 	in := feed.AddInput{IdempotencyKey: "mcp-add", Article: feed.Content{URL: "https://example.com/story?utm_source=agent", Title: "An interesting story", Summary: "A concise, sourced introduction.", ThumbnailURL: "https://images.publisher.example/source.png"}}
 	first := decode[sqlite.MutationResult](t, call(t, c, "add_article", in))
@@ -279,7 +293,7 @@ func TestUnconfiguredShellFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/", "/archive", "/articles/anything", "/health/ready", "/mcp", "/api/v1/articles", "/auth/login", "/thumbnails/anything", "/thumbnails/anything/content/image"} {
+	for _, path := range []string{"/", "/archive", "/articles/anything", "/health/ready", "/mcp", "/api/v1/articles", "/api/v1/articles/anything", "/todo", "/api/v1/todos", "/auth/login", "/thumbnails/anything", "/thumbnails/anything/content/image"} {
 		if out := request(h, "GET", path, nil, ""); out.Code != 503 {
 			t.Fatalf("unconfigured %s returned %d", path, out.Code)
 		}
@@ -289,6 +303,45 @@ func TestUnconfiguredShellFailsClosed(t *testing.T) {
 	}
 	if out := request(h, "GET", "/", nil, ""); out.Header().Get("Content-Type") != "text/html; charset=utf-8" {
 		t.Fatal("unconfigured shell content type lost")
+	}
+}
+
+func TestRetiredJobsRoutesReturnNotFound(t *testing.T) {
+	f, service, configured := app(t)
+	unconfigured, err := web.New(slog.Default(), nil, service, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name    string
+		handler http.Handler
+		cookie  *http.Cookie
+	}{
+		{"authenticated", configured, f.CookieWithScopes(t, "alice", allScopes)},
+		{"signed out", configured, nil},
+		{"unconfigured", unconfigured, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, retired := range []struct{ method, path string }{
+				{http.MethodGet, "/jobs"},
+				{http.MethodGet, "/jobs/"},
+				{http.MethodGet, "/jobs/archive"},
+				{http.MethodGet, "/jobs/trash"},
+				{http.MethodGet, "/jobs/listing?from=archive"},
+				{http.MethodHead, "/jobs"},
+				{http.MethodGet, "/api/v1/opportunities"},
+				{http.MethodGet, "/api/v1/opportunities/"},
+				{http.MethodGet, "/api/v1/opportunities/listing"},
+				{http.MethodPost, "/api/v1/opportunities/listing/archive"},
+				{http.MethodPost, "/api/v1/opportunities/listing/unarchive"},
+				{http.MethodPost, "/api/v1/opportunities/listing/trash"},
+				{http.MethodPost, "/api/v1/opportunities/listing/restore"},
+			} {
+				if out := request(tc.handler, retired.method, retired.path, tc.cookie, ""); out.Code != http.StatusNotFound {
+					t.Errorf("%s %s returned HTTP %d", retired.method, retired.path, out.Code)
+				}
+			}
+		})
 	}
 }
 

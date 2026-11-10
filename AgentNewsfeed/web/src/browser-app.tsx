@@ -8,8 +8,8 @@ import type { TodoDraft } from '@/todo'
 import type { Bootstrap } from '@/types'
 
 const browserMediaType = 'application/vnd.agentnewsfeed.browser+json'
-const pagePath = /^\/(?:archive|trash|articles\/[^/]+|jobs(?:\/[^/]+)?|todo)?$/
-const stateFormPath = /^\/api\/v1\/(?:articles\/[^/]+\/(?:archive|restore|trash|restore-trash)|opportunities\/[^/]+\/(?:archive|unarchive|trash|restore))$/
+const pagePath = /^\/(?:archive|trash|articles\/[^/]+|todo)?$/
+const articleStateFormPath = /^\/api\/v1\/articles\/[^/]+\/(?:archive|restore|trash|restore-trash)$/
 
 type PageRequest = {
   url: URL
@@ -72,7 +72,7 @@ function pageError(status: number | undefined) {
     case 400: return 'This page address or cursor is invalid.'
     case 401: return 'Sign in to continue.'
     case 403: return 'This sign-in cannot open the requested page.'
-    case 404: return 'This article or listing is unavailable in the requested view.'
+    case 404: return 'This article is unavailable in the requested view.'
     default: return 'This page could not load. Try again.'
   }
 }
@@ -81,7 +81,7 @@ function saveError(status: number | undefined, todoWrite: boolean) {
   switch (status) {
     case 400: return todoWrite ? 'This task request is invalid. Check the title, tags and estimate.' : 'This save action is no longer available.'
     case 403: return 'The change could not be verified.'
-    case 404: return todoWrite ? 'The change could not be confirmed. This task is unavailable.' : 'The change could not be confirmed. This article or listing is unavailable.'
+    case 404: return todoWrite ? 'The change could not be confirmed. This task is unavailable.' : 'The change could not be confirmed. This article is unavailable.'
     case 409: return 'The change was rejected. This item changed.'
     default: return 'The change could not be confirmed.'
   }
@@ -129,7 +129,6 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
       await pendingWrite.current?.catch(() => undefined)
       if (attempt !== navigation.current.sequence) return
 
-      // Jobs details carry the same responsive list alongside the selected listing.
       const hasResponsiveList = url.pathname !== '/todo' && !url.pathname.startsWith('/articles/')
       let data: Bootstrap
       for (;;) {
@@ -224,12 +223,10 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
   useLayoutEffect(() => {
     if (!page?.focus || page.pathAndQuery !== pathAndQuery(window.location)) return
     const { hash, scrollTop } = page.focus
-    const isFocusAnchor = hash === '#main' || hash === '#opportunity-detail' || hash === '#opportunity-list'
-    const anchor = isFocusAnchor ? container.current?.querySelector<HTMLElement>(hash) : null
-    const target = anchor ?? container.current?.querySelector<HTMLElement>('#main')
-    if (anchor) anchor.scrollIntoView()
+    const main = container.current?.querySelector<HTMLElement>('#main')
+    if (hash === '#main' && main) main.scrollIntoView()
     else if (scrollTop) window.scrollTo(0, 0)
-    target?.focus({ preventScroll: true })
+    main?.focus({ preventScroll: true })
     // Even after scrolling to the anchor, a short viewport can cut off the notice.
     saveErrorNotice.current?.scrollIntoView({ block: 'nearest' })
   }, [page])
@@ -304,7 +301,7 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
     // The To-do field named "action" shadows the form.action property in browsers.
     const actionAttribute = form.getAttribute('action')
     const url = actionAttribute ? sameOriginURL(actionAttribute) : undefined
-    if (!url || (url.pathname !== todoFormPath && !stateFormPath.test(url.pathname))) return
+    if (!url || (url.pathname !== todoFormPath && !articleStateFormPath.test(url.pathname))) return
     event.preventDefault()
     // A history traversal can change the address before the old controls rerender.
     if (!page || page.pathAndQuery !== pathAndQuery(window.location) || pendingWrite.current || navigation.current.loadingPage) return
@@ -356,7 +353,7 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
     {/* Keep the shell mounted across history loads while hiding any old view. */}
     <div aria-busy={busy} hidden={!pageMatchesAddress}>
       {page && <App data={page.data} actionsPending={busy || !pageMatchesAddress}
-        saveNotice={showSaveNoticeInPage ? saveNotice : undefined} focusHash={window.location.hash}
+        saveNotice={showSaveNoticeInPage ? saveNotice : undefined}
         todoComposer={{
           draft: todoDraft?.csrf === page.data.csrf ? todoDraft : undefined,
           // Editing creates a new Add intent. An unchanged retry keeps the same ID.

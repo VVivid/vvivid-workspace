@@ -7,7 +7,6 @@ import { Arrow } from '@/components/arrow'
 import { ArticleMarkdown } from '@/components/markdown'
 import { Pagination } from '@/components/pagination'
 import { urlWithPagePosition } from '@/pagination'
-import { Opportunities } from '@/opportunities'
 import { Todo } from '@/todo'
 import type { TodoComposer } from '@/todo'
 import type { Article, Bootstrap } from '@/types'
@@ -78,7 +77,6 @@ function Sections({ data }: { data: Bootstrap }) {
       <p className="eyebrow">Your sections</p>
       <nav aria-label="Sections">
         <a href="/" aria-current={!data.section || data.section === 'news' ? 'page' : undefined}><Leaf /><span>News</span></a>
-        <a href="/jobs" aria-current={data.section === 'jobs' ? 'page' : undefined}><Arrow direction="up-right" /><span>Jobs &amp; Internships</span></a>
         <a href="/todo" aria-current={data.section === 'todo' ? 'page' : undefined}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="m3 6 2 2 4-4M12 6h9M12 17h9M3 14h6v6H3z" />
@@ -250,8 +248,8 @@ function Gate({ data, saveNotice }: { data: Bootstrap; saveNotice?: ReactNode })
   )
 }
 
-export function App({ data, actionsPending = false, saveNotice, focusHash, todoComposer }: {
-  data: Bootstrap; actionsPending?: boolean; saveNotice?: ReactNode; focusHash?: string; todoComposer?: TodoComposer
+export function App({ data, actionsPending = false, saveNotice, todoComposer }: {
+  data: Bootstrap; actionsPending?: boolean; saveNotice?: ReactNode; todoComposer?: TodoComposer
 }) {
   return (
     <>
@@ -266,11 +264,9 @@ export function App({ data, actionsPending = false, saveNotice, focusHash, todoC
             {data.section === 'todo'
               ? data.todo && <Todo list={data.todo} csrf={data.csrf} canWrite={data.can_write}
                 pending={actionsPending} composer={todoComposer} saveNotice={saveNotice} />
-              : data.section === 'jobs'
-                ? <Opportunities data={data} actionsPending={actionsPending} saveNotice={saveNotice} focusHash={focusHash} />
-                : data.view === 'reader' && data.article
-                  ? <Reader data={data} article={data.article} actionsPending={actionsPending} saveNotice={saveNotice} />
-                  : <Shelf data={data} saveNotice={saveNotice} />}
+              : data.view === 'reader' && data.article
+                ? <Reader data={data} article={data.article} actionsPending={actionsPending} saveNotice={saveNotice} />
+                : <Shelf data={data} saveNotice={saveNotice} />}
           </div>
         </div>
       )}

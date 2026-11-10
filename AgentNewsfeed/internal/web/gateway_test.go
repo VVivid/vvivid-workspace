@@ -93,7 +93,7 @@ func TestGatewayMCPPreservesToolsOwnershipScopesAndBrowserRecords(t *testing.T) 
 	t.Cleanup(server.Close)
 	alice := client(t, server.URL, token("alice", allScopes))
 	tools, err := alice.ListTools(t.Context(), nil)
-	if err != nil || len(tools.Tools) != 22 {
+	if err != nil || len(tools.Tools) != 14 {
 		t.Fatalf("gateway tools: %v", err)
 	}
 	input := feed.AddInput{IdempotencyKey: "gateway-add", Article: feed.Content{URL: "https://example.com/gateway-story", Title: "Gateway story", Summary: "A sourced gateway test."}}
