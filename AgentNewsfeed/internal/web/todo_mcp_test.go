@@ -510,9 +510,17 @@ func TestTodoMCPPaginationDefaultsAndCursorIsolation(t *testing.T) {
 					t.Fatal("could not prepare browser tasks")
 				}
 			}
+			move := url.Values{"csrf_token": {csrf}, "action": {"reorder"}, "task_id": {"browser-22"}, "expected_revision": {"1"},
+				"neighbor_id": {"browser-21"}, "neighbor_revision": {"1"}, "direction": {"down"}, "idempotency_key": {"browser-order"}}
+			if out := browserJSONRequest(h, "/api/v1/todos", cookie, move, testfixture.Origin); out.Code != 200 {
+				t.Fatalf("browser reorder: %d", out.Code)
+			}
 			page := decode[feed.TodosPage](t, call(t, alice, "list_todos", map[string]any{}))
 			if len(page.Tasks) != 20 || page.NextCursor == "" || page.Undo != nil {
 				t.Fatal("omitted list limit/status did not default to 20 open tasks")
+			}
+			if page.Tasks[0].ID != "browser-21" || page.Tasks[1].ID != "browser-22" {
+				t.Fatalf("MCP did not observe saved browser order: %#v", page.Tasks[:2])
 			}
 			last := decode[feed.TodosPage](t, call(t, alice, "list_todos", feed.ListTodosInput{Cursor: page.NextCursor}))
 			if len(last.Tasks) != 3 || last.NextCursor != "" {
@@ -539,7 +547,7 @@ func TestTodoMCPPaginationDefaultsAndCursorIsolation(t *testing.T) {
 			for _, change := range []struct {
 				field string
 				value any
-			}{{"collection", "articles"}, {"owner", "another-owner"}, {"status", "all"}, {"before_created_at", 0}, {"before_task_id", ""}, {"unknown", true}} {
+			}{{"collection", "articles"}, {"owner", "another-owner"}, {"status", "all"}, {"before_created_at", 1}, {"before_task_id", ""}, {"unknown", true}} {
 				bad := maps.Clone(cursor)
 				bad[change.field] = change.value
 				payload, err := json.Marshal(bad)

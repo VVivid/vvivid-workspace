@@ -31,12 +31,14 @@ function reader(overrides: Partial<Bootstrap> = {}): Bootstrap {
 }
 
 describe('private reading shelf', () => {
-  it('keeps source text, reader links and cursor navigation in an editorial list', () => {
+  it('opens the full compact row at the source and keeps a separate saved reader and cursor navigation', () => {
     render(<App data={shelf} />)
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Your reading shelf')
     expect(screen.getByText(article.summary)).toBeVisible()
-    expect(screen.getByRole('link', { name: article.title })).toHaveAttribute('href', '/articles/synthetic-owned-article?from=feed')
-    expect(screen.getByRole('link', { name: 'Read article' })).toHaveAttribute('href', '/articles/synthetic-owned-article?from=feed')
+    expect(screen.getByRole('link', { name: article.title })).toHaveAttribute('href', article.url)
+    expect(screen.getByRole('link', { name: article.title })).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(screen.getByRole('link', { name: article.title })).toHaveAttribute('target', '_blank')
+    expect(screen.getByRole('link', { name: /^Read saved article:/ })).toHaveAttribute('href', '/articles/synthetic-owned-article?from=feed')
     expect(screen.getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/?cursor=opaque-cursor')
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled()
     expect(screen.getByRole('navigation', { name: 'Library' })).toHaveTextContent('FeedArchiveTrash')
@@ -51,33 +53,23 @@ describe('private reading shelf', () => {
   it('supports keyboard navigation through the skip link, library and reader', async () => {
     const user = userEvent.setup()
     render(<App data={shelf} />)
-    await user.tab()
-    expect(screen.getByRole('link', { name: 'Skip to reading' })).toHaveFocus()
-    await user.tab()
-    expect(screen.getByRole('link', { name: 'Newsfeed home' })).toHaveFocus()
-    await user.tab()
-    expect(screen.getByRole('link', { name: 'Feed' })).toHaveFocus()
-    await user.tab()
-    expect(screen.getByRole('link', { name: 'Archive' })).toHaveFocus()
-    await user.tab()
-    expect(screen.getByRole('link', { name: 'Trash' })).toHaveFocus()
-    await user.tab()
-    expect(screen.getByRole('button', { name: 'Sign out' })).toHaveFocus()
-    await user.tab()
-    expect(screen.getByRole('link', { name: 'News' })).toHaveFocus()
-    await user.tab()
-    expect(screen.getByRole('link', { name: 'To-do' })).toHaveFocus()
-    await user.tab()
-    expect(screen.getByRole('link', { name: article.title })).toHaveFocus()
+    for (const [role, name] of [
+      ['link', 'Skip to reading'], ['link', 'Newsfeed home'], ['button', 'Light'], ['button', 'Dark'],
+      ['button', 'Sign out'], ['link', 'News'], ['link', 'To-do'], ['link', 'Feed'], ['link', 'Archive'], ['link', 'Trash'],
+      ['link', article.title], ['link', `Read saved article: ${article.title}`],
+    ]) {
+      await user.tab()
+      expect(screen.getByRole(role, { name })).toHaveFocus()
+    }
   })
 
-  it('uses only the owned thumbnail proxy and falls back when it cannot load', () => {
-    const { container } = render(<App data={{ ...shelf, page: { articles: [{ ...article, thumbnail_url: 'https://images.publisher.example/source.jpg' }] } }} />)
-    const img = container.querySelector('img')!
-    expect(img).toHaveAttribute('src', '/thumbnails/synthetic-owned-article')
-    fireEvent.error(img)
+  it('keeps the compact list free of image requests even when a stored thumbnail exists', () => {
+    const { container } = render(<App data={{ ...shelf, page: { articles: [{ ...article, thumbnail_url: 'https://images.publisher.example/source.jpg', thumbnail_status: 'stored' }] } }} />)
     expect(container.querySelector('img')).not.toBeInTheDocument()
-    expect(screen.getByText('A story for a slower moment')).toBeVisible()
+    expect(screen.getByRole('link', { name: article.title })).toContainElement(screen.getByText(article.summary))
+    const action = screen.getByRole('button', { name: `Archive ${article.title}` })
+    expect(screen.getByRole('link', { name: article.title })).not.toContainElement(action)
+    expect(action.closest('form')).toHaveAttribute('action', '/api/v1/articles/synthetic-owned-article/archive?return_to=%2F')
   })
 
   it('keeps archived navigation and distinguishes an empty archive', () => {
@@ -93,8 +85,8 @@ describe('private reading shelf', () => {
     const { rerender } = render(<App data={{ ...shelf, view: 'archive', cursor: 'current', page: {
       articles: [archived], next_cursor: 'archive-cursor', previous_cursor: 'newer-archive',
     } }} />)
-    expect(screen.getByText(/Archived/, { selector: '.article-meta span' })).toHaveTextContent('Archived Oct 29, 2026')
-    expect(screen.getByRole('link', { name: 'Read article' })).toHaveAttribute('href', '/articles/synthetic-owned-article?from=archive&cursor=current')
+    expect(screen.getByText('Oct 29, 2026').closest('.feed-date')).toHaveTextContent('Archived Oct 29, 2026')
+    expect(screen.getByRole('link', { name: /^Read saved article:/ })).toHaveAttribute('href', '/articles/synthetic-owned-article?from=archive&cursor=current')
     expect(screen.getByRole('link', { name: 'Previous' })).toHaveAttribute('href', '/archive?before=newer-archive')
     expect(screen.getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/archive?cursor=archive-cursor')
 
@@ -234,7 +226,7 @@ describe('recoverable Trash', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Your trash')
     expect(screen.getByRole('link', { name: 'Trash' })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: 'Feed' })).not.toHaveAttribute('aria-current')
-    expect(screen.getByRole('link', { name: 'Read article' })).toHaveAttribute('href', '/articles/synthetic-owned-article?from=trash')
+    expect(screen.getByRole('link', { name: /^Read saved article:/ })).toHaveAttribute('href', '/articles/synthetic-owned-article?from=trash')
     expect(screen.getByRole('link', { name: 'Next' })).toHaveAttribute('href', '/trash?cursor=trash-cursor')
     expect(screen.getByText('Newest trashed first')).toBeVisible()
   })
@@ -272,9 +264,9 @@ describe('recoverable Trash', () => {
     const { container, rerender } = render(<App data={reader({ from_trash: true, article: { ...article, trashed_at: 1793232000000, content_markdown: '![Source figure](photo.png)' }, content_images: { 'photo.png': path } })} />)
     expect(screen.getByRole('img', { name: 'Source figure' })).toHaveAttribute('src', path)
     rerender(<App data={{ ...shelf, view: 'trash', page: { articles: [{ ...article, trashed_at: 1793232000000, thumbnail_url: 'https://images.example.com/source.jpg', thumbnail_status: 'stored' }] } }} />)
-    expect(container.querySelector('img')).toHaveAttribute('src', `/thumbnails/${article.id}?trashed=true`)
+    expect(container.querySelector('img')).not.toBeInTheDocument()
     rerender(<App data={{ ...shelf, page: { articles: [{ ...article, thumbnail_url: 'https://images.example.com/source.jpg', thumbnail_status: 'unavailable' }] } }} />)
     expect(container.querySelector('img')).not.toBeInTheDocument()
-    expect(screen.getByText('A story for a slower moment')).toBeVisible()
+    expect(screen.getByRole('link', { name: article.title })).toHaveAttribute('href', article.url)
   })
 })

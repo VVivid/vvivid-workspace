@@ -459,3 +459,48 @@ func TestTodoExplicitReopenNoopAndConflictsPreserveIntentKeys(t *testing.T) {
 		t.Fatalf("failed completion reserved its key: %v", err)
 	}
 }
+
+func TestTodoManualOrderAndLegacyCursorTraversal(t *testing.T) {
+	f, s, alice, _ := setup(t)
+	ctx := t.Context()
+	for _, id := range []string{"a", "b", "c"} {
+		if err := s.AddTodo(ctx, alice, id, id, "", 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	legacy, err := f.Store.ListTodos(ctx, alice.Owner(), sqlite.TodoCursor{Collection: feed.TodoCollection, Owner: alice.Owner().ID(), Status: "open"}, 1)
+	if err != nil || legacy.Next == nil || legacy.Tasks[0].ID != "c" {
+		t.Fatalf("legacy fixture: %#v %v", legacy, err)
+	}
+	legacyRaw, _ := json.Marshal(legacy.Next)
+	move := sqlite.TodoMove{TaskID: "a", ExpectedRevision: 1, NeighborID: "b", NeighborRevision: 1, Direction: "up"}
+	readOnly := f.Principal(t, "alice", identity.Read)
+	if err := s.ReorderTodo(ctx, readOnly, "move", move); !errors.Is(err, identity.ErrForbidden) {
+		t.Fatalf("read-only reorder: %v", err)
+	}
+	if err := s.ReorderTodo(ctx, alice, "move", move); err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	cursor := ""
+	for {
+		page, err := s.ListTodos(ctx, alice, feed.ListTodosInput{Limit: 1, Cursor: cursor})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, task := range page.Tasks {
+			ids = append(ids, task.ID)
+		}
+		if page.NextCursor == "" {
+			break
+		}
+		cursor = page.NextCursor
+	}
+	if !slices.Equal(ids, []string{"c", "a", "b"}) {
+		t.Fatalf("manual MCP order: %v", ids)
+	}
+	page, err := s.ListTodos(ctx, alice, feed.ListTodosInput{Cursor: base64.RawURLEncoding.EncodeToString(legacyRaw)})
+	if err != nil || len(page.Tasks) != 2 || page.Tasks[0].ID != "b" || page.Tasks[1].ID != "a" {
+		t.Fatalf("legacy cursor changed traversal: %#v %v", page, err)
+	}
+}

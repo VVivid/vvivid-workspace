@@ -31,11 +31,23 @@ type TodoMutationResult struct {
 }
 
 type TodoCursor struct {
-	Collection string `json:"collection"`
-	Owner      string `json:"owner"`
-	Status     string `json:"status"`
-	Timestamp  int64  `json:"before_created_at"`
-	ID         string `json:"before_task_id"`
+	Collection  string `json:"collection"`
+	Owner       string `json:"owner"`
+	Status      string `json:"status"`
+	Timestamp   int64  `json:"before_created_at,omitzero"`
+	ID          string `json:"before_task_id"`
+	ManualOrder bool   `json:"manual_order,omitzero"`
+	Position    int64  `json:"after_position,omitzero"`
+}
+
+// TodoMove names the adjacent open task observed by the caller. Both revisions
+// must still match so a stale checklist never moves a different neighbor.
+type TodoMove struct {
+	TaskID           string `json:"task_id"`
+	ExpectedRevision int64  `json:"expected_revision"`
+	NeighborID       string `json:"neighbor_id"`
+	NeighborRevision int64  `json:"neighbor_revision"`
+	Direction        string `json:"direction"`
 }
 
 type TodoPage struct {
@@ -49,16 +61,17 @@ type todoRecord struct {
 	createdAt    int64
 	completed    bool
 	removalState string
+	position     int64
 }
 
-const todoColumns = `id, title, tags_json, estimate_minutes, revision, completed_at, created_at, removal_state`
+const todoColumns = `id, title, tags_json, estimate_minutes, revision, completed_at, created_at, removal_state, sort_position`
 
 func scanTodo(row scanner) (todoRecord, error) {
 	var record todoRecord
 	var tagsJSON string
 	var completedAt sql.NullInt64
 	err := row.Scan(&record.task.ID, &record.task.Title, &tagsJSON, &record.task.EstimateMinutes,
-		&record.task.Revision, &completedAt, &record.createdAt, &record.removalState)
+		&record.task.Revision, &completedAt, &record.createdAt, &record.removalState, &record.position)
 	if errors.Is(err, sql.ErrNoRows) {
 		return todoRecord{}, ErrNotFound
 	}
@@ -88,7 +101,7 @@ func (s *Store) ListTodo(ctx context.Context, owner Owner) (TodoList, error) {
 	}
 	rows, err := s.read.QueryContext(ctx, `SELECT `+todoColumns+`
 		FROM todo_tasks WHERE owner_id = ? AND removal_state != 'removed'
-		ORDER BY completed_at DESC, created_at DESC, id DESC`, owner.id)
+		ORDER BY completed_at DESC, sort_position ASC, id ASC`, owner.id)
 	if err != nil {
 		return TodoList{}, err
 	}
@@ -141,8 +154,9 @@ func insertTodo(ctx context.Context, tx *sql.Tx, owner Owner, task TodoTask) (To
 	if err != nil {
 		return TodoTask{}, err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO todo_tasks (owner_id, id, title, tags_json, estimate_minutes, created_at)
-		VALUES (?, ?, ?, ?, ?, ?)`, owner.id, task.ID, task.Title, string(tagsJSON), task.EstimateMinutes, time.Now().UnixMilli())
+	_, err = tx.ExecContext(ctx, `INSERT INTO todo_tasks (owner_id, id, title, tags_json, estimate_minutes, created_at, sort_position)
+		VALUES (?, ?, ?, ?, ?, ?, (SELECT coalesce(min(sort_position), 0) - 1 FROM todo_tasks WHERE owner_id = ?))`,
+		owner.id, task.ID, task.Title, string(tagsJSON), task.EstimateMinutes, time.Now().UnixMilli(), owner.id)
 	if err != nil {
 		return TodoTask{}, err
 	}
@@ -229,7 +243,8 @@ func (s *Store) Todo(ctx context.Context, owner Owner, id string, removed bool) 
 	return record.task, err
 }
 
-// ListTodos orders every completion view by immutable creation time and ID.
+// New lists follow the saved order. Legacy cursors finish their original
+// creation-order traversal rather than interpreting a timestamp as a position.
 // The page and latest Undo are read from the same database snapshot.
 func (s *Store) ListTodos(ctx context.Context, owner Owner, cursor TodoCursor, limit int) (TodoPage, error) {
 	if limit < 1 || limit > 50 {
@@ -254,6 +269,13 @@ func (s *Store) ListTodos(ctx context.Context, owner Owner, cursor TodoCursor, l
 		return TodoPage{}, err
 	}
 	pageSQL, args := pageRange("created_at", "id", cursor.Timestamp, cursor.ID, false, limit+1)
+	if cursor.ManualOrder {
+		pageSQL, args = " ORDER BY sort_position ASC, id ASC LIMIT ?", []any{limit + 1}
+		if cursor.ID != "" {
+			pageSQL = " AND (sort_position, id) > (?, ?)" + pageSQL
+			args = []any{cursor.Position, cursor.ID, limit + 1}
+		}
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT `+todoColumns+` FROM todo_tasks
 		WHERE owner_id = ? AND removal_state = 'visible'`+filter+pageSQL, append([]any{owner.id}, args...)...)
 	if err != nil {
@@ -270,6 +292,9 @@ func (s *Store) ListTodos(ctx context.Context, owner Owner, cursor TodoCursor, l
 		if len(page.Tasks) == limit {
 			next := cursor
 			next.Timestamp, next.ID = last.createdAt, last.task.ID
+			if cursor.ManualOrder {
+				next.Timestamp, next.Position = 0, last.position
+			}
 			page.Next = &next
 			break
 		}
@@ -351,6 +376,17 @@ func (s *Store) MutateTodo(ctx context.Context, owner Owner, key, operation stri
 	if err != nil {
 		return TodoMutationResult{}, err
 	}
+	out, err = saveTodoMutation(ctx, tx, owner, key, operation, payload, out)
+	if err != nil {
+		return TodoMutationResult{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return TodoMutationResult{}, err
+	}
+	return out, nil
+}
+
+func saveTodoMutation(ctx context.Context, tx *sql.Tx, owner Owner, key, operation string, payload []byte, out TodoMutationResult) (TodoMutationResult, error) {
 	// Empty tags are omitted from retry JSON; return the same representation
 	// on the original call that decoding the persisted snapshot will produce.
 	if len(out.Task.Tags) == 0 {
@@ -363,6 +399,63 @@ func (s *Store) MutateTodo(ctx context.Context, owner Owner, key, operation stri
 	hash := sha256.Sum256(payload)
 	if _, err := tx.ExecContext(ctx, `INSERT INTO todo_idempotency_results (owner_id, key, operation, payload_hash, result, created_at)
 		VALUES (?, ?, ?, ?, ?, ?)`, owner.id, key, operation, hash[:], result, time.Now().UnixMilli()); err != nil {
+		return TodoMutationResult{}, err
+	}
+	return out, nil
+}
+
+// ReorderTodo swaps one neighboring pair in the same transaction as its retry
+// snapshot. Positions survive completion, removal, Undo, and process restarts.
+func (s *Store) ReorderTodo(ctx context.Context, owner Owner, key string, payload []byte, move TodoMove) (TodoMutationResult, error) {
+	tx, err := s.write.BeginTx(ctx, nil)
+	if err != nil {
+		return TodoMutationResult{}, err
+	}
+	defer tx.Rollback()
+	if err := checkOwner(ctx, tx, owner); err != nil {
+		return TodoMutationResult{}, err
+	}
+	const operation = "reorder_todo"
+	if out, found, err := replayTodoMutation(ctx, tx, owner, key, operation, payload); found || err != nil {
+		return out, err
+	}
+	task, err := scanTodo(tx.QueryRowContext(ctx, `SELECT `+todoColumns+` FROM todo_tasks
+		WHERE owner_id = ? AND id = ? AND removal_state = 'visible'`, owner.id, move.TaskID))
+	if err != nil {
+		return TodoMutationResult{}, err
+	}
+	if task.completed || task.task.Revision != move.ExpectedRevision {
+		return TodoMutationResult{}, ErrConflict
+	}
+	var adjacentSQL string
+	switch move.Direction {
+	case "up":
+		adjacentSQL = " AND (sort_position, id) < (?, ?) ORDER BY sort_position DESC, id DESC LIMIT 1"
+	case "down":
+		adjacentSQL = " AND (sort_position, id) > (?, ?) ORDER BY sort_position ASC, id ASC LIMIT 1"
+	default:
+		return TodoMutationResult{}, ErrConflict
+	}
+	neighbor, err := scanTodo(tx.QueryRowContext(ctx, `SELECT `+todoColumns+` FROM todo_tasks
+		WHERE owner_id = ? AND removal_state = 'visible' AND completed_at IS NULL`+adjacentSQL,
+		owner.id, task.position, task.task.ID))
+	if errors.Is(err, ErrNotFound) {
+		return TodoMutationResult{}, ErrConflict
+	}
+	if err != nil {
+		return TodoMutationResult{}, err
+	}
+	if neighbor.task.ID != move.NeighborID || neighbor.task.Revision != move.NeighborRevision {
+		return TodoMutationResult{}, ErrConflict
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE todo_tasks SET sort_position = CASE id WHEN ? THEN ? ELSE ? END,
+		revision = revision + 1 WHERE owner_id = ? AND id IN (?, ?)`,
+		task.task.ID, neighbor.position, task.position, owner.id, task.task.ID, neighbor.task.ID); err != nil {
+		return TodoMutationResult{}, err
+	}
+	task.task.Revision++
+	out, err := saveTodoMutation(ctx, tx, owner, key, operation, payload, TodoMutationResult{Task: task.task})
+	if err != nil {
 		return TodoMutationResult{}, err
 	}
 	if err := tx.Commit(); err != nil {

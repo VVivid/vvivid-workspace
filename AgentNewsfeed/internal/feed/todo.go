@@ -61,12 +61,25 @@ type SetTodoCompletedInput struct {
 	Completed        bool   `json:"completed"`
 }
 
-// ListTodo retains the complete browser checklist and its existing order.
+// ListTodo returns the complete browser checklist in its saved order.
 func (s *Service) ListTodo(ctx context.Context, p identity.Principal) (sqlite.TodoList, error) {
 	if err := s.authorize(ctx, p, identity.Read); err != nil {
 		return sqlite.TodoList{}, err
 	}
 	return s.store.ListTodo(ctx, p.Owner())
+}
+
+func (s *Service) ReorderTodo(ctx context.Context, p identity.Principal, key string, move sqlite.TodoMove) error {
+	if err := s.authorize(ctx, p, identity.Read, identity.ArticlesWrite); err != nil {
+		return err
+	}
+	if !validMutation(key, move.TaskID, move.ExpectedRevision) || !boundedText(move.NeighborID, 64) ||
+		move.NeighborRevision < 1 || move.TaskID == move.NeighborID || !slices.Contains([]string{"up", "down"}, move.Direction) {
+		return ErrInvalid
+	}
+	payload, _ := json.Marshal(move)
+	_, err := s.store.ReorderTodo(ctx, p.Owner(), key, payload, move)
+	return err
 }
 
 func normalizeTodo(title, tagInput string, estimateMinutes int) (sqlite.TodoTask, error) {
@@ -139,7 +152,7 @@ func (s *Service) ListTodos(ctx context.Context, p identity.Principal, in ListTo
 		return TodosPage{}, ErrInvalid
 	}
 	owner := p.Owner()
-	cursor := sqlite.TodoCursor{Collection: TodoCollection, Owner: owner.ID(), Status: in.Status}
+	cursor := sqlite.TodoCursor{Collection: TodoCollection, Owner: owner.ID(), Status: in.Status, ManualOrder: true}
 	if in.Cursor != "" {
 		raw, err := base64.RawURLEncoding.DecodeString(in.Cursor)
 		if err != nil {
@@ -149,7 +162,16 @@ func (s *Service) ListTodos(ctx context.Context, p identity.Principal, in ListTo
 		decoder.DisallowUnknownFields()
 		cursor = sqlite.TodoCursor{}
 		if err := decoder.Decode(&cursor); err != nil || cursor.Collection != TodoCollection || cursor.Owner != owner.ID() ||
-			cursor.Status != in.Status || cursor.Timestamp < 1 || !boundedText(cursor.ID, 64) {
+			cursor.Status != in.Status || !boundedText(cursor.ID, 64) {
+			return TodosPage{}, ErrInvalid
+		}
+		// Manual positions may be zero or negative as new tasks enter at the top.
+		// A legacy cursor instead requires its original positive creation time.
+		if cursor.ManualOrder {
+			if cursor.Timestamp != 0 {
+				return TodosPage{}, ErrInvalid
+			}
+		} else if cursor.Timestamp < 1 || cursor.Position != 0 {
 			return TodosPage{}, ErrInvalid
 		}
 		if _, err := decoder.Token(); !errors.Is(err, io.EOF) {

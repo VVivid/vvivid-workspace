@@ -243,3 +243,47 @@ func TestTodoWriteLifecycleUsesRevisionAndKeepsOneUndo(t *testing.T) {
 		t.Fatal("Undo or an Add replay revived a superseded removal")
 	}
 }
+
+func TestTodoReorderFormsSharePersistedOrderAndRejectStaleNeighbors(t *testing.T) {
+	f, _, h := app(t)
+	cookie := f.CookieWithScopes(t, "alice", allScopes)
+	_, csrf := f.BrowserPrincipal(t, cookie)
+	for _, id := range []string{"a", "b", "c"} {
+		if out := browserJSONRequest(h, "/api/v1/todos", cookie, todoAdd(csrf, id, id, "", ""), testfixture.Origin); out.Code != 200 {
+			t.Fatalf("add: %d", out.Code)
+		}
+	}
+	move := url.Values{"csrf_token": {csrf}, "action": {"reorder"}, "task_id": {"a"}, "expected_revision": {"1"}, "neighbor_id": {"b"}, "neighbor_revision": {"1"}, "direction": {"up"}, "idempotency_key": {"move"}}
+	for _, origin := range []string{"", "https://attacker.example"} {
+		if out := browserJSONRequest(h, "/api/v1/todos", cookie, move, origin); out.Code != 403 {
+			t.Fatalf("unsafe origin accepted: %d", out.Code)
+		}
+	}
+	for range 2 {
+		if out := browserJSONRequest(h, "/api/v1/todos", cookie, move, testfixture.Origin); out.Code != 200 {
+			t.Fatalf("move/retry: %d %s", out.Code, out.Body.String())
+		}
+	}
+	list := readTodo(t, h, cookie).Todo
+	if len(list.Tasks) != 3 || list.Tasks[0].ID != "c" || list.Tasks[1].ID != "a" || list.Tasks[2].ID != "b" || list.Tasks[1].Revision != 2 || list.Tasks[2].Revision != 2 {
+		t.Fatalf("move/retry changed order: %#v", list)
+	}
+	move.Set("idempotency_key", "stale")
+	if out := browserJSONRequest(h, "/api/v1/todos", cookie, move, testfixture.Origin); out.Code != 409 {
+		t.Fatalf("stale neighbor accepted: %d", out.Code)
+	}
+	move.Set("expected_revision", "2")
+	move.Set("neighbor_id", "c")
+	move.Set("neighbor_revision", "1")
+	move.Add("direction", "down")
+	if out := browserJSONRequest(h, "/api/v1/todos", cookie, move, testfixture.Origin); out.Code != 400 {
+		t.Fatalf("duplicate field accepted: %d", out.Code)
+	}
+	readOnly := f.Cookie(t, "alice")
+	_, readCSRF := f.BrowserPrincipal(t, readOnly)
+	move.Set("csrf_token", readCSRF)
+	move.Set("direction", "up")
+	if out := browserJSONRequest(h, "/api/v1/todos", readOnly, move, testfixture.Origin); out.Code != 403 {
+		t.Fatalf("read-only reorder accepted: %d", out.Code)
+	}
+}
