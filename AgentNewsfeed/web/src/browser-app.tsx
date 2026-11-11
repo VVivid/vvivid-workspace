@@ -15,6 +15,7 @@ type PageRequest = {
   url: URL
   history: 'push' | 'current'
   refresh?: 'preserve-viewport' | 'viewport-change'
+  preserveScroll?: boolean
 }
 type Page = { data: Bootstrap; pathAndQuery: string; focus?: { hash: string; scrollTop: boolean } }
 type PageProblem = { message: string; retry: PageRequest }
@@ -109,7 +110,7 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
   const pendingWrite = useRef<Promise<URL> | null>(null)
 
   const loadPage = useCallback(async (request: PageRequest) => {
-    const { url, history, refresh } = request
+    const { url, history, refresh, preserveScroll } = request
     const requestedPathAndQuery = pathAndQuery(url)
     if (history === 'current' && requestedPathAndQuery !== pathAndQuery(window.location)) return
     const attempt = ++navigation.current.sequence
@@ -151,7 +152,7 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
       setPage({
         data,
         pathAndQuery: requestedPathAndQuery,
-        focus: refresh ? undefined : { hash: window.location.hash, scrollTop: history === 'push' },
+        focus: refresh ? undefined : { hash: window.location.hash, scrollTop: history === 'push' && !preserveScroll },
       })
     } catch (error) {
       if (attempt !== navigation.current.sequence) return
@@ -243,7 +244,9 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
     const url = pageURL(link.href)
     if (!url) return
     event.preventDefault()
-    void loadPage({ url, history: 'push' })
+    const preserveScroll = url.pathname === window.location.pathname &&
+      (link.relList.contains('prev') || link.relList.contains('next'))
+    void loadPage({ url, history: 'push', preserveScroll })
   }
 
   async function submitState(url: URL, form: URLSearchParams, sourcePathAndQuery: string) {
@@ -345,7 +348,8 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
     </div>
   )
   return <div ref={container} onClick={onClick} onSubmit={onSubmit}>
-    <p className={todoPage ? 'sr-only' : 'navigation-status page-width'} role="status">{saving ? 'Saving change…' : loading ? 'Loading page…' : ''}</p>
+    <p className="sr-only" role="status">{saving ? 'Saving change…' : loading ? 'Loading page…' : ''}</p>
+    {busy && !todoPage && <div className="navigation-progress" aria-hidden="true" />}
     {pageProblem && <div ref={pageErrorNotice} className="navigation-error page-width" role="alert" tabIndex={-1}>
       <p>{pageProblem.message}</p>
       <Button type="button" variant="outline" size="sm" onClick={() => void loadPage(pageProblem.retry)}>Try again</Button>
