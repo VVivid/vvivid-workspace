@@ -33,6 +33,7 @@ function mockViewport(width: number) {
   const media = new EventTarget()
   Object.defineProperty(media, 'matches', { get: () => width <= 640 })
   vi.stubGlobal('matchMedia', (query: string) => {
+    if (query === '(prefers-color-scheme: dark)') return { matches: false }
     expect(query).toBe('(max-width: 640px)')
     return media
   })
@@ -85,7 +86,7 @@ describe('browser navigation', () => {
     }))
     await user.click(screen.getByRole('link', { name: 'Next' }))
     await waitFor(() => expect(window.location.search).toBe('?cursor=second-page'))
-    await user.click(screen.getByRole('link', { name: article.title }))
+    await user.click(screen.getByRole('link', { name: `Read saved article: ${article.title}` }))
     expect(await screen.findByRole('heading', { name: article.title, level: 1 })).toBeVisible()
     expect(screen.getByRole('main')).toHaveFocus()
     expect(window.location.pathname + window.location.search).toBe('/articles/story?from=archive&cursor=second-page')
@@ -124,7 +125,7 @@ describe('browser navigation', () => {
       .mockResolvedValueOnce(json(archive))
     render(<BrowserApp initialData={shelf} />)
 
-    await user.click(screen.getByRole('link', { name: article.title }))
+    await user.click(screen.getByRole('link', { name: `Read saved article: ${article.title}` }))
     const archiveButton = await screen.findByRole('button', { name: 'Archive article' })
     const archiveLink = screen.getByRole('link', { name: 'Archive' })
     window.history.back()
@@ -179,20 +180,18 @@ describe('browser navigation', () => {
   })
 
   it.each([
-    { link: 'Feed', view: 'feed', thumbnailPath: '/thumbnails/story' },
-    { link: 'Trash', view: 'trash', thumbnailPath: '/thumbnails/story?trashed=true' },
-  ])('requests a failed thumbnail again after loading $link', async ({ link, view, thumbnailPath }) => {
+    { link: 'Feed', view: 'feed' }, { link: 'Trash', view: 'trash' },
+  ])('keeps $link compact without requesting thumbnail images', async ({ link, view }) => {
     const user = userEvent.setup()
     const thumbnailArticle = { ...article, thumbnail_url: 'https://source.example/thumbnail.jpg' }
     const initialData = { ...shelf, page: { articles: [thumbnailArticle] } }
     const loadedArticle = view === 'trash' ? { ...thumbnailArticle, trashed_at: article.updated_at } : thumbnailArticle
     request.mockResolvedValueOnce(json({ ...initialData, view, page: { articles: [loadedArticle] } }))
     const { container } = render(<BrowserApp initialData={initialData} />)
-    fireEvent.error(container.querySelector('img')!)
-    expect(screen.getByText('A story for a slower moment')).toBeVisible()
-
+    expect(container.querySelector('img')).not.toBeInTheDocument()
     await user.click(screen.getByRole('link', { name: link }))
-    await waitFor(() => expect(container.querySelector('img')).toHaveAttribute('src', thumbnailPath))
+    await waitFor(() => expect(screen.getByRole('link', { name: link })).toHaveAttribute('aria-current', 'page'))
+    expect(container.querySelector('img')).not.toBeInTheDocument()
   })
 
   it('offers a way back to the feed when an earlier detail is no longer readable', async () => {
@@ -247,11 +246,11 @@ describe('responsive list pages', () => {
     const originalHistoryLength = window.history.length
     request.mockResolvedValueOnce(json(sizedShelf(5))).mockResolvedValueOnce(json(sizedShelf(3)))
     render(<StrictMode><BrowserApp initialData={sizedShelf(3)} /></StrictMode>)
-    expect(screen.getAllByRole('link', { name: 'Read article' })).toHaveLength(3)
-    await waitFor(() => expect(screen.getAllByRole('link', { name: 'Read article' })).toHaveLength(5))
+    expect(screen.getAllByRole('link', { name: /^Read saved article:/ })).toHaveLength(3)
+    await waitFor(() => expect(screen.getAllByRole('link', { name: /^Read saved article:/ })).toHaveLength(5))
 
     act(() => resize(640))
-    await waitFor(() => expect(screen.getAllByRole('link', { name: 'Read article' })).toHaveLength(3))
+    await waitFor(() => expect(screen.getAllByRole('link', { name: /^Read saved article:/ })).toHaveLength(3))
     expect(window.history.length).toBe(originalHistoryLength)
     expect(window.location.search).toBe('?cursor=current')
     expect(request.mock.calls.map(([url, options]) => [String(url), options?.headers])).toEqual([
@@ -303,7 +302,7 @@ describe('responsive list pages', () => {
     await user.click(screen.getByRole('button', { name: 'Try again' }))
     await waitFor(() => expect(screen.getByRole('status')).toBeEmptyDOMElement())
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: article.title })).toHaveAttribute('href', '/articles/story?from=archive&before=previous')
+    expect(screen.getByRole('link', { name: `Read saved article: ${article.title}` })).toHaveAttribute('href', '/articles/story?from=archive&before=previous')
     expect(window.location.href).toBe(window.location.origin + path)
     expect(window.history.length).toBe(originalHistoryLength)
     expect(request).toHaveBeenCalledTimes(2)
@@ -533,7 +532,7 @@ describe('browser state forms', () => {
     const feed = screen.getByRole('main')
     expect(feed).toHaveFocus()
     expect(within(feed).getByRole('alert')).toHaveTextContent('This item changed.')
-    await user.click(within(feed).getByRole('link', { name: second.title }))
+    await user.click(within(feed).getByRole('link', { name: `Read saved article: ${second.title}` }))
 
     expect(await screen.findByRole('heading', { name: second.title })).toBeVisible()
     const articlePage = screen.getByRole('main')

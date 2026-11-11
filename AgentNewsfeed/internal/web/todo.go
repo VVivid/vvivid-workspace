@@ -35,6 +35,8 @@ func (h *handler) todoForm(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if action == "add" {
 		err = h.addTodo(r, p, id)
+	} else if action == "reorder" {
+		err = h.reorderTodo(r, p, id)
 	} else {
 		err = h.changeTodo(r, p, id, sqlite.TodoAction(action))
 	}
@@ -43,6 +45,24 @@ func (h *handler) todoForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondToStateForm(w, r, "/todo")
+}
+
+func (h *handler) reorderTodo(r *http.Request, p identity.Principal, id string) error {
+	if !exactTodoFields(r.PostForm, "action", "csrf_token", "task_id", "expected_revision", "neighbor_id", "neighbor_revision", "direction", "idempotency_key") {
+		return feed.ErrInvalid
+	}
+	revision, err := strconv.ParseInt(r.PostForm.Get("expected_revision"), 10, 64)
+	if err != nil {
+		return feed.ErrInvalid
+	}
+	neighborRevision, err := strconv.ParseInt(r.PostForm.Get("neighbor_revision"), 10, 64)
+	if err != nil {
+		return feed.ErrInvalid
+	}
+	return h.service.ReorderTodo(r.Context(), p, r.PostForm.Get("idempotency_key"), sqlite.TodoMove{
+		TaskID: id, ExpectedRevision: revision, NeighborID: r.PostForm.Get("neighbor_id"),
+		NeighborRevision: neighborRevision, Direction: r.PostForm.Get("direction"),
+	})
 }
 
 func (h *handler) addTodo(r *http.Request, p identity.Principal, id string) error {

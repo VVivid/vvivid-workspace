@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -203,21 +204,15 @@ func TestTodoRetryMigrationPreservesV5TasksAndPriorRetryBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, task := range []TodoTask{{ID: "visible", Title: "Visible", Tags: []string{}}, {ID: "undo", Title: "Removed", Tags: []string{"A long existing tag"}, EstimateMinutes: 90}} {
-		if err := legacy.AddTodo(ctx, owner, task); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := legacy.ChangeTodoState(ctx, owner, "undo", 1, TodoComplete); err != nil {
+	// Seed the historical schema directly; current repository code uses the new column.
+	if _, err := db.ExecContext(ctx, `INSERT INTO todo_tasks
+		(owner_id,id,title,tags_json,estimate_minutes,revision,created_at,completed_at,removal_state)
+		VALUES (?, 'visible', 'Visible', '[]', 0, 1, 100, NULL, 'visible'),
+		(?, 'undo', 'Removed', '["A long existing tag"]', 90, 3, 200, 250, 'undoable')`, owner.id, owner.id); err != nil {
 		t.Fatal(err)
 	}
-	if err := legacy.ChangeTodoState(ctx, owner, "undo", 2, TodoRemove); err != nil {
-		t.Fatal(err)
-	}
-	before, err := legacy.ListTodo(ctx, owner)
-	if err != nil {
-		t.Fatal(err)
-	}
+	before := TodoList{Tasks: []TodoTask{{ID: "visible", Title: "Visible", Tags: []string{}, Revision: 1}},
+		Undo: new(TodoTask{ID: "undo", Title: "Removed", Tags: []string{"A long existing tag"}, EstimateMinutes: 90, Revision: 3, CompletedAt: 250})}
 	hash := sha256.Sum256([]byte("prior intent bytes"))
 	result := []byte("{ \"unchanged\" : true }\n")
 	for _, table := range []string{"idempotency_results", "opportunity_idempotency_results"} {
@@ -342,5 +337,187 @@ func TestTodoKeysetPaginationOrdersTiedCreationTimes(t *testing.T) {
 	want := []string{"task-07", "task-06", "task-05", "task-04", "task-03", "task-02", "task-01", "task-00"}
 	if !reflect.DeepEqual(ids, want) {
 		t.Fatalf("tied task ordering skipped or repeated rows: %v", ids)
+	}
+}
+
+func TestTodoOrderPersistsAndRetriesCannotRepeatMoves(t *testing.T) {
+	store, path, owner, other := thumbnailStore(t)
+	ctx := t.Context()
+	for _, id := range []string{"a", "b", "c"} {
+		if err := store.AddTodo(ctx, owner, TodoTask{ID: id, Title: id, Tags: []string{}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.ChangeTodoState(ctx, owner, "b", 1, TodoComplete); err != nil {
+		t.Fatal(err)
+	}
+	move := TodoMove{TaskID: "a", ExpectedRevision: 1, NeighborID: "c", NeighborRevision: 1, Direction: "up"}
+	payload, _ := json.Marshal(move)
+	first, err := store.ReorderTodo(ctx, owner, "move", payload, move)
+	if err != nil || first.Task.Revision != 2 {
+		t.Fatalf("move: %#v %v", first, err)
+	}
+	assertOrder := func(want ...string) {
+		t.Helper()
+		list, err := store.ListTodo(ctx, owner)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ids []string
+		for _, task := range list.Tasks {
+			if task.CompletedAt == 0 {
+				ids = append(ids, task.ID)
+			}
+		}
+		if !reflect.DeepEqual(ids, want) {
+			t.Fatalf("open order: got %v want %v", ids, want)
+		}
+	}
+	assertOrder("a", "c")
+	if err := store.ChangeTodoState(ctx, owner, "b", 2, TodoReopen); err != nil {
+		t.Fatal(err)
+	}
+	assertOrder("a", "b", "c")
+	if err := store.ChangeTodoState(ctx, owner, "a", 2, TodoRemove); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ChangeTodoState(ctx, owner, "a", 3, TodoUndo); err != nil {
+		t.Fatal(err)
+	}
+	assertOrder("a", "b", "c")
+	if got, err := store.ReorderTodo(ctx, owner, "move", payload, move); err != nil || !reflect.DeepEqual(got, first) {
+		t.Fatalf("retry: %#v %v", got, err)
+	}
+	assertOrder("a", "b", "c")
+	if _, err := store.ReorderTodo(ctx, owner, "move", []byte("another intent"), move); !errors.Is(err, ErrIdempotencyConflict) {
+		t.Fatalf("key reuse: %v", err)
+	}
+	if _, err := store.ReorderTodo(ctx, other, "foreign", payload, move); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("owner isolation: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = Open(ctx, path, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	assertOrder("a", "b", "c")
+	if got, err := store.ReorderTodo(ctx, owner, "move", payload, move); err != nil || !reflect.DeepEqual(got, first) {
+		t.Fatalf("restart replay: %#v %v", got, err)
+	}
+
+	// Both requests observed the same pair; exactly one may swap it.
+	concurrent := TodoMove{TaskID: "b", ExpectedRevision: 3, NeighborID: "a", NeighborRevision: 4, Direction: "up"}
+	body, _ := json.Marshal(concurrent)
+	results := make(chan error, 2)
+	var wg sync.WaitGroup
+	for i := range 2 {
+		wg.Go(func() {
+			_, err := store.ReorderTodo(ctx, owner, fmt.Sprintf("concurrent-%d", i), body, concurrent)
+			results <- err
+		})
+	}
+	wg.Wait()
+	close(results)
+	var successes, conflicts int
+	for err := range results {
+		if err == nil {
+			successes++
+		} else if errors.Is(err, ErrConflict) {
+			conflicts++
+		} else {
+			t.Fatal(err)
+		}
+	}
+	if successes != 1 || conflicts != 1 {
+		t.Fatalf("concurrent move outcomes: %d successes %d conflicts", successes, conflicts)
+	}
+	assertOrder("b", "a", "c")
+}
+
+func TestTodoOrderFailureRollsBackPairAndDoesNotReserveKey(t *testing.T) {
+	store, _, owner, _ := thumbnailStore(t)
+	ctx := t.Context()
+	for _, id := range []string{"a", "b", "c"} {
+		if err := store.AddTodo(ctx, owner, TodoTask{ID: id, Title: id, Tags: []string{}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	move := TodoMove{TaskID: "a", ExpectedRevision: 1, NeighborID: "b", NeighborRevision: 1, Direction: "up"}
+	for _, bad := range []TodoMove{
+		{TaskID: "a", ExpectedRevision: 1, NeighborID: "c", NeighborRevision: 1, Direction: "up"},
+		{TaskID: "a", ExpectedRevision: 1, NeighborID: "b", NeighborRevision: 2, Direction: "up"},
+	} {
+		body, _ := json.Marshal(bad)
+		if _, err := store.ReorderTodo(ctx, owner, "retryable", body, bad); !errors.Is(err, ErrConflict) {
+			t.Fatalf("stale/nonadjacent move: %v", err)
+		}
+	}
+	if _, err := store.write.ExecContext(ctx, `CREATE TRIGGER reject_move BEFORE INSERT ON todo_idempotency_results BEGIN SELECT RAISE(ABORT, 'synthetic retry failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(move)
+	if _, err := store.ReorderTodo(ctx, owner, "retryable", body, move); err == nil {
+		t.Fatal("failed retry write committed")
+	}
+	list, err := store.ListTodo(ctx, owner)
+	if err != nil || len(list.Tasks) != 3 || list.Tasks[0].ID != "c" || list.Tasks[1].ID != "b" || list.Tasks[2].ID != "a" || list.Tasks[1].Revision != 1 || list.Tasks[2].Revision != 1 {
+		t.Fatalf("partial failed swap: %#v %v", list, err)
+	}
+	if _, err := store.write.ExecContext(ctx, `DROP TRIGGER reject_move`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ReorderTodo(ctx, owner, "retryable", body, move); err != nil {
+		t.Fatalf("failed key reserved: %v", err)
+	}
+}
+
+func TestTodoOrderMigrationKeepsLegacyOrderAndRetryBytes(t *testing.T) {
+	ctx := t.Context()
+	path := filepath.Join(t.TempDir(), "v6.sqlite")
+	db, err := sql.Open("sqlite", dataSource(path, time.Second, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	migrations, err := loadMigrations(migrationFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(ctx, db, migrations[:6]); err != nil {
+		t.Fatal(err)
+	}
+	legacy := &Store{read: db, write: db}
+	owner, err := legacy.EnrollAccount(ctx, ExternalIdentity{Issuer: "https://issuer.example", Subject: "order-migration"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"a", "b", "c"} {
+		if _, err := db.ExecContext(ctx, `INSERT INTO todo_tasks(owner_id,id,title,tags_json,estimate_minutes,created_at) VALUES(?,?,?,'[]',0,100)`, owner.id, id, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hash := sha256.Sum256([]byte("legacy todo intent"))
+	result := []byte(`{ "task": {"id":"a","title":"a","revision":1}, "removed":false }`)
+	if _, err := db.ExecContext(ctx, `INSERT INTO todo_idempotency_results(owner_id,key,operation,payload_hash,result,created_at) VALUES(?,'old','add_todo',?,?,100)`, owner.id, hash[:], result); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err := Open(ctx, path, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	list, err := store.ListTodo(ctx, owner)
+	if err != nil || len(list.Tasks) != 3 || list.Tasks[0].ID != "c" || list.Tasks[1].ID != "b" || list.Tasks[2].ID != "a" {
+		t.Fatalf("migration order: %#v %v", list, err)
+	}
+	var gotHash, gotResult []byte
+	if err := store.read.QueryRowContext(ctx, `SELECT payload_hash,result FROM todo_idempotency_results WHERE owner_id=? AND key='old'`, owner.id).Scan(&gotHash, &gotResult); err != nil || !bytes.Equal(gotHash, hash[:]) || !bytes.Equal(gotResult, result) {
+		t.Fatalf("migration changed retry bytes: %v", err)
 	}
 }

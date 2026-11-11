@@ -102,13 +102,33 @@ function TaskForm({ csrf, task, action, children }: {
   </form>
 }
 
-function TaskRows({ tasks, csrf, canWrite, pending }: {
-  tasks: TodoTask[]; csrf: string; canWrite: boolean; pending: boolean
+function MoveTask({ task, neighbor, direction, csrf, pending }: {
+  task: TodoTask; neighbor?: TodoTask; direction: 'up' | 'down'; csrf: string; pending: boolean
+}) {
+  const [idempotencyKey] = useState(() => crypto.randomUUID())
+  return <form method="post" action={todoFormPath}>
+    <input type="hidden" name="action" value="reorder" />
+    <input type="hidden" name="csrf_token" value={csrf} />
+    <input type="hidden" name="task_id" value={task.id} />
+    <input type="hidden" name="expected_revision" value={task.revision} />
+    <input type="hidden" name="neighbor_id" value={neighbor?.id ?? ''} />
+    <input type="hidden" name="neighbor_revision" value={neighbor?.revision ?? ''} />
+    <input type="hidden" name="direction" value={direction} />
+    <input type="hidden" name="idempotency_key" value={idempotencyKey} />
+    <button type="submit" className="todo-move" data-move={direction}
+      aria-label={`Move ${direction}: ${task.title}`} disabled={!neighbor} aria-disabled={pending || undefined}>
+      <span aria-hidden="true">{direction === 'up' ? '↑' : '↓'}</span>
+    </button>
+  </form>
+}
+
+function TaskRows({ tasks, csrf, canWrite, pending, reorder = false }: {
+  tasks: TodoTask[]; csrf: string; canWrite: boolean; pending: boolean; reorder?: boolean
 }) {
   return <ul className="todo-rows" role="list">
-    {tasks.map(task => {
+    {tasks.map((task, index) => {
       const estimate = estimateOptions.find(([minutes]) => minutes === task.estimate_minutes)
-      return <li key={task.id} className="todo-row">
+      return <li key={task.id} className="todo-row" data-task-id={task.id}>
         <TaskForm csrf={csrf} task={task} action={task.completed_at ? 'reopen' : 'complete'}>
           <label>
             <input type="checkbox" checked={Boolean(task.completed_at)} disabled={!canWrite} aria-disabled={pending || undefined}
@@ -124,9 +144,20 @@ function TaskRows({ tasks, csrf, canWrite, pending }: {
             </span>
           </label>
         </TaskForm>
-        {canWrite && <TaskForm csrf={csrf} task={task} action="remove">
-          <button type="submit" className="todo-text-action" aria-label={`Remove ${task.title}`} aria-disabled={pending}>Remove</button>
-        </TaskForm>}
+        {canWrite && <div className="todo-row-actions">
+          {reorder && <div className="todo-moves">
+            {(['up', 'down'] as const).map(direction => {
+              const neighbor = tasks[index + (direction === 'up' ? -1 : 1)]
+              // Keep the retry key until this observed pair changes. A refreshed
+              // pair remounts the form so the next move starts a new intent.
+              return <MoveTask key={`${direction}:${task.revision}:${neighbor?.id}:${neighbor?.revision}`}
+                task={task} neighbor={neighbor} direction={direction} csrf={csrf} pending={pending} />
+            })}
+          </div>}
+          <TaskForm csrf={csrf} task={task} action="remove">
+            <button type="submit" className="todo-text-action" aria-label={`Remove ${task.title}`} aria-disabled={pending}>Remove</button>
+          </TaskForm>
+        </div>}
       </li>
     })}
   </ul>
@@ -151,6 +182,8 @@ export function Todo({ list, csrf, canWrite, composer, pending, saveNotice }: {
   }
   const completedCount = list.tasks.length - openTasks.length
 
+  const main = useRef<HTMLElement>(null)
+  const moveStatus = useRef<HTMLParagraphElement>(null)
   const openHeading = useRef<HTMLHeadingElement>(null)
   const undoButton = useRef<HTMLButtonElement>(null)
   const completedSummary = useRef<HTMLElement>(null)
@@ -159,6 +192,7 @@ export function Todo({ list, csrf, canWrite, composer, pending, saveNotice }: {
     fallbacks: (HTMLElement | null | undefined)[]
     removingCompletedTaskID?: string
     undoingCompletedTaskID?: string
+    move?: { taskID: string; direction: string; revision: number }
   } | null>(null)
   function rememberFocus(event: FormEvent<HTMLElement>) {
     const form = event.target
@@ -172,6 +206,10 @@ export function Todo({ list, csrf, canWrite, composer, pending, saveNotice }: {
       control,
       removingCompletedTaskID: completedPanel && action === 'remove' ? taskID : undefined,
       undoingCompletedTaskID: completedCount === 0 && action === 'undo' && list.undo?.completed_at ? taskID : undefined,
+      move: action === 'reorder' && taskID ? {
+        taskID, direction: form.querySelector<HTMLInputElement>('input[name=direction]')?.value ?? '',
+        revision: Number(form.querySelector<HTMLInputElement>('input[name=expected_revision]')?.value),
+      } : undefined,
       fallbacks: [
         row?.nextElementSibling?.querySelector<HTMLInputElement>('input[type=checkbox]'),
         row?.previousElementSibling?.querySelector<HTMLInputElement>('input[type=checkbox]'),
@@ -182,14 +220,24 @@ export function Todo({ list, csrf, canWrite, composer, pending, saveNotice }: {
   }
   useLayoutEffect(() => {
     if (pending || !actionFocus.current) return
-    const { control, fallbacks, removingCompletedTaskID, undoingCompletedTaskID } = actionFocus.current
+    const { control, fallbacks, removingCompletedTaskID, undoingCompletedTaskID, move } = actionFocus.current
     actionFocus.current = null
+    const orderedOpen = list.tasks.filter(task => !task.completed_at)
+    const movedIndex = move ? orderedOpen.findIndex(task => task.id === move.taskID && task.revision > move.revision) : -1
+    if (movedIndex >= 0 && moveStatus.current) {
+      moveStatus.current.textContent = `${orderedOpen[movedIndex].title} moved to position ${movedIndex + 1} of ${orderedOpen.length}.`
+    }
     // Keep any focus the user moved during the save.
     if (control.isConnected || document.activeElement !== document.body) return
 
     // The refreshed list may include changes from another session.
     let target: HTMLElement | null | undefined
-    if (completedCount === 0 && list.undo && list.undo.id === removingCompletedTaskID) {
+    if (move) {
+      const row = [...main.current?.querySelectorAll<HTMLElement>('[data-task-id]') ?? []]
+        .find(candidate => candidate.dataset.taskId === move.taskID)
+      const button = row?.querySelector<HTMLButtonElement>(`button[data-move="${move.direction}"]`)
+      target = button && !button.disabled ? button : row?.querySelector<HTMLInputElement>('input[type=checkbox]')
+    } else if (completedCount === 0 && list.undo && list.undo.id === removingCompletedTaskID) {
       target = undoButton.current
     } else if (undoingCompletedTaskID && list.tasks.some(task => task.id === undoingCompletedTaskID && task.completed_at)) {
       target = completedSummary.current
@@ -199,10 +247,10 @@ export function Todo({ list, csrf, canWrite, composer, pending, saveNotice }: {
     target?.scrollIntoView({ block: 'nearest' })
   }, [pending, list, completedCount])
 
-  return <main id="main" className="todo" tabIndex={-1} onSubmitCapture={rememberFocus}>
+  return <main ref={main} id="main" className="todo" tabIndex={-1} onSubmitCapture={rememberFocus}>
     {saveNotice}
-    <p className="eyebrow">Your private checklist</p>
     <h1>To-do</h1>
+    <p ref={moveStatus} className="sr-only" role="status" aria-live="polite" />
     {canWrite ? composer && <Compose csrf={csrf} composer={composer} pending={pending} />
       : <p className="permission-note">Your sign-in allows you to view tasks. Write permission is required to make changes.</p>}
     <section aria-labelledby="todo-open">
@@ -210,7 +258,7 @@ export function Todo({ list, csrf, canWrite, composer, pending, saveNotice }: {
         <h2 id="todo-open" ref={openHeading} className="eyebrow" tabIndex={-1}>Open tasks</h2>
         <span>{openTasks.length} {openTasks.length === 1 ? 'task' : 'tasks'}</span>
       </div>
-      {openTasks.length ? <TaskRows tasks={openTasks} csrf={csrf} canWrite={canWrite} pending={pending} />
+      {openTasks.length ? <TaskRows tasks={openTasks} csrf={csrf} canWrite={canWrite} pending={pending} reorder />
         : <p className="todo-empty">No open tasks.</p>}
     </section>
     {list.undo && canWrite && <div className="todo-undo">

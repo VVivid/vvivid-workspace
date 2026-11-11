@@ -314,3 +314,38 @@ describe('Eastern completion days', () => {
     expect(request).not.toHaveBeenCalled()
   })
 })
+
+describe('saved task order', () => {
+  it('moves adjacent tasks with revisions, disables boundaries, and preserves keyboard focus', async () => {
+    const user = userEvent.setup()
+    const next = { id: 'next', title: 'Read the migration guide', revision: 1 }
+    render(<BrowserApp initialData={checklist({ tasks: [task, next] })} />)
+    expect(screen.getByRole('button', { name: `Move up: ${task.title}` })).toBeDisabled()
+    expect(screen.getByRole('button', { name: `Move down: ${next.title}` })).toBeDisabled()
+    const order = { tasks: [{ ...next, revision: 2 }, { ...task, revision: 2 }] }
+    saved(order)
+    screen.getByRole('button', { name: `Move down: ${task.title}` }).focus()
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(screen.getAllByRole('checkbox').map(input => input.getAttribute('aria-label')))
+      .toEqual([next.title, task.title]))
+    expect(postedFields(0)).toMatchObject({ action: 'reorder', task_id: task.id, expected_revision: '1',
+      neighbor_id: next.id, neighbor_revision: '1', direction: 'down', idempotency_key: expect.any(String) })
+    expect(screen.getByRole('button', { name: `Move down: ${task.title}` })).toBeDisabled()
+    expect(screen.getByRole('checkbox', { name: task.title })).toHaveFocus()
+    expect(screen.getByText(`${task.title} moved to position 2 of 2.`)).toBeInTheDocument()
+  })
+
+  it('retains the exact move intent after a lost response and uses the refreshed server order', async () => {
+    const user = userEvent.setup()
+    const next = { id: 'next', title: 'Read the migration guide', revision: 1 }
+    request.mockRejectedValueOnce(new TypeError('Response lost'))
+    render(<BrowserApp initialData={checklist({ tasks: [task, next] })} />)
+    await user.click(screen.getByRole('button', { name: `Move down: ${task.title}` }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('The change could not be confirmed.')
+    const initial = postedFields(0)
+    saved({ tasks: [{ ...next, revision: 2 }, { ...task, revision: 2 }] })
+    await user.click(screen.getByRole('button', { name: `Move down: ${task.title}` }))
+    await waitFor(() => expect(screen.getAllByRole('checkbox')[0]).toHaveAttribute('aria-label', next.title))
+    expect(postedFields(1)).toEqual(initial)
+  })
+})

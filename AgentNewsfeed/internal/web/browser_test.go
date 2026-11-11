@@ -126,3 +126,50 @@ func TestBrowserJSONPageAndStateForms(t *testing.T) {
 		t.Fatal("JSON Trash reader lost state, protected images, or escaping")
 	}
 }
+
+func TestCompactShelfActionsKeepViewAndRejectUnsafeDestinationsBeforeWrite(t *testing.T) {
+	f, s, h := app(t)
+	ctx := t.Context()
+	p := f.Principal(t, "alice", allScopes)
+	cookie := f.CookieWithScopes(t, "alice", allScopes)
+	_, csrf := f.BrowserPrincipal(t, cookie)
+	a, err := s.AddArticle(ctx, p, feed.AddInput{IdempotencyKey: "compact", Article: feed.Content{URL: "https://example.com/compact", Title: "Compact", Summary: "Saved source introduction"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/v1/articles/" + a.Article.ID
+	form := url.Values{"csrf_token": {csrf}}
+	for _, target := range []string{"https://attacker.example/", "//attacker.example/", "/auth/logout", "/?cursor=a&before=b", "/archive?unknown=x"} {
+		out := browserJSONRequest(h, path+"/archive?return_to="+url.QueryEscape(target), cookie, form, testfixture.Origin)
+		if out.Code != 400 {
+			t.Fatalf("unsafe return accepted %q: %d", target, out.Code)
+		}
+	}
+	if got, err := s.GetArticle(ctx, p, a.Article.ID); err != nil || got.ArchivedAt != 0 || got.Revision != 1 {
+		t.Fatalf("invalid return mutated: %#v %v", got, err)
+	}
+	archive := browserJSONRequest(h, path+"/archive?return_to="+url.QueryEscape("/?cursor=kept-position"), cookie, form, testfixture.Origin)
+	if got := readBrowserJSON[struct {
+		Location string `json:"location"`
+	}](t, archive).Location; got != "/?cursor=kept-position" {
+		t.Fatalf("archive returned %q", got)
+	}
+	trashForm := url.Values{"csrf_token": {csrf}, "expected_revision": {"2"}, "idempotency_key": {"compact-trash"}}
+	trash := browserJSONRequest(h, path+"/trash?return_to=%2Farchive", cookie, trashForm, testfixture.Origin)
+	if got := readBrowserJSON[struct {
+		Location string `json:"location"`
+	}](t, trash).Location; got != "/archive" {
+		t.Fatalf("trash returned %q", got)
+	}
+	trashForm.Set("expected_revision", "3")
+	trashForm.Set("idempotency_key", "compact-restore")
+	restored := browserJSONRequest(h, path+"/restore-trash?return_to=%2Ftrash", cookie, trashForm, testfixture.Origin)
+	if got := readBrowserJSON[struct {
+		Location string `json:"location"`
+	}](t, restored).Location; got != "/trash" {
+		t.Fatalf("restore returned %q", got)
+	}
+	if got, err := s.GetArticle(ctx, p, a.Article.ID); err != nil || got.ArchivedAt == 0 || got.TrashedAt != 0 {
+		t.Fatalf("restore lost original shelf: %#v %v", got, err)
+	}
+}

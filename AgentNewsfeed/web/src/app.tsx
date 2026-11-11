@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -8,6 +8,7 @@ import { ArticleMarkdown } from '@/components/markdown'
 import { Pagination } from '@/components/pagination'
 import { urlWithPagePosition } from '@/pagination'
 import { Todo } from '@/todo'
+import { ThemePicker } from '@/theme'
 import type { TodoComposer } from '@/todo'
 import type { Article, Bootstrap } from '@/types'
 
@@ -21,46 +22,16 @@ function sourceHostname(url: string) {
   return new URL(url).hostname.replace(/^www\./, '')
 }
 
-function Thumbnail({ article }: { article: Article }) {
-  // A fresh article can retry even when the proxy URL is unchanged.
-  const [failedArticle, setFailedArticle] = useState<Article | null>(null)
-  return (
-    <div className="article-thumbnail">
-      {article.thumbnail_url && !['unavailable', 'budget_exceeded'].includes(article.thumbnail_status ?? '') && failedArticle !== article ? (
-        <img
-          src={`/thumbnails/${encodeURIComponent(article.id)}${article.trashed_at ? '?trashed=true' : ''}`}
-          alt=""
-          loading="lazy"
-          width="312"
-          height="184"
-          onError={() => setFailedArticle(article)}
-        />
-      ) : (
-        <div className="thumbnail-placeholder">
-          <Leaf /><span>A story for a slower moment</span>
-        </div>
-      )}
-    </div>
-  )
-}
-
 function Header({ data }: { data: Bootstrap }) {
-  const readerShelf = data.from_trash ? 'trash' : data.from_archive ? 'archive' : 'feed'
-  const selectedShelf = data.view === 'reader' ? readerShelf : data.view
-  const isNews = !data.section || data.section === 'news'
   return (
     <header className="site-header">
       <div className="header-inner">
-        <a className="brand" href="/" aria-label="Newsfeed home"><Leaf /><span>Newsfeed</span></a>
+        <a className="brand" href="/" aria-label="Newsfeed home">AgentNewsfeed</a>
         <span className="private-label">Private</span>
+        <ThemePicker />
         {data.authenticated && (
           <>
-            {isNews && <nav aria-label="Library">
-              <a href="/" aria-current={selectedShelf === 'feed' ? 'page' : undefined}>Feed</a>
-              <a href="/archive" aria-current={selectedShelf === 'archive' ? 'page' : undefined}>Archive</a>
-              <a href="/trash" aria-current={selectedShelf === 'trash' ? 'page' : undefined}>Trash</a>
-            </nav>}
-            <form method="post" action="/auth/logout" className={isNews ? undefined : 'header-signout'}>
+            <form method="post" action="/auth/logout">
               <input type="hidden" name="csrf_token" value={data.csrf} />
               <Button variant="outline" type="submit" size="sm">Sign out</Button>
             </form>
@@ -74,7 +45,6 @@ function Header({ data }: { data: Bootstrap }) {
 function Sections({ data }: { data: Bootstrap }) {
   return (
     <aside className="section-sidebar">
-      <p className="eyebrow">Your sections</p>
       <nav aria-label="Sections">
         <a href="/" aria-current={!data.section || data.section === 'news' ? 'page' : undefined}><Leaf /><span>News</span></a>
         <a href="/todo" aria-current={data.section === 'todo' ? 'page' : undefined}>
@@ -88,48 +58,84 @@ function Sections({ data }: { data: Bootstrap }) {
   )
 }
 
-function Shelf({ data, saveNotice }: { data: Bootstrap; saveNotice?: ReactNode }) {
+function NewsViews({ data }: { data: Bootstrap }) {
+  const readerShelf = data.from_trash ? 'trash' : data.from_archive ? 'archive' : 'feed'
+  const selectedShelf = data.view === 'reader' ? readerShelf : data.view
+  return <nav className="news-views" aria-label="Library">
+    <a href="/" aria-current={selectedShelf === 'feed' ? 'page' : undefined}>Feed</a>
+    <a href="/archive" aria-current={selectedShelf === 'archive' ? 'page' : undefined}>Archive</a>
+    <a href="/trash" aria-current={selectedShelf === 'trash' ? 'page' : undefined}>Trash</a>
+  </nav>
+}
+
+function ArticleActions({ article, data, pending }: { article: Article; data: Bootstrap; pending: boolean }) {
+  const [idempotencyKey] = useState(() => crypto.randomUUID())
+  const trashed = Boolean(article.trashed_at)
+  const archived = Boolean(article.archived_at)
+  const actions = trashed ? [['restore-trash', 'Restore']] : [
+    [archived ? 'restore' : 'archive', archived ? 'Restore' : 'Archive'], ['trash', 'Trash'],
+  ]
+  const path = data.view === 'feed' ? '/' : `/${data.view}`
+  const returnTo = encodeURIComponent(urlWithPagePosition(path, data))
+  return <div className="article-actions">
+    <a href={urlWithPagePosition(`/articles/${encodeURIComponent(article.id)}`, data, data.view)}
+      aria-label={`Read saved article: ${article.title}`}>Saved copy</a>
+    {actions.map(([action, label]) => <form key={action} method="post"
+      action={`/api/v1/articles/${encodeURIComponent(article.id)}/${action}?return_to=${returnTo}`}>
+      <input type="hidden" name="csrf_token" value={data.csrf} />
+      {(action === 'trash' || trashed) && <>
+        <input type="hidden" name="expected_revision" value={article.revision} />
+        <input type="hidden" name="idempotency_key" value={idempotencyKey} />
+      </>}
+      <button type="submit" aria-label={`${label} ${article.title}`} disabled={!data.can_write || pending}>{label}</button>
+    </form>)}
+  </div>
+}
+
+function Shelf({ data, actionsPending, saveNotice }: { data: Bootstrap; actionsPending: boolean; saveNotice?: ReactNode }) {
   const archived = data.view === 'archive'
   const trashed = data.view === 'trash'
   const articles = data.page?.articles ?? []
   const shelfPath = trashed ? '/trash' : archived ? '/archive' : '/'
   const stalePage = articles.length === 0 && Boolean(data.cursor || data.before)
+  const main = useRef<HTMLElement>(null)
+  const submittedControl = useRef<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    const control = submittedControl.current
+    if (actionsPending || !control) return
+    submittedControl.current = null
+    if (!control.isConnected && document.activeElement === document.body) main.current?.focus({ preventScroll: true })
+  }, [actionsPending, data.page])
   return (
-    <main id="main" tabIndex={-1} className="shelf page-width">
+    <main ref={main} id="main" tabIndex={-1} className="shelf page-width" onSubmitCapture={() => {
+      if (document.activeElement instanceof HTMLElement) submittedControl.current = document.activeElement
+    }}>
       {saveNotice}
       <div className="shelf-intro">
-        <p className="eyebrow">{trashed ? 'Room to reconsider' : archived ? 'Kept for another day' : 'Your private collection'}</p>
         <h1>{trashed ? 'Your trash' : archived ? 'Your archive' : 'Your reading shelf'}</h1>
-        <p className="subtitle">{trashed ? 'Stories kept safely until you want them back.' : archived ? 'Good stories, read and kept close.' : 'Good stories, saved for a slower moment.'}</p>
       </div>
       <div className="list-heading">
         <span>{trashed ? 'Trashed articles' : archived ? 'Archived articles' : 'Saved articles'}</span>
         <span>{trashed ? 'Newest trashed first' : archived ? 'Newest archived first' : 'Newest saved first'}</span>
       </div>
-      <Separator />
       {articles.length > 0 ? (
         <div className="article-list">
+          <div className="feed-columns" aria-hidden="true"><span>Article</span><span>Source</span><span>{trashed ? 'Trashed' : archived ? 'Archived' : 'Saved'}</span><span>Actions</span></div>
           {articles.map(article => {
-            const readerURL = urlWithPagePosition(`/articles/${encodeURIComponent(article.id)}`, data, data.view)
             const timestamp = trashed ? article.trashed_at! : archived ? article.archived_at! : article.created_at
             return (
               <article className="feed-row" key={article.id}>
-                <a href={readerURL} className="thumbnail-link" tabIndex={-1} aria-hidden="true">
-                  <Thumbnail article={article} />
+                <a href={article.url} className="feed-entry" aria-label={article.title} target="_blank" rel="noopener noreferrer">
+                  <div className="article-introduction">
+                    <h2>{article.title} <Arrow direction="up-right" /></h2>
+                    <p className="summary">{article.summary}</p>
+                  </div>
+                  <span className="feed-source">{sourceHostname(article.url)}</span>
+                  <span className="feed-date"><span className="sr-only">{trashed ? 'Trashed' : archived ? 'Archived' : 'Saved'} </span>
+                    <time dateTime={new Date(timestamp).toISOString()}>{formatDate(timestamp)}</time>
+                  </span>
                 </a>
-                <div className="article-introduction">
-                  <p className="article-meta">
-                    <span className="source">{sourceHostname(article.url)}</span>
-                    <span aria-hidden="true">·</span>
-                    <span>
-                      {trashed ? 'Trashed' : archived ? 'Archived' : 'Saved'}{' '}
-                      <time dateTime={new Date(timestamp).toISOString()}>{formatDate(timestamp)}</time>
-                    </span>
-                  </p>
-                  <h2><a href={readerURL}>{article.title}</a></h2>
-                  <p className="summary">{article.summary}</p>
-                  <a className="reading-link" href={readerURL}>Read article <Arrow /></a>
-                </div>
+                <ArticleActions key={`${article.id}:${article.revision}`} article={article} data={data} pending={actionsPending} />
               </article>
             )
           })}
@@ -261,12 +267,13 @@ export function App({ data, actionsPending = false, saveNotice, todoComposer }: 
         <div className="library-layout">
           <Sections data={data} />
           <div className="library-content">
+            {data.section !== 'todo' && <NewsViews data={data} />}
             {data.section === 'todo'
               ? data.todo && <Todo list={data.todo} csrf={data.csrf} canWrite={data.can_write}
                 pending={actionsPending} composer={todoComposer} saveNotice={saveNotice} />
               : data.view === 'reader' && data.article
                 ? <Reader data={data} article={data.article} actionsPending={actionsPending} saveNotice={saveNotice} />
-                : <Shelf data={data} saveNotice={saveNotice} />}
+                : <Shelf data={data} actionsPending={actionsPending} saveNotice={saveNotice} />}
           </div>
         </div>
       )}

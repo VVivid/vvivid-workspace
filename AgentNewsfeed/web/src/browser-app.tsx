@@ -285,7 +285,9 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
       setTodoDraft(draft => draft?.id === savedDraftID ? null : draft)
     }
     if (startedAt === navigation.current.sequence) {
-      if (todoWrite) {
+      const shelfWrite = !todoWrite && ['/', '/archive', '/trash'].includes(window.location.pathname) &&
+        pathAndQuery(destination) === pathAndQuery(window.location)
+      if (todoWrite || shelfWrite) {
         // Keep the current URL, scroll and compose controls during checklist saves.
         void loadPage({ url: new URL(window.location.href), history: 'current', refresh: 'preserve-viewport' })
       } else {

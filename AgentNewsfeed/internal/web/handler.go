@@ -277,6 +277,11 @@ func (h *handler) detail(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) archive(archived bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		returnTo, err := articleReturnTo(r)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
 		p, _ := identity.FromContext(r.Context())
 		a, err := h.service.SetArchived(r.Context(), p, r.PathValue("id"), archived)
 		if err != nil {
@@ -287,7 +292,10 @@ func (h *handler) archive(archived bool) http.Handler {
 		if archived {
 			from = "archive"
 		}
-		respondToStateForm(w, r, "/articles/"+url.PathEscape(a.ID)+"?from="+from)
+		if returnTo == "" {
+			returnTo = "/articles/" + url.PathEscape(a.ID) + "?from=" + from
+		}
+		respondToStateForm(w, r, returnTo)
 	})
 }
 
@@ -351,6 +359,11 @@ func trashSelection(r *http.Request) (bool, error) {
 
 func (h *handler) trash(restore bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		returnTo, err := articleReturnTo(r)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
 		p, _ := identity.FromContext(r.Context())
 		if len(r.PostForm) != 3 || len(r.PostForm["idempotency_key"]) != 1 || len(r.PostForm["expected_revision"]) != 1 {
 			writeError(w, feed.ErrInvalid)
@@ -379,8 +392,38 @@ func (h *handler) trash(restore bool) http.Handler {
 				from = "archive"
 			}
 		}
-		respondToStateForm(w, r, "/articles/"+url.PathEscape(out.Article.ID)+"?from="+from)
+		if returnTo == "" {
+			returnTo = "/articles/" + url.PathEscape(out.Article.ID) + "?from=" + from
+		}
+		respondToStateForm(w, r, returnTo)
 	})
+}
+
+// Shelf actions return to the current list. Restrict this optional destination
+// before mutating so native forms cannot become an open redirect.
+func articleReturnTo(r *http.Request) (string, error) {
+	query := r.URL.Query()
+	if !query.Has("return_to") {
+		return "", nil
+	}
+	if len(query) != 1 || len(query["return_to"]) != 1 {
+		return "", feed.ErrInvalid
+	}
+	destination, err := url.ParseRequestURI(query.Get("return_to"))
+	if err != nil || destination.IsAbs() || destination.Host != "" || destination.Fragment != "" ||
+		(destination.Path != "/" && destination.Path != "/archive" && destination.Path != "/trash") || destination.RawPath != "" {
+		return "", feed.ErrInvalid
+	}
+	position, err := url.ParseQuery(destination.RawQuery)
+	if err != nil || len(position) > 1 {
+		return "", feed.ErrInvalid
+	}
+	for name, values := range position {
+		if (name != "cursor" && name != "before") || len(values) != 1 || values[0] == "" || len(values[0]) > 1024 {
+			return "", feed.ErrInvalid
+		}
+	}
+	return destination.String(), nil
 }
 
 // Return the same destination to native forms and fetch requests. The latter
