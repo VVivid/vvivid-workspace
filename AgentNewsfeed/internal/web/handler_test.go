@@ -116,7 +116,7 @@ func TestOfficialMCPAddListUpdateAndBrowserSharePrivateRecords(t *testing.T) {
 		}
 	}
 	slices.Sort(names)
-	if strings.Join(names, ",") != "add_article,add_todo,get_article,get_todo,list_articles,list_todos,patch_article,remove_todo,restore_article,set_article_archived,set_todo_completed,trash_article,undo_todo_removal,update_article" {
+	if strings.Join(names, ",") != "accept_recommendation_suggestion,add_article,add_todo,dismiss_recommendation_suggestion,finish_discovery_run,get_article,get_discovery_context,get_discovery_run,get_recommendation_preferences,get_recommendation_suggestion,get_todo,ingest_discovery_article,list_articles,list_discovery_runs,list_recommendation_suggestions,list_todos,patch_article,remove_todo,restore_article,set_article_archived,set_todo_completed,start_discovery_run,submit_recommendation_suggestion,trash_article,undo_todo_removal,update_article,update_recommendation_preferences" {
 		t.Fatalf("unexpected tools %v", names)
 	}
 	if init := c.InitializeResult(); init == nil || strings.Contains(init.Instructions, "Jobs & Internships") || strings.Contains(init.Instructions, "_opportunit") {

@@ -112,7 +112,7 @@ class ChartTests(unittest.TestCase):
                 self.assertEqual(entrypoint, "websecure")
                 self.assertEqual(rule["host"], "newsfeed.vvivid.dev")
                 allowed = {(p["path"], p["pathType"]) for p in paths}
-                self.assertEqual(allowed, {(p, "Exact") for p in ("/", "/archive", "/trash", "/todo", "/api/v1/todos", "/auth/login", "/auth/callback", "/auth/logout")} |
+                self.assertEqual(allowed, {(p, "Exact") for p in ("/", "/archive", "/trash", "/todo", "/settings", "/api/v1/todos", "/api/v1/settings/preferences", "/api/v1/settings/suggestions/accept", "/api/v1/settings/suggestions/dismiss", "/auth/login", "/auth/callback", "/auth/logout")} |
                                  {(p, "Prefix") for p in ("/articles/", "/api/v1/articles", "/static/assets/", "/thumbnails/")})
                 def matches(request):
                     for path, kind in allowed:
@@ -124,7 +124,7 @@ class ChartTests(unittest.TestCase):
                                 return True
                     return False
                 for path in ("/", "/auth/callback", "/archive", "/trash", "/api/v1/articles/abc/archive", "/articles/abc",
-                             "/todo", "/api/v1/todos", "/static/assets/app.js", "/thumbnails/abc", "/thumbnails/abc/content/" + "a" * 64):
+                             "/todo", "/settings", "/api/v1/todos", "/api/v1/settings/preferences", "/api/v1/settings/suggestions/accept", "/api/v1/settings/suggestions/dismiss", "/static/assets/app.js", "/thumbnails/abc", "/thumbnails/abc/content/" + "a" * 64):
                     self.assertTrue(matches(path), path)
                 for path in ("/mcp", "/mcp/", "/health/live", "/health/ready", "/.well-known/oauth-protected-resource/mcp",
                              "/.well-known/oauth-protected-resource/api/v1", "/api/admin", "/api/v1/articles-evil", "/auth/admin",
@@ -132,7 +132,7 @@ class ChartTests(unittest.TestCase):
                              "/api/v1/opportunities", "/api/v1/opportunities/abc", "/api/v1/opportunities/abc/archive",
                              "/api/v1/opportunities/abc/unarchive", "/api/v1/opportunities/abc/trash", "/api/v1/opportunities/abc/restore",
                              "/api/v1/opportunities-evil", "/api/v1/opportunity",
-                             "/todo/", "/todo/history", "/todo-evil", "/api/v1/todos/anything", "/api/v1/todos-evil"):
+                             "/settings/", "/settings-evil", "/api/v1/settings/admin", "/api/v1/settings/preferences-evil", "/todo/", "/todo/history", "/todo-evil", "/api/v1/todos/anything", "/api/v1/todos-evil"):
                     self.assertFalse(matches(path), path)
                 self.assertTrue(all(p["backend"]["service"]["name"] == "agent-newsfeed" for p in paths))
         self.assertEqual(len([d for d in documents if d["kind"] == "Certificate"]), 2)
