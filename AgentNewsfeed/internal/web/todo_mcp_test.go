@@ -45,8 +45,8 @@ func todoSchemas(t *testing.T, c *sdk.ClientSession) map[string]*jsonschema.Reso
 		t.Fatal("initialize omitted To-do version, trust or retry contract")
 	}
 	tools, err := c.ListTools(t.Context(), nil)
-	if err != nil || len(tools.Tools) != 14 {
-		t.Fatalf("expected 14 tools: %v", err)
+	if err != nil || len(tools.Tools) != 27 {
+		t.Fatalf("expected 27 tools: %v", err)
 	}
 	out := make(map[string]*jsonschema.Resolved)
 	for _, tool := range tools.Tools {

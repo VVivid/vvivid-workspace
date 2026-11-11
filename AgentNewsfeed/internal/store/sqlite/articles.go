@@ -188,10 +188,23 @@ func (s *Store) MutateArticle(ctx context.Context, owner Owner, key, operation s
 	if out, found, err := replayMutation(ctx, tx, owner, key, operation, payload); found || err != nil {
 		return out, err
 	}
+	out, err := mutateArticleTx(ctx, tx, owner, key, operation, payload, a, expected, thumbnailChanges...)
+	if err != nil {
+		return MutationResult{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return MutationResult{}, err
+	}
+	return out, nil
+}
+
+// mutateArticleTx shares article and thumbnail writes with controlled discovery.
+// The caller owns enrollment, retry checks, additional guards and commit.
+func mutateArticleTx(ctx context.Context, tx *sql.Tx, owner Owner, key, operation string, payload []byte, a Article, expected int64, thumbnailChanges ...ThumbnailChange) (MutationResult, error) {
 	now := time.Now().UnixMilli()
 	created, contentChanged := false, false
 	switch operation {
-	case "add_article":
+	case "add_article", "ingest_discovery_article":
 		existing, err := scanArticle(tx.QueryRowContext(ctx, "SELECT "+articleColumns+articleFrom+" WHERE a.owner_id = ? AND a.canonical_url = ?", owner.id, a.URL))
 		if err == nil {
 			a = existing
@@ -280,9 +293,6 @@ func (s *Store) MutateArticle(ctx context.Context, owner Owner, key, operation s
 	hash := sha256.Sum256(payload)
 	if _, err := tx.ExecContext(ctx, `INSERT INTO idempotency_results(owner_id,key,operation,payload_hash,result,created_at)
   VALUES (?,?,?,?,?,?)`, owner.id, key, operation, hash[:], result, now); err != nil {
-		return MutationResult{}, err
-	}
-	if err := tx.Commit(); err != nil {
 		return MutationResult{}, err
 	}
 	return out, nil

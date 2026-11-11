@@ -6,9 +6,10 @@ import { observeViewportPageSize, pageSizeHeader, viewportPageSize } from '@/pag
 import { todoFormPath } from '@/todo'
 import type { TodoDraft } from '@/todo'
 import type { Bootstrap } from '@/types'
+import type { SettingsDraft } from '@/settings'
 
 const browserMediaType = 'application/vnd.agentnewsfeed.browser+json'
-const pagePath = /^\/(?:archive|trash|articles\/[^/]+|todo)?$/
+const pagePath = /^\/(?:archive|trash|articles\/[^/]+|todo|settings)?$/
 const articleStateFormPath = /^\/api\/v1\/articles\/[^/]+\/(?:archive|restore|trash|restore-trash)$/
 
 type PageRequest = {
@@ -101,6 +102,7 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [todoDraft, setTodoDraft] = useState<(TodoDraft & { id: string; csrf: string }) | null>(null)
+  const [settingsDraft, setSettingsDraft] = useState<SettingsDraft | null>(null)
   const container = useRef<HTMLDivElement>(null)
   const pageErrorNotice = useRef<HTMLDivElement>(null)
   const saveErrorNotice = useRef<HTMLDivElement>(null)
@@ -108,6 +110,16 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
   // History events need the last observed address before React commits its render.
   const lastObservedAddress = useRef(addressPathAndQuery)
   const pendingWrite = useRef<Promise<URL> | null>(null)
+
+  // The draft outlives the Settings view, including visits to News or To-do.
+  useEffect(() => {
+    if (!settingsDraft) return
+    function warn(event: BeforeUnloadEvent) {
+      event.preventDefault()
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [settingsDraft])
 
   const loadPage = useCallback(async (request: PageRequest) => {
     const { url, history, refresh, preserveScroll } = request
@@ -130,7 +142,7 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
       await pendingWrite.current?.catch(() => undefined)
       if (attempt !== navigation.current.sequence) return
 
-      const hasResponsiveList = url.pathname !== '/todo' && !url.pathname.startsWith('/articles/')
+      const hasResponsiveList = url.pathname !== '/todo' && url.pathname !== '/settings' && !url.pathname.startsWith('/articles/')
       let data: Bootstrap
       for (;;) {
         const requestedSize = hasResponsiveList ? viewportPageSize() : undefined
@@ -140,6 +152,7 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
         if (attempt !== navigation.current.sequence) return
         if (typeof data?.authenticated !== 'boolean' ||
           (data.authenticated && data.section === 'todo' && !Array.isArray(data.todo?.tasks)) ||
+          (data.authenticated && data.section === 'settings' && !data.settings?.preferences) ||
           (data.page_size !== undefined && data.page_size !== requestedSize)) {
           throw new Error('Invalid page response')
         }
@@ -149,6 +162,7 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
       updateAddress()
       navigation.current.savedSinceLoad = false
       setTodoDraft(draft => data.authenticated && draft?.csrf === data.csrf ? draft : null)
+      setSettingsDraft(draft => data.authenticated && draft?.csrf === data.csrf ? draft : null)
       setPage({
         data,
         pathAndQuery: requestedPathAndQuery,
@@ -158,7 +172,10 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
       if (attempt !== navigation.current.sequence) return
       const status = error instanceof HTTPFailure ? error.status : undefined
       const { savedSinceLoad } = navigation.current
-      if (status === 401 || status === 403) setTodoDraft(null)
+      if (status === 401 || status === 403) {
+        setTodoDraft(null)
+        setSettingsDraft(null)
+      }
       // A failed resize can keep the last successfully loaded page at this address.
       if ((history === 'current' && refresh !== 'viewport-change') || savedSinceLoad || status === 401 || status === 403) {
         updateAddress()
@@ -271,6 +288,7 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
       // Remove private content on expiry even if another page load is pending.
       if (status === 401) {
         setTodoDraft(null)
+        setSettingsDraft(null)
         setPage(null)
         if (startedAt === navigation.current.sequence) {
           void loadPage({ url: new URL(window.location.href), history: 'current' })
@@ -319,6 +337,73 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
     void submitState(url, fields, page.pathAndQuery)
   }
 
+  async function writeSettings(path: string, payload: object) {
+    // A history change can precede React's disabled-control render. Match the
+    // form submission guards before a page read can pass the write barrier.
+    if (!page || page.data.section !== 'settings' || !page.data.authenticated || !page.data.can_write ||
+      page.pathAndQuery !== pathAndQuery(window.location) || pendingWrite.current || navigation.current.loadingPage) {
+      throw new Error('This page is changing. Wait for the current settings page before saving.')
+    }
+    const url = sameOriginURL(path)
+    if (!url || ![
+      '/api/v1/settings/preferences',
+      '/api/v1/settings/suggestions/accept',
+      '/api/v1/settings/suggestions/dismiss',
+    ].includes(url.pathname)) {
+      throw new Error('Invalid settings action.')
+    }
+    const startedAt = navigation.current.sequence
+    setSaving(true)
+    const request = fetch(url, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': page.data.csrf },
+      mode: 'same-origin',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      redirect: 'error',
+    }).then(async response => {
+      if (!response.ok) throw new HTTPFailure(response.status)
+      if (response.headers.get('Content-Type') !== 'application/json') throw new Error('Unexpected settings response')
+      await response.json()
+      navigation.current.savedSinceLoad = true
+      return new URL('/settings', window.location.origin)
+    })
+    pendingWrite.current = request
+    try {
+      await request
+      return startedAt
+    } catch (error) {
+      const status = error instanceof HTTPFailure ? error.status : undefined
+      if (status === 401) {
+        setSettingsDraft(null)
+        setTodoDraft(null)
+        setPage(null)
+        setPageProblem({ message: 'Sign in to continue.', retry: { url: new URL(window.location.href), history: 'current' } })
+      }
+      if (status === 409) {
+        throw new Error('This changed in another session. Your draft is kept. Reload current settings, compare your draft, then discard it to edit the current revision.', { cause: error })
+      }
+      if (status === 400) {
+        throw new Error('Check the settings and allowed values before saving.', { cause: error })
+      }
+      if (status === 401 || status === 403) {
+        throw new Error('Sign in with write permission to save this change.', { cause: error })
+      }
+      throw new Error('The change could not be confirmed. Retry the same request to check its result.', { cause: error })
+    } finally {
+      pendingWrite.current = null
+      setSaving(false)
+    }
+  }
+
+  function refreshSettings(saved: boolean) {
+    if (!page || page.data.section !== 'settings' || page.pathAndQuery !== pathAndQuery(window.location) ||
+      pendingWrite.current || navigation.current.loadingPage) return
+    navigation.current.savedSinceLoad = saved
+    void loadPage({ url: new URL(window.location.href), history: 'current', refresh: 'preserve-viewport' })
+  }
+
   function refreshSaveSource(sourcePathAndQuery: string) {
     const url = new URL(window.location.href)
     if (sourcePathAndQuery !== pathAndQuery(url) || pendingWrite.current || navigation.current.loadingPage) return
@@ -360,6 +445,15 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
     <div aria-busy={busy} hidden={!pageMatchesAddress}>
       {page && <App data={page.data} actionsPending={busy || !pageMatchesAddress}
         saveNotice={showSaveNoticeInPage ? saveNotice : undefined}
+        settingsEditor={{
+          draft: settingsDraft,
+          onDraft: setSettingsDraft,
+          write: writeSettings,
+          onRefresh: () => refreshSettings(false),
+          onSaved: sequence => {
+            if (sequence === navigation.current.sequence) refreshSettings(true)
+          },
+        }}
         todoComposer={{
           draft: todoDraft?.csrf === page.data.csrf ? todoDraft : undefined,
           // Editing creates a new Add intent. An unchanged retry keeps the same ID.

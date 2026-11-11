@@ -43,7 +43,7 @@ describe('private reading shelf', () => {
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled()
     expect(screen.getByRole('navigation', { name: 'Library' })).toHaveTextContent('FeedArchiveTrash')
     const sections = within(screen.getByRole('navigation', { name: 'Sections' }))
-    expect(sections.getAllByRole('link')).toHaveLength(2)
+    expect(sections.getAllByRole('link')).toHaveLength(3)
     expect(sections.getByRole('link', { name: 'News', current: 'page' })).toHaveAttribute('href', '/')
     expect(sections.getByRole('link', { name: 'To-do' })).toHaveAttribute('href', '/todo')
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
@@ -55,7 +55,7 @@ describe('private reading shelf', () => {
     render(<App data={shelf} />)
     for (const [role, name] of [
       ['link', 'Skip to reading'], ['link', 'Newsfeed home'], ['button', 'Light'], ['button', 'Dark'],
-      ['button', 'Sign out'], ['link', 'News'], ['link', 'To-do'], ['link', 'Feed'], ['link', 'Archive'], ['link', 'Trash'],
+      ['button', 'Sign out'], ['link', 'News'], ['link', 'To-do'], ['link', 'Settings'], ['link', 'Feed'], ['link', 'Archive'], ['link', 'Trash'],
       ['link', article.title], ['link', `Read saved article: ${article.title}`],
     ]) {
       await user.tab()

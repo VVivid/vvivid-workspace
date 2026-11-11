@@ -9,6 +9,8 @@ import { Pagination } from '@/components/pagination'
 import { urlWithPagePosition } from '@/pagination'
 import { Todo } from '@/todo'
 import { ThemePicker } from '@/theme'
+import { Settings } from '@/settings'
+import type { SettingsEditor } from '@/settings'
 import type { TodoComposer } from '@/todo'
 import type { Article, Bootstrap } from '@/types'
 
@@ -52,6 +54,12 @@ function Sections({ data }: { data: Bootstrap }) {
             <path d="m3 6 2 2 4-4M12 6h9M12 17h9M3 14h6v6H3z" />
           </svg>
           <span>To-do</span>
+        </a>
+        <a href="/settings" aria-current={data.section === 'settings' ? 'page' : undefined}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6" />
+          </svg>
+          <span>Settings</span>
         </a>
       </nav>
     </aside>
@@ -236,16 +244,17 @@ function Reader({ data, article, actionsPending, saveNotice }: {
 
 function Gate({ data, saveNotice }: { data: Bootstrap; saveNotice?: ReactNode }) {
   const todo = data.section === 'todo'
+  const settings = data.section === 'settings'
   return (
     <main id="main" tabIndex={-1} className="gate page-width">
       {saveNotice}
       <p className="eyebrow">A quiet corner of the internet</p>
-      <h1>{todo ? 'To-do' : 'Your reading shelf'}</h1>
-      <p className="subtitle">{todo ? 'Your private checklist.' : 'Good stories, saved for a slower moment.'}</p>
+      <h1>{settings ? 'Reading preferences' : todo ? 'To-do' : 'Your reading shelf'}</h1>
+      <p className="subtitle">{settings ? 'Guide what your agent finds for you.' : todo ? 'Your private checklist.' : 'Good stories, saved for a slower moment.'}</p>
       <Separator />
       <h2>{data.configured ? 'Make yourself at home.' : 'Your shelf is being prepared.'}</h2>
       {data.configured
-        ? <p>{todo ? 'Sign in to view your tasks.' : 'Sign in to read your private collection of stories, ideas, and things worth keeping.'}</p>
+        ? <p>{settings ? 'Sign in to view your reading preferences.' : todo ? 'Sign in to view your tasks.' : 'Sign in to read your private collection of stories, ideas, and things worth keeping.'}</p>
         : <p>Newsfeed identity is not configured. Your account administrator can finish the setup.</p>}
       {data.configured && (
         <Button asChild><a href={data.sign_in_url}>Sign in <Arrow /></a></Button>
@@ -254,8 +263,12 @@ function Gate({ data, saveNotice }: { data: Bootstrap; saveNotice?: ReactNode })
   )
 }
 
-export function App({ data, actionsPending = false, saveNotice, todoComposer }: {
-  data: Bootstrap; actionsPending?: boolean; saveNotice?: ReactNode; todoComposer?: TodoComposer
+export function App({ data, actionsPending = false, saveNotice, todoComposer, settingsEditor }: {
+  data: Bootstrap
+  actionsPending?: boolean
+  saveNotice?: ReactNode
+  todoComposer?: TodoComposer
+  settingsEditor?: SettingsEditor
 }) {
   return (
     <>
@@ -267,13 +280,15 @@ export function App({ data, actionsPending = false, saveNotice, todoComposer }: 
         <div className="library-layout">
           <Sections data={data} />
           <div className="library-content">
-            {data.section !== 'todo' && <NewsViews data={data} />}
-            {data.section === 'todo'
-              ? data.todo && <Todo list={data.todo} csrf={data.csrf} canWrite={data.can_write}
-                pending={actionsPending} composer={todoComposer} saveNotice={saveNotice} />
-              : data.view === 'reader' && data.article
-                ? <Reader data={data} article={data.article} actionsPending={actionsPending} saveNotice={saveNotice} />
-                : <Shelf data={data} actionsPending={actionsPending} saveNotice={saveNotice} />}
+            {(!data.section || data.section === 'news') && <NewsViews data={data} />}
+            {data.section === 'settings'
+              ? data.settings && settingsEditor && <Settings data={data} editor={settingsEditor} pending={actionsPending} saveNotice={saveNotice} />
+              : data.section === 'todo'
+                ? data.todo && <Todo list={data.todo} csrf={data.csrf} canWrite={data.can_write}
+                  pending={actionsPending} composer={todoComposer} saveNotice={saveNotice} />
+                : data.view === 'reader' && data.article
+                  ? <Reader data={data} article={data.article} actionsPending={actionsPending} saveNotice={saveNotice} />
+                  : <Shelf data={data} actionsPending={actionsPending} saveNotice={saveNotice} />}
           </div>
         </div>
       )}

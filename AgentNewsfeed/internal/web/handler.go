@@ -69,8 +69,10 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 	mux.HandleFunc("GET /trash", h.index)
 	mux.HandleFunc("GET /articles/{id}", h.index)
 	mux.HandleFunc("GET /todo", h.todo)
+	mux.HandleFunc("GET /settings", h.settings)
 	if auth != nil {
 		auth.Register(mux)
+		h.registerSettings(mux)
 		mux.Handle("GET /api/v1/articles", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.list)))
 		mux.Handle("GET /api/v1/articles/{id}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.detail)))
 		mux.Handle("POST /api/v1/articles/{id}/archive", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.archive(true)))
@@ -87,6 +89,7 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 		mux.HandleFunc("/api/v1/articles", unconfigured)
 		mux.HandleFunc("/api/v1/articles/", unconfigured)
 		mux.HandleFunc("/api/v1/todos", unconfigured)
+		mux.HandleFunc("/api/v1/settings/", unconfigured)
 		mux.HandleFunc("/auth/", unconfigured)
 		mux.HandleFunc("/thumbnails/", unconfigured)
 	}
@@ -141,6 +144,7 @@ type bootstrap struct {
 	Before        string                    `json:"before,omitempty"`
 	PageSize      int                       `json:"page_size,omitzero"`
 	Todo          *sqlite.TodoList          `json:"todo,omitempty"`
+	Settings      *settingsPage             `json:"settings,omitempty"`
 }
 
 func (h *handler) index(w http.ResponseWriter, r *http.Request) {
@@ -468,6 +472,8 @@ func writeSafeError(w http.ResponseWriter, err error, message string) {
 		status = http.StatusUnauthorized
 	case errors.Is(err, sqlite.ErrNotFound):
 		status = http.StatusNotFound
+	case errors.Is(err, sqlite.ErrLimit):
+		status = http.StatusTooManyRequests
 	case errors.Is(err, sqlite.ErrConflict), errors.Is(err, sqlite.ErrIdempotencyConflict):
 		status = http.StatusConflict
 	}
