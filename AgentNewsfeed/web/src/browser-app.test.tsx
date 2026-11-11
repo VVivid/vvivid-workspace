@@ -80,6 +80,7 @@ describe('browser navigation', () => {
     await user.click(screen.getByRole('link', { name: 'Archive' }))
     expect(await screen.findByRole('heading', { name: 'Your archive' })).toBeVisible()
     expect(screen.getByRole('main')).toHaveFocus()
+    expect(window.scrollTo).toHaveBeenCalledExactlyOnceWith(0, 0)
     expect(request).toHaveBeenCalledWith(new URL('/archive', window.location.origin), expect.objectContaining({
       method: 'GET', mode: 'same-origin', credentials: 'same-origin', cache: 'no-store', redirect: 'error',
       headers: { Accept: mediaType, 'X-Newsfeed-Page-Size': '3' },
@@ -89,6 +90,7 @@ describe('browser navigation', () => {
     await user.click(screen.getByRole('link', { name: `Read saved article: ${article.title}` }))
     expect(await screen.findByRole('heading', { name: article.title, level: 1 })).toBeVisible()
     expect(screen.getByRole('main')).toHaveFocus()
+    expect(window.scrollTo).toHaveBeenCalledTimes(2)
     expect(window.location.pathname + window.location.search).toBe('/articles/story?from=archive&cursor=second-page')
     expect(screen.getByRole('link', { name: 'Back to archive' })).toHaveAttribute('href', '/archive?cursor=second-page')
 
@@ -100,6 +102,67 @@ describe('browser navigation', () => {
     expect(await screen.findByRole('heading', { name: article.title, level: 1 })).toBeVisible()
     expect(screen.getByRole('main')).toHaveFocus()
     expect(screen.getByRole('link', { name: 'Newsfeed home' })).toBe(home)
+  })
+
+  it.each(([
+    { path: '/', view: 'feed' }, { path: '/archive', view: 'archive' }, { path: '/trash', view: 'trash' },
+  ] as const).flatMap(shelf => ['Next', 'Previous'].map(direction => ({ ...shelf, direction }))))(
+    'keeps the $view viewport while loading $direction and focuses the loaded list',
+    async ({ path, view, direction }) => {
+      window.history.replaceState(null, '', `${path}?cursor=current`)
+      const user = userEvent.setup()
+      const pending = deferredPage()
+      const initialData = {
+        ...shelf, view, page: {
+          articles: [{
+            ...article,
+            archived_at: view === 'archive' ? article.updated_at : undefined,
+            trashed_at: view === 'trash' ? article.updated_at : undefined,
+          }],
+          next_cursor: 'next', previous_cursor: 'previous',
+        },
+      }
+      const position = direction === 'Next' ? { cursor: 'next' } : { before: 'previous' }
+      request.mockReturnValueOnce(pending.response)
+      const { container } = render(<BrowserApp initialData={initialData} />)
+      const main = screen.getByRole('main')
+
+      await user.click(screen.getByRole('link', { name: direction }))
+      expect(screen.getByRole('status')).toHaveTextContent('Loading page')
+      expect(screen.getByRole('status')).toHaveClass('sr-only')
+      expect(container.querySelector('.navigation-progress')).toHaveAttribute('aria-hidden', 'true')
+      expect(main.closest('[aria-busy]')).toHaveAttribute('aria-busy', 'true')
+      expect(screen.getByRole('main')).toBe(main)
+      expect(window.location.search).toBe('?cursor=current')
+      expect(window.scrollTo).not.toHaveBeenCalled()
+
+      await act(async () => pending.resolve(json({ ...initialData, ...position })))
+      expect(window.location.pathname + window.location.search).toBe(`${path}?${direction === 'Next' ? 'cursor=next' : 'before=previous'}`)
+      expect(screen.getByRole('main')).toHaveFocus()
+      expect(window.scrollTo).not.toHaveBeenCalled()
+      expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
+      expect(container.querySelector('.navigation-progress')).not.toBeInTheDocument()
+      expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    },
+  )
+
+  it('retains a failed cursor request and its viewport behavior when retrying', async () => {
+    const user = userEvent.setup()
+    request.mockResolvedValueOnce(new Response('Unavailable', { status: 503 }))
+      .mockResolvedValueOnce(json({ ...shelf, cursor: 'next' }))
+    render(<BrowserApp initialData={{ ...shelf, page: { articles: [article], next_cursor: 'next' } }} />)
+
+    await user.click(screen.getByRole('link', { name: 'Next' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('This page could not load.')
+    expect(screen.getByRole('alert')).toHaveFocus()
+    expect(screen.getByRole('heading', { name: article.title })).toBeVisible()
+    expect(window.location.search).toBe('')
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    await waitFor(() => expect(window.location.search).toBe('?cursor=next'))
+    expect(screen.getByRole('main')).toHaveFocus()
+    expect(window.scrollTo).not.toHaveBeenCalled()
+    expect(request).toHaveBeenCalledTimes(2)
   })
 
   it('keeps a loading announcement and ignores a superseded page result', async () => {
