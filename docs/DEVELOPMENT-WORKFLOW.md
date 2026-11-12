@@ -65,7 +65,7 @@ Advance automatically only when exit criteria pass and Review returns `Approved`
 
 Select checks from actual project configuration. Validate affected projects and supported consumers; shared tooling and cross-project contracts require broader impact checks. Projects retain independent dependencies, build contexts, runtime configuration, versions, and deployments. Do not introduce shared packages or synchronized releases without an agreed need.
 
-Branches and worktrees contain the whole repository. Preserve unrelated changes, coordinate shared-file edits, and inspect the complete diff before staging. Website and AgentNewsfeed workflows check matching PRs and main/release pushes. AgentNewsfeed publishes only production tags after separate activation; other projects use their manual Make commands. Select explicit local validation for every affected project, including shared tooling. CI changes require their own scope.
+Branches and worktrees contain the whole repository. Preserve unrelated changes, coordinate shared-file edits, and inspect the complete diff before staging. Website, AgentNewsfeed, AgentShoppingList and VocabBank workflows check their matching PRs and pushes. Application production tags publish only after separate activation; other projects use their manual Make commands. Select explicit local validation for every affected project, including shared tooling. CI changes require their own scope.
 
 Keep source completion, independent approval, publication, deployment, and actual runtime verification distinct. Follow [the development guide](../DEVELOPMENT.md) for build and release conventions.
 

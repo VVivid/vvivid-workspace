@@ -15,6 +15,7 @@ Before Go edits, use [Modern Go Guidelines](.agents/skills/use-modern-go/SKILL.m
 | `SSHMCP` | Authenticated MCP gateway and persistent SSH execution runner | [SSHMCP README](SSHMCP/README.md) |
 | `GoogleHealthMCP` | Google Health / Fitbit importer backed by SQLite | [Google Health README](GoogleHealthMCP/README.md) |
 | `AgentNewsfeed` | Private reading feed with browser OIDC and direct/gateway MCP | [Newsfeed README](AgentNewsfeed/README.md) |
+| `VocabBank` | Private English vocabulary capture and MCP learning content | [VocabBank README](VocabBank/README.md) |
 | `AgentShoppingList` | Agent-managed mobile shopping app with built-in MCP | [Shopping README](AgentShoppingList/README.md) |
 | `WebhookControl` | Standalone JSON webhook router with durable delivery | [Webhook Control README](WebhookControl/README.md) |
 | `examples/xtrace-example` | A runnable distributed tracing demonstration | [XTrace README](examples/xtrace-example/README.md#run) |
@@ -41,15 +42,24 @@ Use `make xtrace-check`, `make xtrace-test`, or `make xtrace-build` to select XT
 
 Use `make go-case-study-check`, `make go-case-study-test`, or `make go-case-study-build` for the Go 1.25 case-study module in `examples/go-lang-case-study`.
 
+Use `make vocab-check`, `make vocab-test`, or `make vocab-build` for VocabBank's independent Go module and Next.js static export. Install its pinned frontend dependencies with `make -C VocabBank deps`; its README also requires race, production-export browser and Docker checks for app changes.
+
 ## Pull request checks
 
-The [website workflow](.github/workflows/website.yml), [AgentNewsfeed workflow](.github/workflows/newsfeed.yml) and [AgentShoppingList workflow](.github/workflows/shopping.yml) are enabled. Other projects use manual root/project Make commands. Select the affected projects explicitly before a PR.
+The [website workflow](.github/workflows/website.yml), [AgentNewsfeed workflow](.github/workflows/newsfeed.yml), [AgentShoppingList workflow](.github/workflows/shopping.yml) and [VocabBank workflow](.github/workflows/vocabbank.yml) are enabled. Other projects use manual root/project Make commands. Select the affected projects explicitly before a PR.
 
 Website PR checks have read-only repository permissions and build both public base URLs without tailnet or publishing secrets. Main pushes run checks. After separate activation, `release/vvivid.dev/X.Y.Z` publishes staging artifacts and `vvivid.dev/vX.Y.Z` publishes production artifacts to private Zot, then records exact desired state in `VVivid/homelab-gitops`. Fleet reconciles only explicitly enabled website paths. The [publication contract](vvivid.dev/deploy/gitops/README.md) owns setup, credential boundaries and recovery; main and the old `release/vvivid-preview` branch never deploy automatically.
 
 AgentNewsfeed PR/main checks include frontend, Go/race/build, Compose, real Linux amd64 container and Helm/release policy tests. Only canonical `AgentNewsfeed/vX.Y.Z` production tags can publish after `NEWSFEED_GITOPS_ENABLED=true` and shared environment activation. Its [production contract](AgentNewsfeed/deploy/gitops/README.md) reuses the existing artifact-publication identity/App/lock; no website behavior changes.
 
 AgentShoppingList PR/main checks include browser sharing regressions, Go/race/build, real Linux amd64 container and Helm/release/publication tests. Only canonical `AgentShoppingList/vX.Y.Z` tags can publish after `SHOPPING_GITOPS_ENABLED=true` and shared environment activation. Its [production contract](AgentShoppingList/deploy/gitops/README.md) reuses the same identity/App/lock; data migration and live cutover remain separate.
+
+VocabBank PR/main checks include production-export browser tests, post-build formatting
+checks, Go/race/build, Linux amd64 candidate CLI and strict Helm/release/promotion
+tests. Only canonical `VocabBank/vX.Y.Z` tags at verified merged main commits can
+publish after repository-level `VOCAB_GITOPS_ENABLED=true` and the shared tag rule.
+Its [production contract](VocabBank/deploy/gitops/README.md) reuses the existing
+private Zot identity/App/lock and preserves operator values in the fixed GitOps file.
 
 Account for path-filtered PR checks being skipped on unrelated changes before making them required globally. Future service CI must reuse the monorepo's shared artifact-publication environment and existing Tailscale CI trust; each app remains a separate release and adoption decision.
 

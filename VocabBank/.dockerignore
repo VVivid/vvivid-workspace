@@ -1,0 +1,14 @@
+.git
+.development
+.cache
+.secrets
+data
+bin
+web/node_modules
+web/.next
+web/out
+web/test-results
+web/playwright-report
+.env
+.env.local
+*.sqlite*

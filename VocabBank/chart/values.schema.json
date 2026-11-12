@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "image",
+    "imagePullSecrets",
+    "hostname",
+    "replicaCount",
+    "maintenance",
+    "identity",
+    "persistence",
+    "resources",
+    "initImage",
+    "ingress",
+    "tls",
+    "provenance"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "image": {
+      "type": "object",
+      "required": [
+        "repository",
+        "digest"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "const": "registry.lab.vvivid.dev/products/vocabbank"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "imagePullSecrets": {
+      "const": [
+        {
+          "name": "vocabbank-registry-pull"
+        }
+      ]
+    },
+    "hostname": {
+      "const": "vocab.vvivid.dev"
+    },
+    "replicaCount": {
+      "const": 1
+    },
+    "maintenance": {
+      "type": "boolean"
+    },
+    "identity": {
+      "type": "object",
+      "required": [
+        "issuer",
+        "webClientID",
+        "existingSecret",
+        "gatewayIssuer",
+        "gatewayAudience",
+        "mcpClientIDs",
+        "existingGatewayJWKS"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "issuer": {
+          "const": "https://auth.rd.vvivid.dev/realms/vvivid-rd"
+        },
+        "webClientID": {
+          "const": "vocabbank-web"
+        },
+        "existingSecret": {
+          "const": "vocabbank-identity"
+        },
+        "gatewayIssuer": {
+          "const": "https://mcp.rd.lab.vvivid.dev"
+        },
+        "gatewayAudience": {
+          "const": "vocabbank-mcp"
+        },
+        "mcpClientIDs": {
+          "const": "vocabbank-chatgpt"
+        },
+        "existingGatewayJWKS": {
+          "const": "vocabbank-gateway-jwks"
+        }
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "required": [
+        "claimName",
+        "storageClassName",
+        "size"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "claimName": {
+          "enum": [
+            "vocabbank-acceptance",
+            "vocabbank-data"
+          ]
+        },
+        "storageClassName": {
+          "const": "rd-local-retain"
+        },
+        "size": {
+          "const": "5Gi"
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "required": [
+        "requests",
+        "limits"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "requests": {
+          "type": "object",
+          "required": [
+            "cpu",
+            "memory",
+            "ephemeral-storage"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "cpu": {
+              "enum": [
+                "50m",
+                "100m"
+              ]
+            },
+            "memory": {
+              "const": "128Mi"
+            },
+            "ephemeral-storage": {
+              "const": "64Mi"
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "required": [
+            "cpu",
+            "memory",
+            "ephemeral-storage"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "cpu": {
+              "const": "500m"
+            },
+            "memory": {
+              "const": "512Mi"
+            },
+            "ephemeral-storage": {
+              "const": "256Mi"
+            }
+          }
+        }
+      }
+    },
+    "initImage": {
+      "const": "docker.io/library/postgres:17-bookworm@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5"
+    },
+    "ingress": {
+      "type": "object",
+      "required": [
+        "enabled"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "tls": {
+      "type": "object",
+      "required": [
+        "productionEnabled",
+        "trustedCertificateReady"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "productionEnabled": {
+          "type": "boolean"
+        },
+        "trustedCertificateReady": {
+          "type": "boolean"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "channel",
+        "version",
+        "sourceRef",
+        "sourceSha",
+        "sourceRepository",
+        "runId",
+        "runAttempt",
+        "runUrl",
+        "imageDigest",
+        "chartVersion",
+        "chartDigest"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "const": "production"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+        },
+        "sourceRef": {
+          "type": "string",
+          "pattern": "^refs/tags/VocabBank/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+        },
+        "sourceSha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "sourceRepository": {
+          "const": "https://github.com/VVivid/vvivid-workspace.git"
+        },
+        "runId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "runAttempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "runUrl": {
+          "type": "string",
+          "pattern": "^https://github.com/VVivid/vvivid-workspace/actions/runs/[1-9][0-9]*$"
+        },
+        "imageDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "chartVersion": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+        },
+        "chartDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}
