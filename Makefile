@@ -1,10 +1,10 @@
 .PHONY: check test build xtrace-check xtrace-test xtrace-build website-check website-test website-build go-case-study-check go-case-study-test go-case-study-build
 
-check: xtrace-check sshmcp-check google-health-check shopping-check newsfeed-check website-check webhook-control-check go-case-study-check
+check: xtrace-check sshmcp-check google-health-check shopping-check newsfeed-check website-check webhook-control-check go-case-study-check vocab-check
 
-test: xtrace-test sshmcp-test google-health-test shopping-test newsfeed-test website-test webhook-control-test go-case-study-test
+test: xtrace-test sshmcp-test google-health-test shopping-test newsfeed-test website-test webhook-control-test go-case-study-test vocab-test
 
-build: xtrace-build sshmcp-build google-health-build shopping-build newsfeed-build website-build webhook-control-build go-case-study-build
+build: xtrace-build sshmcp-build google-health-build shopping-build newsfeed-build website-build webhook-control-build go-case-study-build vocab-build
 
 go-case-study-check:
 	$(MAKE) -C examples/go-lang-case-study check
@@ -86,3 +86,22 @@ webhook-control-test:
 
 webhook-control-build:
 	$(MAKE) -C WebhookControl build
+
+.PHONY: vocab-check vocab-test vocab-build
+
+vocab-check:
+	$(MAKE) -C VocabBank check
+
+vocab-test:
+	$(MAKE) -C VocabBank test
+
+vocab-build:
+	$(MAKE) -C VocabBank build
+
+.PHONY: vocab-chart-test vocab-container-test
+
+vocab-chart-test:
+	$(MAKE) -C VocabBank chart-test
+
+vocab-container-test:
+	$(MAKE) -C VocabBank container-test

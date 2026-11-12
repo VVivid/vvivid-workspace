@@ -13,6 +13,7 @@
 | --- | --- | --- |
 | `AgentShoppingList/` | Agent-managed mobile shopping app with built-in MCP | [README](AgentShoppingList/README.md), [local instructions](AgentShoppingList/AGENTS.md) |
 | `AgentNewsfeed/` | Private reading feed with browser Keycloak, direct/gateway MCP and production Helm | [README](AgentNewsfeed/README.md) |
+| `VocabBank/` | Private English vocabulary bank with authenticated browser capture and MCP learning content | [README](VocabBank/README.md), [local instructions](VocabBank/AGENTS.md) |
 | `GoogleHealthMCP/` | Google Health / Fitbit importer with SQLite persistence | [README](GoogleHealthMCP/README.md) |
 | `SSHMCP/` | Authenticated MCP gateway and persistent SSH execution runner | [README](SSHMCP/README.md) |
 | `WebhookControl/` | Standalone JSON webhook router with durable delivery | [README](WebhookControl/README.md), [architecture](WebhookControl/ARCHITECTURE.md) |
@@ -37,7 +38,7 @@ For a `vvivid.dev` preview, follow the [website release instructions](vvivid.dev
 - Each project owns its dependencies, build context, tests, runtime configuration, and version. Git branches and worktrees cover the whole repository; project folders do not isolate concurrent Git operations.
 - For each new editing task, create or reuse its dedicated branch and worktree before editing, including documentation changes. Read-only investigation may use the current checkout. Name branches `<type>/<area>/<task>`; use `feature`, `bugfix`, `docs`, `refactor`, `chore`, or `release`, and a project area or `workspace` for shared/cross-project work. Follow the [branching procedure](docs/DEVELOPMENT-WORKFLOW.md#branches-and-worktrees).
 - Keep all checkpoints and sequential agent stages for one task in the same worktree; reuse it for follow-ups. Deliver through a PR targeting `main`; commit, push, PR creation, merge, and release actions require the corresponding user instruction. The user controls merging. Never push directly to `main`, force-push, or rewrite published history.
-- Website, AgentNewsfeed and AgentShoppingList CI are enabled. Other projects retain manual Make commands; select their checks explicitly when changing them.
+- Website, AgentNewsfeed, AgentShoppingList and VocabBank CI are enabled. Other projects retain manual Make commands; select their checks explicitly when changing them.
 - Keep source completion, independent approval, release, deployment, and runtime verification distinct. Planning does not authorize live infrastructure or data changes.
 - Keep secrets and personal/runtime data out of source, docs, fixtures, and logs. Retain lasting contracts and operating instructions in maintained documentation; development diaries stay local.
 - When adding or moving projects, update both maps and relevant build/CI entry points. Optional project `AGENTS.md` files add local guidance without duplicating the shared methodology.
