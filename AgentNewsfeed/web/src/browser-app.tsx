@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { FormEvent, MouseEvent } from 'react'
 import { App } from '@/app'
+import type { ArticleBrowseDraft, BrowseArticles } from '@/article-controls'
 import { Button } from '@/components/ui/button'
-import { observeViewportPageSize, pageSizeHeader, viewportPageSize } from '@/pagination'
+import { observePageSize, pageSizeHeader, preferredPageSize, rememberPageSize, requestedPageSize, urlWithPagePosition } from '@/pagination'
 import { todoFormPath } from '@/todo'
 import type { TodoDraft } from '@/todo'
 import type { Bootstrap } from '@/types'
@@ -15,12 +16,13 @@ const articleStateFormPath = /^\/api\/v1\/articles\/[^/]+\/(?:archive|restore|tr
 type PageRequest = {
   url: URL
   history: 'push' | 'current'
-  refresh?: 'preserve-viewport' | 'viewport-change'
+  refresh?: 'preserve-viewport' | 'page-size-change'
   preserveScroll?: boolean
 }
 type Page = { data: Bootstrap; pathAndQuery: string; focus?: { hash: string; scrollTop: boolean } }
 type PageProblem = { message: string; retry: PageRequest }
 type SaveProblem = { message: string; sourcePathAndQuery: string }
+type ArticleBrowseNavigation = { editRevision: number; preserveDraft?: boolean }
 
 function sameOriginURL(href: string): URL | undefined {
   try {
@@ -90,7 +92,7 @@ function saveError(status: number | undefined, todoWrite: boolean) {
 }
 
 export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
-  const viewportSize = useSyncExternalStore(observeViewportPageSize, viewportPageSize)
+  const preferredSize = useSyncExternalStore(observePageSize, preferredPageSize)
   const [addressPathAndQuery, setAddressPathAndQuery] = useState(() => pathAndQuery(window.location))
   const [page, setPage] = useState<Page | null>(() => ({
     data: initialData,
@@ -101,6 +103,9 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
   const [saveProblem, setSaveProblem] = useState<SaveProblem | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [articleBrowseDraft, setArticleBrowseDraft] = useState<ArticleBrowseDraft>({
+    query: initialData.query ?? '', pageSize: initialData.page_size ?? 10,
+  })
   const [todoDraft, setTodoDraft] = useState<(TodoDraft & { id: string; csrf: string }) | null>(null)
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft | null>(null)
   const container = useRef<HTMLDivElement>(null)
@@ -110,6 +115,14 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
   // History events need the last observed address before React commits its render.
   const lastObservedAddress = useRef(addressPathAndQuery)
   const pendingWrite = useRef<Promise<URL> | null>(null)
+  const pendingSearch = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const articleBrowseEditRevision = useRef(0)
+  const loadedArticleBrowse = useRef(articleBrowseDraft)
+
+  const cancelPendingSearch = useCallback(() => {
+    clearTimeout(pendingSearch.current)
+    pendingSearch.current = undefined
+  }, [])
 
   // The draft outlives the Settings view, including visits to News or To-do.
   useEffect(() => {
@@ -121,10 +134,19 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
     return () => window.removeEventListener('beforeunload', warn)
   }, [settingsDraft])
 
-  const loadPage = useCallback(async (request: PageRequest) => {
+  const loadPage = useCallback(async (request: PageRequest, browseIntent?: ArticleBrowseNavigation) => {
     const { url, history, refresh, preserveScroll } = request
     const requestedPathAndQuery = pathAndQuery(url)
     if (history === 'current' && requestedPathAndQuery !== pathAndQuery(window.location)) return
+    // A save continuation belongs to the action that started it. Leave newer
+    // typing and its timer intact, just as when an older search read completes.
+    const editRevision = browseIntent?.editRevision ?? articleBrowseEditRevision.current
+    if (editRevision === articleBrowseEditRevision.current) {
+      cancelPendingSearch()
+      if (!browseIntent?.preserveDraft) {
+        setArticleBrowseDraft({ query: url.searchParams.get('q') ?? '', pageSize: requestedPageSize(url) })
+      }
+    }
     const attempt = ++navigation.current.sequence
     const updateAddress = () => {
       if (history === 'push' && url.href !== window.location.href) {
@@ -142,10 +164,10 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
       await pendingWrite.current?.catch(() => undefined)
       if (attempt !== navigation.current.sequence) return
 
-      const hasResponsiveList = url.pathname !== '/todo' && url.pathname !== '/settings' && !url.pathname.startsWith('/articles/')
+      const hasArticleList = url.pathname !== '/todo' && url.pathname !== '/settings' && !url.pathname.startsWith('/articles/')
       let data: Bootstrap
       for (;;) {
-        const requestedSize = hasResponsiveList ? viewportPageSize() : undefined
+        const requestedSize = hasArticleList ? requestedPageSize(url) : undefined
         // Let superseded GETs finish because canceling a Keycloak grant
         // refresh can revoke the session. Only the latest result changes the UI.
         data = await browserJSON<Bootstrap>(url, { pageSize: requestedSize })
@@ -153,14 +175,18 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
         if (typeof data?.authenticated !== 'boolean' ||
           (data.authenticated && data.section === 'todo' && !Array.isArray(data.todo?.tasks)) ||
           (data.authenticated && data.section === 'settings' && !data.settings?.preferences) ||
-          (data.page_size !== undefined && data.page_size !== requestedSize)) {
+          (hasArticleList && data.page_size !== undefined && data.page_size !== requestedSize)) {
           throw new Error('Invalid page response')
         }
-        // Finish this same navigation at the new size if the viewport changed during the GET.
-        if (data.page_size === undefined || data.page_size === viewportPageSize()) break
+        // A preference changed in another tab can supersede an in-flight read.
+        if (!hasArticleList || data.page_size === undefined || data.page_size === requestedPageSize(url)) break
       }
       updateAddress()
       navigation.current.savedSinceLoad = false
+      loadedArticleBrowse.current = { query: data.query ?? '', pageSize: data.page_size ?? requestedPageSize(url) }
+      if (!browseIntent?.preserveDraft && editRevision === articleBrowseEditRevision.current) {
+        setArticleBrowseDraft(loadedArticleBrowse.current)
+      }
       setTodoDraft(draft => data.authenticated && draft?.csrf === data.csrf ? draft : null)
       setSettingsDraft(draft => data.authenticated && draft?.csrf === data.csrf ? draft : null)
       setPage({
@@ -176,8 +202,8 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
         setTodoDraft(null)
         setSettingsDraft(null)
       }
-      // A failed resize can keep the last successfully loaded page at this address.
-      if ((history === 'current' && refresh !== 'viewport-change') || savedSinceLoad || status === 401 || status === 403) {
+      // A failed preference refresh can keep the last successfully loaded page.
+      if ((history === 'current' && refresh !== 'page-size-change') || savedSinceLoad || status === 401 || status === 403) {
         updateAddress()
         setPage(null)
       } else {
@@ -193,17 +219,21 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
         setLoading(false)
       }
     }
-  }, [])
+  }, [cancelPendingSearch])
 
   useEffect(() => {
     function onPopState() {
+      cancelPendingSearch()
       const url = pageURL(window.location.href)
       if (!url) return
       // Keep idle fragment navigation native. During a request, history chooses the next view.
       const nextAddress = pathAndQuery(url)
       const sameAddress = nextAddress === lastObservedAddress.current
       const requestPending = navigation.current.loadingPage || pendingWrite.current !== null
-      if (sameAddress && !requestPending) return
+      if (sameAddress && !requestPending) {
+        setArticleBrowseDraft(loadedArticleBrowse.current)
+        return
+      }
       lastObservedAddress.current = nextAddress
       setAddressPathAndQuery(nextAddress)
       void loadPage({ url, history: 'current' })
@@ -212,23 +242,47 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
     window.addEventListener('popstate', onPopState)
     return () => {
       window.removeEventListener('popstate', onPopState)
+      cancelPendingSearch()
       navigationState.sequence++
     }
-  }, [loadPage])
+  }, [cancelPendingSearch, loadPage])
 
   useEffect(() => {
     if (!page) return
     const loadedSize = page.data.page_size
-    if (loading || saving || pageProblem || loadedSize === undefined || loadedSize === viewportSize) return
+    const url = new URL(window.location.href)
+    if (loading || saving || pageProblem || loadedSize === undefined || page.data.view === 'reader' ||
+      loadedSize === requestedPageSize(url)) return
     let active = true
     // Let a foreground navigation or effect cleanup take precedence over this refresh.
     queueMicrotask(() => {
-      if (!active || navigation.current.loadingPage || pendingWrite.current || loadedSize === viewportPageSize()) return
-      const url = new URL(window.location.href)
-      if (page.pathAndQuery === pathAndQuery(url)) void loadPage({ url, history: 'current', refresh: 'viewport-change' })
+      if (!active || navigation.current.loadingPage || pendingWrite.current || loadedSize === requestedPageSize(url)) return
+      if (page.pathAndQuery === pathAndQuery(url)) {
+        // A different size starts at the first matching row, including on reload.
+        url.searchParams.delete('cursor')
+        url.searchParams.delete('before')
+        void loadPage({ url, history: 'push', refresh: 'page-size-change', preserveScroll: true })
+      }
     })
     return () => { active = false }
-  }, [loadPage, loading, page, pageProblem, saving, viewportSize])
+  }, [loadPage, loading, page, pageProblem, saving, preferredSize])
+
+  const browseArticles = useCallback<BrowseArticles>((query, pageSize, timing = 'immediate') => {
+    cancelPendingSearch()
+    const path = window.location.pathname
+    if (!['/', '/archive', '/trash'].includes(path)) return
+    const editRevision = ++articleBrowseEditRevision.current
+    setArticleBrowseDraft({ query, pageSize })
+    const browse = () => {
+      pendingSearch.current = undefined
+      // The server owns query normalization; JavaScript uses different Unicode whitespace.
+      const url = new URL(urlWithPagePosition(path, { query, page_size: pageSize }), window.location.origin)
+      rememberPageSize(pageSize)
+      void loadPage({ url, history: 'push', refresh: 'preserve-viewport', preserveScroll: true }, { editRevision, preserveDraft: true })
+    }
+    if (timing === 'debounced') pendingSearch.current = setTimeout(browse, 250)
+    else browse()
+  }, [cancelPendingSearch, loadPage])
 
   useLayoutEffect(() => {
     // Leave focus to the destination when the user navigates during a save.
@@ -267,6 +321,9 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
   }
 
   async function submitState(url: URL, form: URLSearchParams, sourcePathAndQuery: string) {
+    cancelPendingSearch()
+    const editRevision = articleBrowseEditRevision.current
+    setArticleBrowseDraft(loadedArticleBrowse.current)
     const startedAt = navigation.current.sequence
     const todoWrite = url.pathname === todoFormPath
     setPageProblem(null)
@@ -291,7 +348,7 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
         setSettingsDraft(null)
         setPage(null)
         if (startedAt === navigation.current.sequence) {
-          void loadPage({ url: new URL(window.location.href), history: 'current' })
+          void loadPage({ url: new URL(window.location.href), history: 'current' }, { editRevision })
         }
       } else {
         setSaveProblem({ message: saveError(status, todoWrite), sourcePathAndQuery })
@@ -310,9 +367,9 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
         pathAndQuery(destination) === pathAndQuery(window.location)
       if (todoWrite || shelfWrite) {
         // Keep the current URL, scroll and compose controls during checklist saves.
-        void loadPage({ url: new URL(window.location.href), history: 'current', refresh: 'preserve-viewport' })
+        void loadPage({ url: new URL(window.location.href), history: 'current', refresh: 'preserve-viewport' }, { editRevision })
       } else {
-        void loadPage({ url: destination, history: 'push' })
+        void loadPage({ url: destination, history: 'push' }, { editRevision })
       }
     }
   }
@@ -444,6 +501,8 @@ export function BrowserApp({ initialData }: { initialData: Bootstrap }) {
     {/* Keep the shell mounted across history loads while hiding any old view. */}
     <div aria-busy={busy} hidden={!pageMatchesAddress}>
       {page && <App data={page.data} actionsPending={busy || !pageMatchesAddress}
+        articleBrowseDraft={articleBrowseDraft}
+        onBrowse={browseArticles}
         saveNotice={showSaveNoticeInPage ? saveNotice : undefined}
         settingsEditor={{
           draft: settingsDraft,

@@ -2,6 +2,7 @@ import { Arrow } from '@/components/arrow'
 import { Button } from '@/components/ui/button'
 import { urlWithPagePosition } from '@/pagination'
 import type { PageLinks } from '@/types'
+import type { PagePosition } from '@/pagination'
 
 function PageLink({ direction, href }: { direction: 'prev' | 'next'; href?: string }) {
   const contents = direction === 'prev' ? <><Arrow direction="left" /> Previous</> : <>Next <Arrow /></>
@@ -10,16 +11,17 @@ function PageLink({ direction, href }: { direction: 'prev' | 'next'; href?: stri
     : <Button type="button" variant="outline" disabled>{contents}</Button>
 }
 
-export function Pagination({ path, page, stale }: { path: string; page?: PageLinks; stale: boolean }) {
+export function Pagination({ path, page, stale, position = {} }: { path: string; page?: PageLinks; stale: boolean; position?: PagePosition }) {
   const previousCursor = page?.previous_cursor
   const nextCursor = page?.next_cursor
   if (!stale && !previousCursor && !nextCursor) return null
 
-  const previousURL = previousCursor ? urlWithPagePosition(path, { before: previousCursor }) : undefined
-  const nextURL = nextCursor ? urlWithPagePosition(path, { cursor: nextCursor }) : undefined
+  const context = { query: position.query, page_size: position.page_size }
+  const previousURL = previousCursor ? urlWithPagePosition(path, { ...context, before: previousCursor }) : undefined
+  const nextURL = nextCursor ? urlWithPagePosition(path, { ...context, cursor: nextCursor }) : undefined
   return <nav className="pagination" aria-label="Pagination">
     <PageLink direction="prev" href={previousURL} />
     <PageLink direction="next" href={nextURL} />
-    {stale && <a className="pagination-restart" href={path}>Start of list</a>}
+    {stale && <a className="pagination-restart" href={urlWithPagePosition(path, context)}>Start of list</a>}
   </nav>
 }

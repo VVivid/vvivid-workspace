@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"agentnewsfeed/internal/feed"
@@ -143,6 +144,7 @@ type bootstrap struct {
 	Cursor        string                    `json:"cursor,omitempty"`
 	Before        string                    `json:"before,omitempty"`
 	PageSize      int                       `json:"page_size,omitzero"`
+	Query         string                    `json:"query,omitempty"`
 	Todo          *sqlite.TodoList          `json:"todo,omitempty"`
 	Settings      *settingsPage             `json:"settings,omitempty"`
 }
@@ -172,7 +174,8 @@ func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		cursor, before := data.pageBoundary()
-		in := feed.ListInput{Cursor: cursor, Archived: data.View == "archive" || data.FromArchive, Trashed: data.View == "trash" || data.FromTrash}
+		in := feed.BrowserListInput{ListInput: feed.ListInput{Limit: data.PageSize, Cursor: cursor,
+			Archived: data.View == "archive" || data.FromArchive, Trashed: data.View == "trash" || data.FromTrash}, Query: data.Query}
 		if data.View == "reader" {
 			if err := in.ValidateCursor(p.Owner()); err != nil {
 				writeError(w, err)
@@ -192,7 +195,13 @@ func (h *handler) index(w http.ResponseWriter, r *http.Request) {
 			}
 			data.MutationKey = rand.Text()
 		} else {
-			data.PageSize = browserPageSize(r)
+			if !query.Has("page_size") {
+				data.PageSize, err = browserPageSize(r)
+				if err != nil {
+					writeError(w, err)
+					return
+				}
+			}
 			in.Limit = data.PageSize
 			page, err := h.service.BrowseArticles(r.Context(), p, in, before)
 			if err != nil {
@@ -398,12 +407,22 @@ func (h *handler) trash(restore bool) http.Handler {
 		}
 		if returnTo == "" {
 			returnTo = "/articles/" + url.PathEscape(out.Article.ID) + "?from=" + from
+		} else if strings.HasPrefix(returnTo, "/articles/") {
+			// Trash changes which explicit reader view can load the article. Keep
+			// the query and size, but discard a boundary from the previous shelf.
+			destination, _ := url.ParseRequestURI(returnTo)
+			position := destination.Query()
+			position.Set("from", from)
+			position.Del("cursor")
+			position.Del("before")
+			destination.RawQuery = position.Encode()
+			returnTo = destination.String()
 		}
 		respondToStateForm(w, r, returnTo)
 	})
 }
 
-// Shelf actions return to the current list. Restrict this optional destination
+// Article actions return to the current shelf or reader. Restrict this destination
 // before mutating so native forms cannot become an open redirect.
 func articleReturnTo(r *http.Request) (string, error) {
 	query := r.URL.Query()
@@ -414,18 +433,26 @@ func articleReturnTo(r *http.Request) (string, error) {
 		return "", feed.ErrInvalid
 	}
 	destination, err := url.ParseRequestURI(query.Get("return_to"))
+	reader := err == nil && destination.Path == "/articles/"+r.PathValue("id")
 	if err != nil || destination.IsAbs() || destination.Host != "" || destination.Fragment != "" ||
-		(destination.Path != "/" && destination.Path != "/archive" && destination.Path != "/trash") || destination.RawPath != "" {
+		(!reader && destination.Path != "/" && destination.Path != "/archive" && destination.Path != "/trash") || destination.RawPath != "" {
 		return "", feed.ErrInvalid
 	}
 	position, err := url.ParseQuery(destination.RawQuery)
-	if err != nil || len(position) > 1 {
+	if err != nil {
 		return "", feed.ErrInvalid
 	}
 	for name, values := range position {
-		if (name != "cursor" && name != "before") || len(values) != 1 || values[0] == "" || len(values[0]) > 1024 {
+		if len(values) != 1 || len(values[0]) > 1024 ||
+			(name != "cursor" && name != "before" && name != "q" && name != "page_size" && !(reader && name == "from")) {
 			return "", feed.ErrInvalid
 		}
+	}
+	if reader && (len(position["from"]) != 1 || (position.Get("from") != "feed" && position.Get("from") != "archive" && position.Get("from") != "trash")) {
+		return "", feed.ErrInvalid
+	}
+	if err := new(bootstrap).readPagePosition(position); err != nil {
+		return "", err
 	}
 	return destination.String(), nil
 }
