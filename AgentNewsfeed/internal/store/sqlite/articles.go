@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -105,17 +106,32 @@ func (s *Store) ListArticles(ctx context.Context, owner Owner, cursor Cursor, li
 	if limit < 1 || limit > 51 || (cursor.Archived && cursor.Trashed) {
 		return nil, ErrLimit
 	}
-	// The summary selection excludes both Markdown and JPEG payloads.
-	filter, order := "a.trashed_at IS NULL AND a.archived_at IS NULL", "a.created_at"
+	return listArticles(ctx, s.read, owner, cursor, limit, "")
+}
+
+func articleSelection(owner Owner, cursor Cursor, query string) (filter, order string, args []any) {
+	filter = "a.owner_id = ? AND a.owner_id IN (SELECT id FROM accounts WHERE disabled_at IS NULL) AND "
+	args = []any{owner.id}
+	view, order := "a.trashed_at IS NULL AND a.archived_at IS NULL", "a.created_at"
 	if cursor.Trashed {
-		filter, order = "a.trashed_at IS NOT NULL", "a.trashed_at"
+		view, order = "a.trashed_at IS NOT NULL", "a.trashed_at"
 	} else if cursor.Archived {
-		filter, order = "a.trashed_at IS NULL AND a.archived_at IS NOT NULL", "a.archived_at"
+		view, order = "a.trashed_at IS NULL AND a.archived_at IS NOT NULL", "a.archived_at"
 	}
-	pageSQL, args := pageRange(order, "a.id", cursor.Timestamp, cursor.ID, cursor.Before, limit)
-	rows, err := s.read.QueryContext(ctx, "SELECT "+articleSummaryColumns+", ''"+articleFrom+
-		"WHERE a.owner_id = ? AND a.owner_id IN (SELECT id FROM accounts WHERE disabled_at IS NULL) AND "+filter+pageSQL,
-		append([]any{owner.id}, args...)...)
+	filter += view
+	for term := range strings.FieldsSeq(query) {
+		filter += " AND instr(newsfeed_lower(a.title || ' ' || a.summary || ' ' || a.canonical_url), ?) > 0"
+		args = append(args, term)
+	}
+	return filter, order, args
+}
+
+func listArticles(ctx context.Context, db queryer, owner Owner, cursor Cursor, limit int, query string) ([]Article, error) {
+	// The summary selection excludes both Markdown and JPEG payloads.
+	filter, order, args := articleSelection(owner, cursor, query)
+	pageSQL, pageArgs := pageRange(order, "a.id", cursor.Timestamp, cursor.ID, cursor.Before, limit)
+	rows, err := db.QueryContext(ctx, "SELECT "+articleSummaryColumns+", ''"+articleFrom+
+		"WHERE "+filter+pageSQL, append(args, pageArgs...)...)
 	if err != nil {
 		return nil, err
 	}

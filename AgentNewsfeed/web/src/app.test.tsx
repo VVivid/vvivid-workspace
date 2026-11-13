@@ -46,8 +46,8 @@ describe('private reading shelf', () => {
     expect(sections.getAllByRole('link')).toHaveLength(3)
     expect(sections.getByRole('link', { name: 'News', current: 'page' })).toHaveAttribute('href', '/')
     expect(sections.getByRole('link', { name: 'To-do' })).toHaveAttribute('href', '/todo')
-    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.getByRole('searchbox', { name: 'Search saved news' })).toBeVisible()
+    expect(screen.getByRole('combobox', { name: 'Articles per page' })).toHaveValue('10')
   })
 
   it('supports keyboard navigation through the skip link, library and reader', async () => {
@@ -56,11 +56,107 @@ describe('private reading shelf', () => {
     for (const [role, name] of [
       ['link', 'Skip to reading'], ['link', 'Newsfeed home'], ['button', 'Light'], ['button', 'Dark'],
       ['button', 'Sign out'], ['link', 'News'], ['link', 'To-do'], ['link', 'Settings'], ['link', 'Feed'], ['link', 'Archive'], ['link', 'Trash'],
+      ['searchbox', 'Search saved news'], ['combobox', 'Articles per page'],
       ['link', article.title], ['link', `Read saved article: ${article.title}`],
     ]) {
       await user.tab()
       expect(screen.getByRole(role, { name })).toHaveFocus()
     }
+  })
+
+  it('highlights literal search terms and shows the introduction around a late match', () => {
+    const introduction = 'Source background. '.repeat(30) + 'C++ [50%]_ source detail follows.'
+    const { container, rerender } = render(<App data={{ ...shelf, query: 'c++ [50%]_', page_size: 20, page: {
+      articles: [{ ...article, title: 'C++ [50%]_ source title', summary: introduction }], total: 1, start: 1, end: 1,
+    } }} />)
+    const summary = container.querySelector('.summary')!
+    expect(summary.textContent).toMatch(/^…/)
+    expect(summary.textContent).toContain('C++ [50%]_ source detail')
+    expect(Array.from(summary.querySelectorAll('mark'), mark => mark.textContent)).toEqual(['C++', '[50%]_'])
+    expect(screen.getByText('1–1 of 1 matching articles')).toBeVisible()
+    rerender(<App data={{ ...shelf, page: { articles: [{ ...article, summary: introduction }] } }} />)
+    expect(container.querySelector('.summary')).toHaveTextContent(introduction)
+    expect(container.querySelector('mark')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    { name: 'Turkish dotted I', title: 'İstanbul source', query: 'istanbul', matches: ['İstanbul'] },
+    { name: 'offset after Turkish dotted I', title: 'İstanbul source', query: 'source', matches: ['source'] },
+    { name: 'Greek capital final sigma', title: 'ΟΣ ος', query: 'οσ', matches: ['ΟΣ'] },
+    { name: 'distinct Greek lowercase final sigma', title: 'ΟΣ ος', query: 'ος', matches: ['ος'] },
+    { name: 'supplementary letters and offsets', title: '😀𐐀 İstanbul source', query: '𐐨 source', matches: ['𐐀', 'source'] },
+    { name: 'Unicode 16 Cyrillic mapping', title: '\u1c89 \u1c8a', query: '\u1c8a', matches: ['\u1c8a'] },
+    { name: 'Unicode 16 Latin mapping', title: '\ua7cb \u0264', query: '\u0264', matches: ['\u0264'] },
+    { name: 'Unicode 16 Garay mapping', title: '\u{10d50} \u{10d70}', query: '\u{10d70}', matches: ['\u{10d70}'] },
+    { name: 'Unicode 17 Beria Erfe mapping', title: '\u{16ea0} \u{16ebb}', query: '\u{16ebb}', matches: ['\u{16ebb}'] },
+  ])('matches backend lowercase semantics for $name without changing source text', ({ title, query, matches }) => {
+    const { container } = render(<App data={{ ...shelf, query, page: { articles: [{ ...article, title }] } }} />)
+    const heading = container.querySelector('.article-introduction h2')!
+    expect(heading.textContent).toBe(`${title} `)
+    expect(Array.from(heading.querySelectorAll('mark'), mark => mark.textContent)).toEqual(matches)
+  })
+
+  it('shows the original introduction around a late Unicode match', () => {
+    const introduction = 'İ '.repeat(150) + 'İstanbul source detail follows.'
+    const { container } = render(<App data={{ ...shelf, query: 'istanbul source', page: {
+      articles: [{ ...article, summary: introduction }],
+    } }} />)
+    const summary = container.querySelector('.summary')!
+    expect(summary.textContent).toMatch(/^…/)
+    expect(summary.textContent).toContain('İstanbul source detail follows.')
+    expect(Array.from(summary.querySelectorAll('mark'), mark => mark.textContent)).toEqual(['İstanbul', 'source'])
+  })
+
+  it.each([
+    { name: 'CJK', prefix: '漢字'.repeat(120) },
+    { name: 'wide ASCII', prefix: 'W'.repeat(400) },
+  ])('starts the introduction excerpt at its first match after a long $name prefix', ({ prefix }) => {
+    const introduction = `${prefix} needle following source detail.`
+    const { container } = render(<App data={{ ...shelf, query: 'needle', page: {
+      articles: [{ ...article, summary: introduction }],
+    } }} />)
+    const summary = container.querySelector('.summary')!
+    // The two-line clamp must not spend its visible lines on leading context.
+    expect(summary.textContent).toBe('…needle following source detail.')
+    expect(summary.querySelector('mark')).toHaveTextContent('needle')
+  })
+
+  it('keeps the whole first search match when a valid single term exceeds the excerpt budget', () => {
+    const term = 'W'.repeat(300)
+    const introduction = `Original source context. ${term} following source detail.`
+    const { container, rerender } = render(<App data={{ ...shelf, query: term.toLowerCase(), page: {
+      articles: [{ ...article, summary: introduction }],
+    } }} />)
+    const summary = container.querySelector('.summary')!
+    expect(summary.textContent).toBe(`…${term}…`)
+    expect(summary.querySelector('mark')?.textContent).toBe(term)
+    rerender(<App data={{ ...shelf, page: { articles: [{ ...article, summary: introduction }] } }} />)
+    expect(container.querySelector('.summary')?.textContent).toBe(introduction)
+    expect(container.querySelector('mark')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    { match: 'match', query: 'match', trailingEmoji: 127 },
+    { match: '𐐀match', query: '𐐨match', trailingEmoji: 126 },
+  ])('keeps supplementary characters whole at both introduction excerpt boundaries for $match', ({ match, query, trailingEmoji }) => {
+    const introduction = '😀'.repeat(40) + match + '😀'.repeat(160)
+    const { container } = render(<App data={{ ...shelf, query, page: {
+      articles: [{ ...article, summary: introduction }],
+    } }} />)
+    const summary = container.querySelector('.summary')!
+    expect(summary.textContent).toBe(`…${match}${'😀'.repeat(trailingEmoji)}…`)
+    expect(summary.querySelector('mark')?.textContent).toBe(match)
+  })
+
+  it('highlights markup and regex punctuation as escaped literal source text', () => {
+    const title = '<img src=x onerror=alert(1)> C++ [50%]_'
+    const { container } = render(<App data={{ ...shelf, query: '<img c++ [50%]_', page: {
+      articles: [{ ...article, title }],
+    } }} />)
+    const heading = container.querySelector('.article-introduction h2')!
+    expect(heading.textContent).toBe(`${title} `)
+    expect(Array.from(heading.querySelectorAll('mark'), mark => mark.textContent)).toEqual(['<img', 'C++', '[50%]_'])
+    expect(container.querySelector('img, script, [onerror]')).not.toBeInTheDocument()
   })
 
   it('keeps the compact list free of image requests even when a stored thumbnail exists', () => {

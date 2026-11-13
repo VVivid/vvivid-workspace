@@ -70,11 +70,6 @@ type Page struct {
 	NextCursor string           `json:"next_cursor,omitempty"`
 }
 
-type BrowserArticlesPage struct {
-	Page
-	PreviousCursor string `json:"previous_cursor,omitempty"`
-}
-
 func boundedText(value string, max int) bool {
 	return value != "" && len(value) <= max && utf8.ValidString(value) && strings.TrimSpace(value) == value && !strings.ContainsFunc(value, unicode.IsControl)
 }
@@ -182,14 +177,6 @@ func (s *Service) ListArticles(ctx context.Context, p identity.Principal, in Lis
 	return Page{Articles: page.rows, NextCursor: page.next}, err
 }
 
-func (s *Service) BrowseArticles(ctx context.Context, p identity.Principal, in ListInput, before bool) (BrowserArticlesPage, error) {
-	page, err := s.listArticles(ctx, p, in, browseMode(before))
-	return BrowserArticlesPage{
-		Page:           Page{Articles: page.rows, NextCursor: page.next},
-		PreviousCursor: page.previous,
-	}, err
-}
-
 func (s *Service) listArticles(ctx context.Context, p identity.Principal, in ListInput, mode pageMode) (listPage[sqlite.Article], error) {
 	if err := s.authorize(ctx, p, identity.Read); err != nil {
 		return listPage[sqlite.Article]{}, err
@@ -236,7 +223,9 @@ func (in ListInput) articleCursor(owner sqlite.Owner) (sqlite.Cursor, error) {
 	}
 	var cursor sqlite.Cursor
 	raw, err := base64.RawURLEncoding.DecodeString(in.Cursor)
-	if err != nil || json.Unmarshal(raw, &cursor) != nil || cursor.Timestamp < 1 || !boundedText(cursor.ID, 64) ||
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.DisallowUnknownFields()
+	if err != nil || decoder.Decode(&cursor) != nil || decoder.InputOffset() != int64(len(raw)) || cursor.Timestamp < 1 || !boundedText(cursor.ID, 64) ||
 		cursor.Owner != owner.ID() || cursor.Archived != in.Archived || cursor.Trashed != in.Trashed {
 		return sqlite.Cursor{}, ErrInvalid
 	}
