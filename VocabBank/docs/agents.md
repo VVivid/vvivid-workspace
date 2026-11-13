@@ -44,11 +44,13 @@ exclude `/mcp`; expose it only on the intended private/direct or gateway route.
 ## Tools and workflow
 
 All operations derive the owner from verified identity. Inputs never accept an
-owner. All counts/pagination and validation are shared with HTTP.
+owner. Word validation, counts and pagination are shared with HTTP.
 
 | Tool | Purpose |
 | --- | --- |
 | `add_word` | Save `term` alone, optional original sentence/source/note, retry key. |
+| `add_words` | Create 1–100 draft or complete words with a retry key and result for each item. |
+| `delete_words` | Permanently remove 1–100 explicit owned IDs at their current revisions, with a retry key and result for each item. |
 | `list_words` | Search terms, filter `needs_details`/`complete`, page and page_size. |
 | `get_word` | Read current fields, learning content and revision by ID. |
 | `update_word` | Replace user capture fields at the current revision. Omitted optional capture fields become empty. |
@@ -84,6 +86,109 @@ an earlier list's revision after concurrent editing. Then `complete_word` accept
 }
 ```
 
+To create several words together, call `add_words` with a `words` array. Each
+item requires `term` and its own stable `idempotency_key`; capture fields and
+`senses` are optional. For example, this creates one draft and one complete word:
+
+```json
+{
+  "words":[
+    {"term":"synthetic draft","idempotency_key":"batch-capture-intent-001"},
+    {
+      "term":"synthetic expression",
+      "idempotency_key":"batch-learning-intent-001",
+      "personal_note":"Keep this capture separate from the learning examples.",
+      "senses":[{
+        "part_of_speech":"phrase",
+        "definition":"An expression made for an example rather than taken from real use.",
+        "when_to_use":"Use it when discussing sample language in a test.",
+        "examples":[
+          {"context":"Writing a test","sentence":"This synthetic expression is only sample data."},
+          {"context":"Explaining a fixture","sentence":"We use a synthetic expression to illustrate the request format."}
+        ],
+        "common_phrases":["a synthetic expression"]
+      }]
+    }
+  ]
+}
+```
+
+Omitted, null and empty `senses` all mean the same capture-only intent and create
+`needs_details`. Nonempty `senses` must meet the same complete 1–8-sense validation
+as `complete_word`. A complete batch item is inserted directly as `complete` at
+revision 1, with its captures and successful retry snapshot in one transaction.
+There is no intermediate saved draft and no browser batch form or batch HTTP API.
+
+The tool returns `results` in input order. Each result includes its zero-based
+`index`, `idempotency_key` and `success`. A successful item contains `word`; an
+unsuccessful item contains `code` and `error`, without `word`. A tool call can
+succeed while some or all items fail, so inspect every result. Invalid term or
+nonempty learning content, duplicate terms, invalid retry keys and changed input
+under a successful key fail only that item. Existing words and earlier successful
+items are never merged or overwritten. Exact repetitions of the same successful
+item/key replay the original word rather than reporting a duplicate.
+
+The official SDK validates the whole request's structure before calling the
+store. Wrong JSON types, missing required fields (including required fields in
+supplied senses), or unknown fields reject the whole call before any writes.
+An empty or greater-than-100 `words` array also writes nothing. The entire MCP
+request must fit within 256 KiB; 100 is a count limit, not a guarantee that 100
+large complete words fit. Split larger content into smaller calls.
+
+There is no batch-level retry key or all-or-nothing transaction. Every successful
+item commits independently with its own durable retry snapshot; errors are not
+cached. After a timeout or partial failure, retry the same item inputs and keys,
+even in a different order or in smaller batches. Successful items replay their
+original snapshots even after later edits, deletion or a restart. Fix failed
+items with a new key for a changed intent. Keys are scoped to owner and operation: keep using
+`add_words` to retry a batch item; `add_word` has its existing separate namespace.
+
+To remove selected words, read their current IDs and revisions with `get_word`,
+then call `delete_words`:
+
+```json
+{
+  "words":[
+    {
+      "id":"ID returned by get_word",
+      "expected_revision":3,
+      "idempotency_key":"delete-intent-001"
+    }
+  ]
+}
+```
+
+Every item requires an explicit `id`, `expected_revision` of at least 1, and its
+own stable retry key. The tool accepts 1–100 items; an empty or greater-than-100
+envelope writes nothing. SDK structural validation and the 256 KiB request cap
+apply before deletion, just as for creation. There is no search/status/all-words
+delete filter. New deletion intents require the current revision; stale revisions,
+unknown/unowned IDs and invalid items fail individually without changing those
+words. Successful items stay deleted when another item fails.
+
+Delete `results` have the same input-order `index`, `idempotency_key` and `success`
+fields as creation. A successful item contains `deleted_word`, the full snapshot
+immediately before removal. A failed item contains `code` and `error`, without
+`deleted_word`. Inspect every result even if the tool call succeeds. Each deletion
+and its successful snapshot commit in one transaction; snapshot-persistence
+failure rolls back that deletion. Failed results are not cached.
+
+An exact successful delete retry replays the original `deleted_word` before
+checking the old ID's existence or revision. Keep the same item inputs/keys after
+a timeout, including in reordered or split batches. The snapshot survives a
+restart; changed input under a successful delete key returns
+`idempotency_conflict`. Keys have a separate `delete_words` operation namespace.
+To intentionally recreate a removed term, use a new creation intent/key. The
+new word receives a new ID, and an old delete retry cannot remove it.
+
+Deletion is permanent from the current bank: the old ID no longer appears in
+`list_words` or `get_word`. Its successful create, update and completion retries
+still return their original snapshots without recreating the removed word.
+SQLite retains these earlier idempotency snapshots as well as `deleted_word`
+snapshots, so deleting a word is not complete privacy erasure. There is no undo
+tool; if the user requests recovery, copy the returned capture fields and
+senses into a new `add_words` intent to create a fresh word.
+
 The supported POS values are noun, verb, adjective, adverb, pronoun, preposition,
 conjunction, determiner, interjection and phrase. Use distinct senses for different
 meanings, including repeated POS. Bounds are UTF-8 bytes: term 120, optional
@@ -102,15 +207,18 @@ the same key returns `idempotency_conflict`; a new intent needs a new key. Do no
 respond to a network timeout by immediately generating a new key. If you receive
 `stale_revision`, call `get_word`, reconcile with the latest capture/revision and
 create a new intent. `duplicate_term` means the term already exists; search/read
-it instead of replacing it. Partial failures preserve the draft or previous
-complete content. MCP reports these codes in tool error text; browser JSON uses
+it instead of replacing it. A failed item preserves its current word, if any.
+MCP reports these codes in tool error text; browser JSON uses
 `{code,error}` and HTTP 409 for conflicts, 400 invalid input, 403 forbidden, 404
-unknown/unowned word, or 500 for an unexpected store failure. Authentication
-responds 401/403; temporary identity failure is 503.
+unknown/unowned word, or 500 for an unexpected store failure. Both batch tools use
+these same codes inside their per-item results; an invalid batch envelope or
+schema still returns a tool error. Authentication responds 401/403; temporary
+identity failure is 503.
 
-Batch work uses separate bounded calls; there is no automatic background fill or
-bulk transaction. Preserve user fields unless explicitly asked to edit them.
+There is no automatic background fill or whole-batch transaction. Preserve user
+fields unless explicitly asked to edit them.
 `complete_word` cannot change those fields at all. `update_word` replaces all
 capture fields, so read and resend the ones being kept. Changing the term's
 normalized lowercase key clears senses rather than associating old learning
-with a new expression. Neither transport supports deletion in V1.
+with a new expression. `delete_words` is the deletion interface; there is no
+browser deletion UI, deletion HTTP API, bulk update or automatic cleanup.

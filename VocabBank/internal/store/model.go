@@ -84,6 +84,42 @@ type AddInput struct {
 	Capture
 	IdempotencyKey string `json:"idempotency_key"`
 }
+
+// AddWordsItem can capture a draft or create a complete word. Empty senses
+// (including omitted or null JSON) mean a draft, just as add_word creates.
+type AddWordsItem struct {
+	AddInput
+	Senses []Sense `json:"senses,omitempty"`
+}
+
+type AddWordsInput struct {
+	Words []AddWordsItem `json:"words"`
+}
+
+// AddWordsItemResult belongs to the corresponding input position. A failed item
+// has no saved Word; successful items commit independently of the other items.
+type AddWordsItemResult struct {
+	Word Word
+	Err  error
+}
+
+type DeleteWordsItem struct {
+	ID               string `json:"id"`
+	ExpectedRevision int    `json:"expected_revision"`
+	IdempotencyKey   string `json:"idempotency_key"`
+}
+
+type DeleteWordsInput struct {
+	Words []DeleteWordsItem `json:"words"`
+}
+
+// DeleteWordsItemResult returns the removed word's snapshot on success. The
+// snapshot is retry evidence, not a word that is still present in the bank.
+type DeleteWordsItemResult struct {
+	DeletedWord Word
+	Err         error
+}
+
 type UpdateInput struct {
 	Capture
 	ID               string `json:"id"`
