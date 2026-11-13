@@ -5,6 +5,13 @@ connected agent to fill in plain English meanings, when to use it, contextual
 examples, and common phrases through MCP. Your original sentence, source URL and
 personal note remain separate from the illustrative examples.
 
+Agents can also use `add_words` to create 1–100 words in one MCP call, mixing
+capture-only drafts with complete learning content. Each item has its own retry
+key and atomic result. Duplicate terms never merge or overwrite saved content;
+one item's failure leaves successful items saved. `delete_words` removes 1–100
+explicitly selected owned IDs at their current revisions, with an independent
+retry key and result for each item.
+
 The app opens to a plain word grid with search, three or four columns and
 30/50/100 words per page. Click a word for the learner popup; multiple senses
 have keyboard-accessible tabs. Light/dark and layout preferences are the only
@@ -44,14 +51,29 @@ keys. Thus ` In   Hindsight ` conflicts with `in hindsight` for the same owner;
 accents are not removed and language-specific case folding is not performed.
 Duplicates return a conflict instead of merging or overwriting captures. User
 fields can be edited. Changing the actual normalized term clears learning about
-the previous term; changing case/spacing or notes preserves senses. V1 has no delete.
+the previous term; changing case/spacing or notes preserves senses.
+
+MCP deletion permanently removes a word from the current bank and returns its
+pre-deletion snapshot as `deleted_word`. The deletion and successful retry
+snapshot commit together. Existing idempotency snapshots for creation, edits,
+completion and deletion remain retained in SQLite; deletion is not complete
+privacy erasure. There is no deletion UI, deletion HTTP API or bulk update.
 
 Writes require a stable idempotency key. An exact successful retry returns the
-original result snapshot even if the word changed afterward; it never reapplies
-that old intent. Different input under the same owner/operation/key conflicts.
-Update/completion also require the current revision. A stale revision or invalid
-completion changes nothing. An editor retains its input and presents an explicit
-latest-version review before using newer saved fields. Agent completion cannot
+original result snapshot even if the word changed or was deleted afterward;
+it never reapplies that old intent or restores a deleted word. Different input
+under the same owner/operation/key conflicts. An exact successful delete retry
+returns the original removed snapshot before checking existence or revision.
+Recreating the same term with a new creation intent produces a fresh ID; old
+delete retries cannot remove it.
+Creation batch items use a separate `add_words` operation namespace and keep
+their intent when reordered or retried in smaller batches. Omitted, null or empty batch senses
+all mean a draft; nonempty senses must pass the full validation and create a
+complete word directly at revision 1. There is no intermediate saved draft.
+Update, completion and deletion require the current revision for a new intent.
+A stale revision or invalid completion changes nothing. An editor retains its
+input and presents an explicit latest-version review before using newer saved
+fields. Agent completion cannot
 replace the original sentence, source or note. The visible UI refreshes on focus
 and every 12 seconds, so external MCP updates appear without a full-page reload.
 
@@ -82,10 +104,20 @@ make docker-build
 `make check` runs gofmt verification, go vet, TypeScript and Prettier. Domain
 tests cover reopen durability, isolation/scopes, duplicates, complete/multi-sense
 preservation, malformed input, stale concurrent writes, pagination and exact retry
-semantics. Transport tests sign in against a synthetic issuer and use the actual
-official SDK to create/read/complete across HTTP and MCP, including forbidden
-calls, CSRF and owner-input rejection. Adapted identity regressions exercise
-strict claims, host binding, rotating refresh, retryable provider/JWKS failures,
+semantics. Batch tests cover mixed complete/draft creation at the 100-item
+maximum, rejected envelopes, independent failures, atomic retry persistence,
+owner isolation and snapshots after edits/restart. Deletion tests cover mixed
+outcomes, revision/ownership checks, batch bounds, atomic rollback,
+restart/recreation retries and retained creation/edit/completion snapshots that
+never restore a removed word. Transport tests sign in against a synthetic issuer
+and use the actual official SDK to create/read/complete across HTTP and MCP,
+including forbidden calls, CSRF and owner-input rejection. Batch transport
+coverage verifies SDK-derived schemas, addition-only create and destructive/
+idempotent delete annotations, partial-result reporting, whole-request rejection
+of structural/schema errors and the 256 KiB limit, and safe retries after
+committed create/delete responses are lost, including recreation under new IDs.
+Adapted identity regressions exercise strict claims, host binding, rotating
+refresh, retryable provider/JWKS failures,
 restart recovery and logout. No real identity is used.
 
 The Chromium suite serves the **production export** through the actual Go handler

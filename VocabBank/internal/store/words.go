@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -155,16 +156,92 @@ func (s *Store) AddWord(ctx context.Context, a Actor, in AddInput) (Word, error)
 		return Word{}, err
 	}
 	return s.write(ctx, a, "add_word", in.IdempotencyKey, in, func(tx *sql.Tx) (Word, error) {
-		term := normalizedTerm(in.Term)
-		if err := duplicate(ctx, tx, a.Owner, termKey(term), ""); err != nil {
-			return Word{}, err
-		}
-		now := s.now().UTC().Format(time.RFC3339Nano)
-		word := Word{ID: ID(), Term: term, OriginalSentence: in.OriginalSentence, SourceURL: in.SourceURL, PersonalNote: in.PersonalNote, Senses: []Sense{}, Status: NeedsDetails, Revision: 1, CreatedAt: now, UpdatedAt: now}
-		_, err := tx.ExecContext(ctx, `INSERT INTO words(id,owner,term,term_key,original_sentence,source_url,personal_note,senses,status,revision,created_at,updated_at)VALUES(?,?,?,?,?,?,?,'[]',?,1,?,?)`, word.ID, a.Owner, word.Term, termKey(term), word.OriginalSentence, word.SourceURL, word.PersonalNote, word.Status, now, now)
-		return word, err
+		return s.insertWord(ctx, tx, a.Owner, in.Capture, nil)
 	})
 }
+
+// AddWords validates the envelope before any write, then commits each item and
+// its retry snapshot in a separate transaction. Batch order is not part of an
+// item's intent: its owner, add_words operation, and key identify exact retries.
+func (s *Store) AddWords(ctx context.Context, a Actor, in AddWordsInput) ([]AddWordsItemResult, error) {
+	if err := s.authorize(ctx, a, Write); err != nil {
+		return nil, err
+	}
+	if len(in.Words) < 1 || len(in.Words) > 100 {
+		return nil, fmt.Errorf("%w: provide 1–100 words", ErrInvalid)
+	}
+	results := make([]AddWordsItemResult, len(in.Words))
+	for i, item := range in.Words {
+		if err := validateCapture(item.Capture); err != nil {
+			results[i].Err = err
+			continue
+		}
+		if len(item.Senses) > 0 {
+			if err := validateSenses(item.Senses); err != nil {
+				results[i].Err = err
+				continue
+			}
+		}
+		results[i].Word, results[i].Err = s.write(ctx, a, "add_words", item.IdempotencyKey, item, func(tx *sql.Tx) (Word, error) {
+			return s.insertWord(ctx, tx, a.Owner, item.Capture, item.Senses)
+		})
+	}
+	return results, nil
+}
+
+// DeleteWords removes only explicit owned IDs at their expected revisions.
+// Each deletion commits with its retry snapshot; replay happens before looking
+// for the deleted ID, so an old retry cannot remove a later same-term creation.
+func (s *Store) DeleteWords(ctx context.Context, a Actor, in DeleteWordsInput) ([]DeleteWordsItemResult, error) {
+	if err := s.authorize(ctx, a, Write); err != nil {
+		return nil, err
+	}
+	if len(in.Words) < 1 || len(in.Words) > 100 {
+		return nil, fmt.Errorf("%w: provide 1–100 words", ErrInvalid)
+	}
+	results := make([]DeleteWordsItemResult, len(in.Words))
+	for i, item := range in.Words {
+		if !recordID(item.ID) || item.ExpectedRevision < 1 {
+			results[i].Err = ErrInvalid
+			continue
+		}
+		results[i].DeletedWord, results[i].Err = s.write(ctx, a, "delete_words", item.IdempotencyKey, item, func(tx *sql.Tx) (Word, error) {
+			word, err := scanWord(tx.QueryRowContext(ctx, `SELECT `+wordColumns+` FROM words WHERE owner=? AND id=?`, a.Owner, item.ID))
+			if err != nil {
+				return Word{}, err
+			}
+			if word.Revision != item.ExpectedRevision {
+				return Word{}, ErrStale
+			}
+			_, err = tx.ExecContext(ctx, `DELETE FROM words WHERE owner=? AND id=?`, a.Owner, word.ID)
+			return word, err
+		})
+	}
+	return results, nil
+}
+
+// insertWord creates the final state directly; complete batch entries never
+// exist as drafts, and both creation paths keep revision 1 and the same captures.
+func (s *Store) insertWord(ctx context.Context, tx *sql.Tx, owner string, capture Capture, senses []Sense) (Word, error) {
+	term := normalizedTerm(capture.Term)
+	if err := duplicate(ctx, tx, owner, termKey(term), ""); err != nil {
+		return Word{}, err
+	}
+	status := Complete
+	if len(senses) == 0 {
+		senses = []Sense{}
+		status = NeedsDetails
+	}
+	now := s.now().UTC().Format(time.RFC3339Nano)
+	word := Word{ID: ID(), Term: term, OriginalSentence: capture.OriginalSentence, SourceURL: capture.SourceURL, PersonalNote: capture.PersonalNote, Senses: senses, Status: status, Revision: 1, CreatedAt: now, UpdatedAt: now}
+	raw, err := json.Marshal(senses)
+	if err != nil {
+		return Word{}, err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO words(id,owner,term,term_key,original_sentence,source_url,personal_note,senses,status,revision,created_at,updated_at)VALUES(?,?,?,?,?,?,?,?,?,1,?,?)`, word.ID, owner, word.Term, termKey(term), word.OriginalSentence, word.SourceURL, word.PersonalNote, string(raw), word.Status, now, now)
+	return word, err
+}
+
 func (s *Store) UpdateWord(ctx context.Context, a Actor, in UpdateInput) (Word, error) {
 	if err := validateCapture(in.Capture); err != nil {
 		return Word{}, err
