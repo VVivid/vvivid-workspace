@@ -6,6 +6,8 @@ import { Leaf } from '@/components/leaf'
 import { Arrow } from '@/components/arrow'
 import { ArticleMarkdown } from '@/components/markdown'
 import { Pagination } from '@/components/pagination'
+import { ArticleControls, Highlight } from '@/article-controls'
+import type { ArticleBrowseDraft, BrowseArticles } from '@/article-controls'
 import { urlWithPagePosition } from '@/pagination'
 import { Todo } from '@/todo'
 import { ThemePicker } from '@/theme'
@@ -69,10 +71,11 @@ function Sections({ data }: { data: Bootstrap }) {
 function NewsViews({ data }: { data: Bootstrap }) {
   const readerShelf = data.from_trash ? 'trash' : data.from_archive ? 'archive' : 'feed'
   const selectedShelf = data.view === 'reader' ? readerShelf : data.view
+  const context = { query: data.query, page_size: data.page_size }
   return <nav className="news-views" aria-label="Library">
-    <a href="/" aria-current={selectedShelf === 'feed' ? 'page' : undefined}>Feed</a>
-    <a href="/archive" aria-current={selectedShelf === 'archive' ? 'page' : undefined}>Archive</a>
-    <a href="/trash" aria-current={selectedShelf === 'trash' ? 'page' : undefined}>Trash</a>
+    <a href={urlWithPagePosition('/', context)} aria-current={selectedShelf === 'feed' ? 'page' : undefined}>Feed</a>
+    <a href={urlWithPagePosition('/archive', context)} aria-current={selectedShelf === 'archive' ? 'page' : undefined}>Archive</a>
+    <a href={urlWithPagePosition('/trash', context)} aria-current={selectedShelf === 'trash' ? 'page' : undefined}>Trash</a>
   </nav>
 }
 
@@ -100,12 +103,44 @@ function ArticleActions({ article, data, pending }: { article: Article; data: Bo
   </div>
 }
 
-function Shelf({ data, actionsPending, saveNotice }: { data: Bootstrap; actionsPending: boolean; saveNotice?: ReactNode }) {
+function shelfCountLabel(data: Bootstrap) {
+  const page = data.page
+  if (page?.total === undefined) {
+    if (data.view === 'trash') return 'Trashed articles'
+    if (data.view === 'archive') return 'Archived articles'
+    return 'Saved articles'
+  }
+  const range = page.start ? `${page.start}–${page.end} of ` : ''
+  const category = data.query ? 'matching' : data.view === 'trash' ? 'trashed' : data.view === 'archive' ? 'archived' : 'saved'
+  return `${range}${page.total} ${category} articles`
+}
+
+function emptyShelfMessage(data: Bootstrap, stalePage: boolean) {
+  if (stalePage) return { title: 'This page is empty.', description: 'Return to the start to see the current list.' }
+  if (data.query) return { title: 'No matching articles', description: 'Try another keyword or source.' }
+  if (data.view === 'trash') return {
+    title: 'Nothing in the trash.',
+    description: 'Trashed articles stay recoverable, with their original content and images. Nothing is permanently deleted.',
+  }
+  if (data.view === 'archive') return {
+    title: 'Room for stories you have read.',
+    description: 'Articles you archive will be waiting here. Restore one whenever you want to return to it.',
+  }
+  return {
+    title: 'A little space for a good story.',
+    description: 'Save a sourced article with your connected agent, then settle in here when you have a moment.',
+  }
+}
+
+function Shelf({ data, actionsPending, saveNotice, articleBrowseDraft, onBrowse }: {
+  data: Bootstrap; actionsPending: boolean; saveNotice?: ReactNode; articleBrowseDraft?: ArticleBrowseDraft; onBrowse?: BrowseArticles
+}) {
   const archived = data.view === 'archive'
   const trashed = data.view === 'trash'
   const articles = data.page?.articles ?? []
   const shelfPath = trashed ? '/trash' : archived ? '/archive' : '/'
   const stalePage = articles.length === 0 && Boolean(data.cursor || data.before)
+  const emptyMessage = emptyShelfMessage(data, stalePage)
   const main = useRef<HTMLElement>(null)
   const submittedControl = useRef<HTMLElement | null>(null)
   useLayoutEffect(() => {
@@ -122,8 +157,9 @@ function Shelf({ data, actionsPending, saveNotice }: { data: Bootstrap; actionsP
       <div className="shelf-intro">
         <h1>{trashed ? 'Your trash' : archived ? 'Your archive' : 'Your reading shelf'}</h1>
       </div>
+      <ArticleControls key={data.view} path={shelfPath} query={data.query} pageSize={data.page_size ?? 10} browseDraft={articleBrowseDraft} onBrowse={onBrowse} />
       <div className="list-heading">
-        <span>{trashed ? 'Trashed articles' : archived ? 'Archived articles' : 'Saved articles'}</span>
+        <span aria-live="polite">{shelfCountLabel(data)}</span>
         <span>{trashed ? 'Newest trashed first' : archived ? 'Newest archived first' : 'Newest saved first'}</span>
       </div>
       {articles.length > 0 ? (
@@ -135,10 +171,10 @@ function Shelf({ data, actionsPending, saveNotice }: { data: Bootstrap; actionsP
               <article className="feed-row" key={article.id}>
                 <a href={article.url} className="feed-entry" aria-label={article.title} target="_blank" rel="noopener noreferrer">
                   <div className="article-introduction">
-                    <h2>{article.title} <Arrow direction="up-right" /></h2>
-                    <p className="summary">{article.summary}</p>
+                    <h2><Highlight text={article.title} query={data.query} /> <Arrow direction="up-right" /></h2>
+                    <p className="summary"><Highlight text={article.summary} query={data.query} excerpt /></p>
                   </div>
-                  <span className="feed-source">{sourceHostname(article.url)}</span>
+                  <span className="feed-source"><Highlight text={sourceHostname(article.url)} query={data.query} /></span>
                   <span className="feed-date"><span className="sr-only">{trashed ? 'Trashed' : archived ? 'Archived' : 'Saved'} </span>
                     <time dateTime={new Date(timestamp).toISOString()}>{formatDate(timestamp)}</time>
                   </span>
@@ -151,12 +187,14 @@ function Shelf({ data, actionsPending, saveNotice }: { data: Bootstrap; actionsP
       ) : (
         <div className="empty-shelf">
           <Leaf />
-          <h2>{stalePage ? 'This page is empty.' : trashed ? 'Nothing in the trash.' : archived ? 'Room for stories you have read.' : 'A little space for a good story.'}</h2>
-          <p>{stalePage ? 'Return to the start to see the current list.' : trashed ? 'Trashed articles stay recoverable, with their original content and images. Nothing is permanently deleted.' : archived ? 'Articles you archive will be waiting here. Restore one whenever you want to return to it.' : 'Save a sourced article with your connected agent, then settle in here when you have a moment.'}</p>
-          {!stalePage && (archived || trashed) && <a className="reading-link" href="/">Back to your feed <Arrow /></a>}
+          <h2>{emptyMessage.title}</h2>
+          <p>{emptyMessage.description}</p>
+          {!stalePage && data.query
+            ? <a href={urlWithPagePosition(shelfPath, { page_size: data.page_size })}>Clear search</a>
+            : !stalePage && (archived || trashed) && <a className="reading-link" href="/">Back to your feed <Arrow /></a>}
         </div>
       )}
-      <Pagination path={shelfPath} page={data.page} stale={stalePage} />
+      <Pagination path={shelfPath} page={data.page} stale={stalePage} position={data} />
     </main>
   )
 }
@@ -171,6 +209,8 @@ function Reader({ data, article, actionsPending, saveNotice }: {
     ? archived ? 'Restore to archive' : 'Restore to feed'
     : archived ? 'Restore to feed' : 'Archive article'
   const back = data.from_trash ? 'trash' : data.from_archive ? 'archive' : 'feed'
+  const context = data.query || data.page_size || data.cursor || data.before
+    ? `?return_to=${encodeURIComponent(urlWithPagePosition(`/articles/${encodeURIComponent(article.id)}`, data, back))}` : ''
   return (
     <main id="main" tabIndex={-1} className="reader page-width">
       {saveNotice}
@@ -213,7 +253,7 @@ function Reader({ data, article, actionsPending, saveNotice }: {
           <Separator />
           <div className="reader-end">
             <p>{trashed ? 'This story is safely kept. Restore it to its previous place.' : archived ? 'Bring this story back to your reading shelf.' : 'Finished for now? Keep this story in your archive.'}</p>
-            <form method="post" action={`/api/v1/articles/${encodeURIComponent(article.id)}/${action}`}>
+            <form method="post" action={`/api/v1/articles/${encodeURIComponent(article.id)}/${action}${context}`}>
               <input type="hidden" name="csrf_token" value={data.csrf} />
               {trashed && <>
                 <input type="hidden" name="expected_revision" value={article.revision} />
@@ -226,7 +266,7 @@ function Reader({ data, article, actionsPending, saveNotice }: {
           </div>
           {!trashed && <div className="reader-end">
             <p>Want to set this story aside? You can restore it later.</p>
-            <form method="post" action={`/api/v1/articles/${encodeURIComponent(article.id)}/trash`}>
+            <form method="post" action={`/api/v1/articles/${encodeURIComponent(article.id)}/trash${context}`}>
               <input type="hidden" name="csrf_token" value={data.csrf} />
               <input type="hidden" name="expected_revision" value={article.revision} />
               <input type="hidden" name="idempotency_key" value={data.mutation_key ?? ''} />
@@ -263,12 +303,14 @@ function Gate({ data, saveNotice }: { data: Bootstrap; saveNotice?: ReactNode })
   )
 }
 
-export function App({ data, actionsPending = false, saveNotice, todoComposer, settingsEditor }: {
+export function App({ data, actionsPending = false, saveNotice, todoComposer, settingsEditor, articleBrowseDraft, onBrowse }: {
   data: Bootstrap
   actionsPending?: boolean
   saveNotice?: ReactNode
   todoComposer?: TodoComposer
   settingsEditor?: SettingsEditor
+  articleBrowseDraft?: ArticleBrowseDraft
+  onBrowse?: BrowseArticles
 }) {
   return (
     <>
@@ -288,7 +330,7 @@ export function App({ data, actionsPending = false, saveNotice, todoComposer, se
                   pending={actionsPending} composer={todoComposer} saveNotice={saveNotice} />
                 : data.view === 'reader' && data.article
                   ? <Reader data={data} article={data.article} actionsPending={actionsPending} saveNotice={saveNotice} />
-                  : <Shelf data={data} actionsPending={actionsPending} saveNotice={saveNotice} />}
+                  : <Shelf data={data} actionsPending={actionsPending} saveNotice={saveNotice} articleBrowseDraft={articleBrowseDraft} onBrowse={onBrowse} />}
           </div>
         </div>
       )}

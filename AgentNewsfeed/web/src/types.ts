@@ -24,6 +24,9 @@ export interface PageLinks {
 
 export interface Page extends PageLinks {
   articles: Article[]
+  total?: number
+  start?: number
+  end?: number
 }
 
 export interface TodoTask {
@@ -57,6 +60,7 @@ export interface Bootstrap {
   cursor?: string
   before?: string
   page_size?: number
+  query?: string
   todo?: TodoList
   settings?: SettingsPage
 }
