@@ -1,13 +1,18 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
+	"slices"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -68,24 +73,105 @@ func (s *Store) Words(ctx context.Context, a Actor, f Filter) (Page, error) {
 	if err = tx.QueryRowContext(ctx, `SELECT count(*)`+where, a.Owner, f.Query, f.Status, f.Status).Scan(&result.Total); err != nil {
 		return result, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT `+wordColumns+where+` ORDER BY term_key,id LIMIT ? OFFSET ?`, a.Owner, f.Query, f.Status, f.Status, f.PageSize, (f.Page-1)*f.PageSize)
-	if err != nil {
-		return result, err
+	if f.ShuffleSeed != 0 {
+		result.Items, err = shuffledPage(ctx, tx, where, a.Owner, f)
+	} else {
+		result.Items, err = queryWords(ctx, tx, `SELECT `+wordColumns+where+` ORDER BY term_key,id LIMIT ? OFFSET ?`, a.Owner, f.Query, f.Status, f.Status, f.PageSize, (f.Page-1)*f.PageSize)
 	}
-	for rows.Next() {
-		word, e := scanWord(rows)
-		if e != nil {
-			rows.Close()
-			return result, e
-		}
-		result.Items = append(result.Items, word)
-	}
-	err = rows.Err()
-	rows.Close()
 	if err != nil {
 		return result, err
 	}
 	return result, tx.Commit()
+}
+
+// shuffledPage returns one page of the matching words in the order fixed by
+// f.ShuffleSeed. Every page of the same seed sorts the full set of matching
+// IDs identically, so paging never repeats or skips a word. Only IDs are read
+// for the whole set; full rows are loaded for the requested page alone.
+func shuffledPage(ctx context.Context, tx *sql.Tx, where, owner string, f Filter) ([]Word, error) {
+	orderedIDs, err := shuffledIDs(ctx, tx, where, owner, f)
+	if err != nil {
+		return nil, err
+	}
+	start := min((f.Page-1)*f.PageSize, len(orderedIDs))
+	pageIDs := orderedIDs[start:min(start+f.PageSize, len(orderedIDs))]
+	if len(pageIDs) == 0 {
+		return []Word{}, nil
+	}
+	// SQLite returns IN (...) rows in its own order; restore the shuffled one.
+	args := []any{owner}
+	position := make(map[string]int, len(pageIDs))
+	for i, id := range pageIDs {
+		args = append(args, id)
+		position[id] = i
+	}
+	placeholders := strings.Repeat(",?", len(pageIDs))[1:]
+	words, err := queryWords(ctx, tx, `SELECT `+wordColumns+` FROM words WHERE owner=? AND id IN (`+placeholders+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	slices.SortFunc(words, func(x, y Word) int { return cmp.Compare(position[x.ID], position[y.ID]) })
+	return words, nil
+}
+
+// shuffledIDs returns the IDs of every word matching the filter, sorted by
+// their seeded rank with the ID as a tie-breaker.
+func shuffledIDs(ctx context.Context, tx *sql.Tx, where, owner string, f Filter) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT id`+where, owner, f.Query, f.Status, f.Status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	type rankedID struct {
+		id   string
+		rank uint64
+	}
+	var ranked []rankedID
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ranked = append(ranked, rankedID{id, shuffleRank(f.ShuffleSeed, id)})
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	slices.SortFunc(ranked, func(x, y rankedID) int {
+		return cmp.Or(cmp.Compare(x.rank, y.rank), cmp.Compare(x.id, y.id))
+	})
+	ids := make([]string, len(ranked))
+	for i, r := range ranked {
+		ids[i] = r.id
+	}
+	return ids, nil
+}
+
+// shuffleRank gives a word a stable pseudo-random position for one seed. It
+// only orders the owner's own words for display and is not a security control.
+func shuffleRank(seed int, id string) uint64 {
+	h := fnv.New64a()
+	_ = binary.Write(h, binary.BigEndian, uint32(seed))
+	h.Write([]byte(id))
+	return h.Sum64()
+}
+
+// queryWords scans every row of a wordColumns query; it never returns nil items.
+func queryWords(ctx context.Context, tx *sql.Tx, query string, args ...any) ([]Word, error) {
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	words := []Word{}
+	for rows.Next() {
+		word, err := scanWord(rows)
+		if err != nil {
+			return nil, err
+		}
+		words = append(words, word)
+	}
+	return words, rows.Err()
 }
 
 // write replays an exact successful intent before testing its old revision.

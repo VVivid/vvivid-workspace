@@ -63,6 +63,10 @@ func validateSenses(senses []Sense) error {
 	}
 	return nil
 }
+
+// MaxShuffleSeed keeps browser seeds exact in JavaScript and within uint32.
+const MaxShuffleSeed = 1<<31 - 1
+
 func normalizeFilter(f *Filter) error {
 	if !bounded(f.Query, 0, 120) || !slices.Contains([]string{"", NeedsDetails, Complete}, f.Status) {
 		return ErrInvalid
@@ -73,7 +77,7 @@ func normalizeFilter(f *Filter) error {
 	if f.PageSize == 0 {
 		f.PageSize = 30
 	}
-	if f.Page < 1 || f.Page > 100000 || f.PageSize < 1 || f.PageSize > 100 {
+	if f.Page < 1 || f.Page > 100000 || f.PageSize < 1 || f.PageSize > 100 || f.ShuffleSeed < 0 || f.ShuffleSeed > MaxShuffleSeed {
 		return ErrInvalid
 	}
 	f.Query = termKey(f.Query)

@@ -138,6 +138,9 @@ type Filter struct {
 	Status   string `json:"status,omitempty"`
 	Page     int    `json:"page,omitzero"`
 	PageSize int    `json:"page_size,omitzero"`
+	// ShuffleSeed orders browser pages pseudo-randomly; zero keeps A–Z.
+	// It is excluded from JSON so the MCP list_words schema stays alphabetical.
+	ShuffleSeed int `json:"-"`
 }
 type Page struct {
 	Items    []Word `json:"items"`

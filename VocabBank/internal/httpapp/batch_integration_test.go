@@ -42,14 +42,21 @@ func TestOfficialMCPBatchSchemaAnd100MixedRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var batch *sdk.Tool
+	var batch, list *sdk.Tool
 	for _, tool := range tools.Tools {
-		if tool.Name == "add_words" {
+		switch tool.Name {
+		case "add_words":
 			batch = tool
+		case "list_words":
+			list = tool
 		}
 	}
-	if batch == nil {
-		t.Fatal("add_words was not advertised")
+	if batch == nil || list == nil {
+		t.Fatal("add_words or list_words was not advertised")
+	}
+	// Shuffled order is a browser view; agents keep the alphabetical listing.
+	if listFields := schemaObject(t, schemaObject(t, list.InputSchema)["properties"]); listFields["shuffle_seed"] != nil || listFields["ShuffleSeed"] != nil {
+		t.Fatalf("list_words advertises a shuffle seed: %v", listFields)
 	}
 	a := batch.Annotations
 	if a == nil || a.ReadOnlyHint || !a.IdempotentHint || a.DestructiveHint == nil || *a.DestructiveHint || a.OpenWorldHint == nil || *a.OpenWorldHint {
