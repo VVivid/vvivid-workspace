@@ -250,6 +250,42 @@ test('authenticated production export saves captures, learns through MCP, resolv
   await page.getByRole('button', { name: 'Next words', exact: true }).click();
   await expect(page.locator('.vg-grid .vg-word')).toHaveCount(6);
   await expect(page.getByText('101–106 of 106', { exact: true })).toBeVisible();
+
+  // Daily mix is the default order; the server shuffles all pages together.
+  const words = page.locator('.vg-grid .vg-word');
+  const orderGroup = page.getByRole('group', { name: 'Order', exact: true });
+  const orderButton = (name: string) => orderGroup.getByRole('button', { name, exact: true });
+  await expect(orderButton('Daily mix')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.vg-order-hint')).toHaveText('· Today’s mix, new order tomorrow');
+  const dailyLastPage = await words.allTextContents();
+  await page.getByRole('button', { name: 'Previous words', exact: true }).click();
+  await expect(page.getByText('1–100 of 106', { exact: true })).toBeVisible();
+  const dailyFirstPage = await words.allTextContents();
+  const dailyMix = [...dailyFirstPage, ...dailyLastPage];
+  expect(new Set(dailyMix).size).toBe(106);
+
+  // Read A–Z from the server itself rather than re-implementing its sort.
+  await orderButton('A–Z').click();
+  await expect(orderButton('A–Z')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.vg-order-hint')).toHaveText('· A–Z');
+  // The range already reads 1–100 here, so wait for the A–Z words themselves.
+  await expect.poll(() => words.allTextContents()).not.toEqual(dailyFirstPage);
+  const alphabeticalFirstPage = await words.allTextContents();
+  await page.getByRole('button', { name: 'Next words', exact: true }).click();
+  await expect(page.getByText('101–106 of 106', { exact: true })).toBeVisible();
+  const alphabetical = [...alphabeticalFirstPage, ...(await words.allTextContents())];
+  expect([...dailyMix].sort()).toEqual([...alphabetical].sort());
+  expect(dailyMix).not.toEqual(alphabetical);
+
+  await orderButton('Shuffle').click();
+  await expect(page.locator('.vg-order-hint')).toHaveText('· Shuffled');
+  await expect(page.getByText('1–100 of 106', { exact: true })).toBeVisible();
+  await expect.poll(() => words.allTextContents()).not.toEqual(alphabeticalFirstPage);
+  const firstShuffle = await words.allTextContents();
+  await orderButton('Shuffle').click();
+  await expect.poll(() => words.allTextContents()).not.toEqual(firstShuffle);
+  await page.getByRole('button', { name: 'Next words', exact: true }).click();
+  await expect(page.getByText('101–106 of 106', { exact: true })).toBeVisible();
   await page.getByRole('searchbox', { name: 'Search words' }).fill('articulate');
   await expect(page.locator('.vg-grid .vg-word')).toHaveCount(1);
   const wordButton = page.getByRole('button', { name: 'articulate', exact: true });

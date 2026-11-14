@@ -345,11 +345,15 @@ func TestTransportAuthorizationUnknownFieldsAndLimits(t *testing.T) {
 	if res.StatusCode != 421 {
 		t.Fatal("forwarded host bypassed exact origin")
 	}
-	for _, path := range []string{"/api/v1/words?owner=other", "/api/v1/words?page=-1", "/api/v1/words?page_size=101", "/api/v1/words?status=complete&status=needs_details"} {
+	for _, path := range []string{"/api/v1/words?owner=other", "/api/v1/words?page=-1", "/api/v1/words?page_size=101", "/api/v1/words?status=complete&status=needs_details", "/api/v1/words?shuffle_seed=0", "/api/v1/words?shuffle_seed=", "/api/v1/words?shuffle_seed=-1", "/api/v1/words?shuffle_seed=2147483648", "/api/v1/words?shuffle_seed=abc"} {
 		res = f.request(t, "GET", path, nil, "", cookie, "")
 		if res.StatusCode != 400 {
 			t.Fatalf("filter accepted %s", path)
 		}
+	}
+	shuffled := decodeResponse[store.Page](t, f.request(t, "GET", "/api/v1/words?shuffle_seed=2147483647", nil, "", cookie, ""), 200)
+	if shuffled.Total != 1 || len(shuffled.Items) != 1 || shuffled.Items[0].ID != word.ID {
+		t.Fatalf("shuffled list=%+v", shuffled)
 	}
 	for _, path := range []string{"/.env", "/api/v1/not-found", "/nonexistent"} {
 		res = f.request(t, "GET", path, nil, "", nil, "")

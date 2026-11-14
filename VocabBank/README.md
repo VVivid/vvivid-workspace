@@ -13,11 +13,18 @@ explicitly selected owned IDs at their current revisions, with an independent
 retry key and result for each item.
 
 The app opens to a plain word grid with search, three or four columns and
-30/50/100 words per page. Click a word for the learner popup; multiple senses
-have keyboard-accessible tabs. Light/dark and layout preferences are the only
-items saved in localStorage. Vocabulary and session secrets are never stored
-there. New installations start empty and do not open a sample popup. There is
-no browser extension, built-in AI, provider API key, scraping, or seeded dictionary.
+30/50/100 words per page. The Order control defaults to **Daily mix**, a shuffle
+seeded by the local date when the page opens (or Daily mix is chosen), so it
+stays steady while you page and differs the next day; **Shuffle** re-mixes the
+whole bank on every click, and **A–Z** restores alphabetical order. The server
+applies the order across all pages with `shuffle_seed` (1–2147483647) on
+`GET /api/v1/words`, so paging never repeats or skips a word; omitting the seed
+keeps A–Z. Seeds stay in memory, and MCP `list_words` remains alphabetical.
+Click a word for the learner popup; multiple senses have keyboard-accessible
+tabs. Light/dark and layout preferences are the only items saved in
+localStorage. Vocabulary and session secrets are never stored there. New
+installations start empty and do not open a sample popup. There is no browser
+extension, built-in AI, provider API key, scraping, or seeded dictionary.
 
 Source lives in `VocabBank/` inside
 [VVivid/vvivid-workspace](https://github.com/VVivid/vvivid-workspace). Run the

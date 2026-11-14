@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -272,5 +273,51 @@ func TestLiteralSearchBoundedPaginationAndFutureSchema(t *testing.T) {
 	var version int
 	if err = db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 2 {
 		t.Fatal("schema version lowered")
+	}
+}
+func TestShuffledPagesCoverEveryWordOnceInAStableSeedOrder(t *testing.T) {
+	s, a, other, _ := setupStore(t)
+	for i := range 45 {
+		add(t, s, a, fmt.Sprintf("Shuffle %03d", i), fmt.Sprintf("shuffle-word-%03d", i))
+	}
+	add(t, s, other, "Shuffle other", "shuffle-other-001")
+	terms := func(seed int) []string {
+		t.Helper()
+		var all []string
+		for page := 1; page <= 3; page++ {
+			result, err := s.Words(t.Context(), a, Filter{Query: "shuffle", Page: page, PageSize: 20, ShuffleSeed: seed})
+			if err != nil || result.Total != 45 || result.Page != page {
+				t.Fatalf("page %d: %+v %v", page, result, err)
+			}
+			for _, word := range result.Items {
+				all = append(all, word.Term)
+			}
+		}
+		return all
+	}
+	alphabetical := terms(0)
+	first, again, second := terms(20261114), terms(20261114), terms(7)
+	if !slices.IsSorted(alphabetical) || len(alphabetical) != 45 {
+		t.Fatalf("seed 0 must stay A–Z: %v", alphabetical)
+	}
+	if !reflect.DeepEqual(first, again) {
+		t.Fatal("the same seed returned a different order")
+	}
+	if reflect.DeepEqual(first, alphabetical) || reflect.DeepEqual(first, second) {
+		t.Fatal("seeds did not change the order")
+	}
+	for _, shuffled := range [][]string{first, second} {
+		if !reflect.DeepEqual(slices.Sorted(slices.Values(shuffled)), alphabetical) {
+			t.Fatalf("shuffled pages repeated or skipped words: %v", shuffled)
+		}
+	}
+	beyond, err := s.Words(t.Context(), a, Filter{Page: 4, PageSize: 20, ShuffleSeed: 7})
+	if err != nil || beyond.Total != 45 || len(beyond.Items) != 0 {
+		t.Fatalf("page past the end: %+v %v", beyond, err)
+	}
+	for _, seed := range []int{-1, MaxShuffleSeed + 1} {
+		if _, err = s.Words(t.Context(), a, Filter{ShuffleSeed: seed}); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("seed %d accepted", seed)
+		}
 	}
 }

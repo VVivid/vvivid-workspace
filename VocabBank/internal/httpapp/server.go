@@ -110,7 +110,7 @@ func parseFilter(r *http.Request) (store.Filter, error) {
 		return store.Filter{}, store.ErrInvalid
 	}
 	for key, values := range q {
-		if !slices.Contains([]string{"query", "status", "page", "page_size"}, key) || len(values) != 1 {
+		if !slices.Contains([]string{"query", "status", "page", "page_size", "shuffle_seed"}, key) || len(values) != 1 {
 			return store.Filter{}, store.ErrInvalid
 		}
 	}
@@ -118,7 +118,7 @@ func parseFilter(r *http.Request) (store.Filter, error) {
 	for _, field := range []struct {
 		name  string
 		value *int
-	}{{"page", &f.Page}, {"page_size", &f.PageSize}} {
+	}{{"page", &f.Page}, {"page_size", &f.PageSize}, {"shuffle_seed", &f.ShuffleSeed}} {
 		if q.Get(field.name) != "" {
 			value, err := strconv.Atoi(q.Get(field.name))
 			if err != nil {
@@ -126,6 +126,11 @@ func parseFilter(r *http.Request) (store.Filter, error) {
 			}
 			*field.value = value
 		}
+	}
+	// The store reads a zero seed as "A–Z", so a seed the client sends must be
+	// a real one; otherwise shuffle_seed=0 or an empty value would mean A–Z too.
+	if q.Has("shuffle_seed") && f.ShuffleSeed < 1 {
+		return f, store.ErrInvalid
 	}
 	return f, nil
 }

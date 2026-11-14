@@ -7,6 +7,23 @@ import Learning from './learning';
 type Settings = { theme: 'light' | 'dark'; columns: 3 | 4; pageSize: 30 | 50 | 100 };
 const defaults: Settings = { theme: 'light', columns: 3, pageSize: 30 };
 const settingsKey = 'vocabbank-display';
+
+// The server shuffles the whole bank, so every page of one seed fits together.
+// Seeds stay in memory: only theme and layout are saved in localStorage.
+type WordOrder = 'daily' | 'shuffle' | 'az';
+const orderChoices: { order: WordOrder; label: string; hint: string }[] = [
+  { order: 'daily', label: 'Daily mix', hint: 'Today’s mix, new order tomorrow' },
+  { order: 'shuffle', label: 'Shuffle', hint: 'Shuffled' },
+  { order: 'az', label: 'A–Z', hint: 'A–Z' },
+];
+const maxShuffleSeed = 2 ** 31 - 1;
+/** The reader's local date as YYYYMMDD, so each day gets a different daily mix. */
+function dailySeed(now = new Date()) {
+  return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+}
+function randomSeed() {
+  return (crypto.getRandomValues(new Uint32Array(1))[0] % maxShuffleSeed) + 1;
+}
 export default function Vocabulary() {
   const [settings, setSettings] = useState(defaults);
   const [settingsReady, setSettingsReady] = useState(false);
@@ -18,6 +35,10 @@ export default function Vocabulary() {
   const [signingOut, setSigningOut] = useState(false);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
+  const [order, setOrder] = useState<WordOrder>('daily');
+  // The seed is fixed when the order is chosen (Daily mix: when the page opens),
+  // so paging across midnight keeps one consistent order.
+  const [orderSeed, setOrderSeed] = useState(() => dailySeed());
   const [data, setData] = useState<WordPage | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -105,9 +126,13 @@ export default function Vocabulary() {
     const requestVersion = ++listRequestVersion.current;
     setLoading(true);
     try {
-      const next = await api<WordPage>(
-        `/api/v1/words?${new URLSearchParams({ query, page: String(page), page_size: String(settings.pageSize) })}`,
-      );
+      const params = new URLSearchParams({
+        query,
+        page: String(page),
+        page_size: String(settings.pageSize),
+      });
+      if (order !== 'az') params.set('shuffle_seed', String(orderSeed));
+      const next = await api<WordPage>(`/api/v1/words?${params}`);
       if (requestVersion !== listRequestVersion.current) return;
       if (next.total > 0 && page > Math.ceil(next.total / settings.pageSize)) {
         setPage(Math.ceil(next.total / settings.pageSize));
@@ -123,7 +148,7 @@ export default function Vocabulary() {
     } finally {
       if (requestVersion === listRequestVersion.current) setLoading(false);
     }
-  }, [session, checking, query, page, settings.pageSize, handleUnauthorized]);
+  }, [session, checking, query, page, settings.pageSize, order, orderSeed, handleUnauthorized]);
   useEffect(() => {
     if (!session || checking) return;
     const timer = setTimeout(() => {
@@ -185,6 +210,13 @@ export default function Vocabulary() {
       document.removeEventListener('visibilitychange', resume);
     };
   }, [editorNeedsSignIn, checkSession]);
+  function chooseOrder(next: WordOrder) {
+    // Choosing Shuffle again re-rolls it; choosing Daily mix picks up today's date.
+    if (next === 'daily') setOrderSeed(dailySeed());
+    if (next === 'shuffle') setOrderSeed(randomSeed());
+    setOrder(next);
+    setPage(1);
+  }
   function open(word: Word) {
     setDetailError('');
     setSelected(word);
@@ -255,6 +287,11 @@ export default function Vocabulary() {
             {query && ' matching'}
           </span>
         )}
+        {session && data && (
+          <span className="vg-order-hint">
+            · {orderChoices.find((choice) => choice.order === order)?.hint}
+          </span>
+        )}
       </div>
       {checking ? (
         <p role="status" className="vg-empty">
@@ -308,6 +345,23 @@ export default function Vocabulary() {
               }}
             />
             <div className="vg-view">
+              <div className="vg-order">
+                <span id="vg-order-label">Order</span>
+                <div className="vg-theme" role="group" aria-labelledby="vg-order-label">
+                  {orderChoices.map((choice) => (
+                    <button
+                      key={choice.order}
+                      type="button"
+                      aria-pressed={order === choice.order}
+                      title={choice.order === 'shuffle' ? 'Shuffle all words' : undefined}
+                      onClick={() => chooseOrder(choice.order)}
+                    >
+                      {choice.order === 'shuffle' && <span aria-hidden="true">⤨ </span>}
+                      {choice.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <label htmlFor="vg-columns">
                 Columns
                 <select
