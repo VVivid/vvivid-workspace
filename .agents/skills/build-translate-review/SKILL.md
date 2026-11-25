@@ -23,11 +23,17 @@ Before editing for a new task, create or reuse its dedicated branch/worktree fol
 
 Run the complete Builder -> Translation -> final validation -> independent Review sequence for each coding checkpoint. Advance automatically only when exit criteria pass and Review returns Approved. A Denied verdict pauses work as specified below.
 
-This skill explicitly calls for delegation to Builder, Translation, and Review. Launch every stage with exactly `model="gpt-6.1-sol"`. Builder and Review require `reasoning_effort="max"`; Translation requires `reasoning_effort="xhigh"`. Set both values explicitly for every launch, including corrections and repeat reviews. Use `fork_turns="none"` when supplying overrides. Do not inherit defaults or substitute models or efforts. In custom-agent files, use `model_reasoning_effort` with the stage's required value and verify the file before using it; a conflicting custom-agent setting can override launch arguments.
+This skill explicitly calls for delegation to Builder, Translation, and Review. The owner moved this workflow to Claude Code on 2026-11-25. Launch every stage with the Agent tool and `model="opus"`, set explicitly for every launch, including corrections and repeat reviews:
 
-Before accepting a stage's work, verify its effective model and reasoning effort from host launch or runtime metadata. Record the stage, agent ID, verified model, verified effort, and evidence source in the conversation. Requested arguments, saved configuration, and an agent's self-report are not runtime proof. If settings are unavailable, mismatched, or cannot be verified, or independent-agent capability is unavailable, stop and leave the workflow incomplete. Do not present a single-agent pass as independent review.
+| Stage | `subagent_type` | `effort` |
+| --- | --- | --- |
+| Builder | `general-purpose` | `max` |
+| Translation | `general-purpose` | `xhigh` |
+| Review | `Plan` (read-only: no edit tools) | `max` |
 
-Run stages sequentially, with one editing stage active at a time. Launch fresh agents with `fork_turns="none"` where supported. Give them the original request, scoped plan and acceptance criteria, target directory, applicable project instructions, current changes or diff, and validation commands and results. Give each agent this skill's relevant instructions. Do not supply earlier approval verdicts or persuasive explanations as evidence of correctness.
+Never use `subagent_type="fork"`, which inherits the coordinator's conversation. Do not inherit defaults or substitute models or efforts. Record each stage's agent ID and launch settings in the conversation and the task records. Claude Code does not expose separate runtime proof of a sub-agent's model, so the recorded launch settings are the available evidence; state that limitation in the handoff instead of claiming runtime verification. If independent agents are unavailable or the required settings cannot be applied, stop and leave the workflow incomplete. Do not present a single-agent pass as independent review.
+
+Run stages sequentially, with one editing stage active at a time. Launch a fresh agent for every stage, without the coordinator's conversation. Give them the original request, scoped plan and acceptance criteria, target directory, applicable project instructions, current changes or diff, and validation commands and results. Give each agent this skill's relevant instructions. Do not supply earlier approval verdicts or persuasive explanations as evidence of correctness.
 
 Each agent must read the applicable project instructions before acting. The skill grants no additional permission for files, tests, Git operations, dependency changes, service execution, deployment, database writes, or external actions. Preserve unrelated user changes. Keep the agreed plan and progress in the affected project's ignored .development/<task>/CHECKPOINTS.md and RESUME.md as described in the shared workflow. Keep stage evidence there and in the conversation; never stage, commit, or force-add temporary records. Use project and language guidance where applicable without requiring a particular service, language, plugin, or external API.
 

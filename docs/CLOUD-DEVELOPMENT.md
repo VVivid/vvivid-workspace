@@ -48,7 +48,7 @@ Do not truncate or filter guideline output. Run project validation selected by [
 
 ## Verify cloud capabilities before coding
 
-The repository workflow requires Builder and Review on `gpt-6.1-sol` with `max`, and Translation on `gpt-6.1-sol` with `xhigh`. Verify independent-agent support and actual runtime model/effort evidence in the target cloud host. Requested settings, repository metadata, or an agent's self-report are insufficient. If unavailable or unverifiable, stop the affected coding workflow incomplete; do not substitute a single-agent review or silently change models. Vendoring the skill does not provision these capabilities.
+Since 2026-11-25 the repository workflow runs on Claude Code: Builder and Review on `opus` with `max` effort, Translation on `opus` with `xhigh`, each a fresh independent sub-agent (the [skill](../.agents/skills/build-translate-review/SKILL.md) lists the exact launch settings). Verify independent-agent support in the target host and record launch settings as the stage evidence. If unavailable, stop the affected coding workflow incomplete; do not substitute a single-agent review or silently change models. Vendoring the skill does not provision these capabilities.
 
 Follow the shared branch/worktree policy. A cloud task checkout is not automatically proof of the required dedicated branch/worktree or a fresh base; inspect it before editing and use a task worktree when needed. Missing `origin/main`, restricted Git metadata, or unavailable worktree support is a prerequisite to resolve, not permission to edit `main`.
 
