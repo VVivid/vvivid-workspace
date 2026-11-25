@@ -31,6 +31,10 @@ type Config struct {
 	APIAudience     string
 	MCPAudience     string
 	MCPClientIDs    []string
+	// NativeClientIDs lists public native app clients whose API-audience access
+	// tokens may read articles and change their archive and Trash state through an
+	// Authorization header. Empty disables it.
+	NativeClientIDs []string
 	Keys            *Keyring
 	MCPAuthMode     string
 	GatewayIssuer   string
@@ -50,7 +54,7 @@ func LoadConfig(lookup func(string) (string, bool)) (*Config, error) {
 		"NEWSFEED_MCP_CLIENT_IDS",
 		"NEWSFEED_SESSION_KEYS_FILE",
 	}
-	optional := []string{"NEWSFEED_MCP_AUTH_MODE", "NEWSFEED_MCP_GATEWAY_ISSUER", "NEWSFEED_MCP_GATEWAY_JWKS_FILE"}
+	optional := []string{"NEWSFEED_MCP_AUTH_MODE", "NEWSFEED_MCP_GATEWAY_ISSUER", "NEWSFEED_MCP_GATEWAY_JWKS_FILE", "NEWSFEED_NATIVE_CLIENT_IDS"}
 	values := make(map[string]string)
 	configured := false
 	for _, name := range names {
@@ -81,6 +85,10 @@ func LoadConfig(lookup func(string) (string, bool)) (*Config, error) {
 		APIAudience:     values["NEWSFEED_API_AUDIENCE"],
 		MCPAudience:     values["NEWSFEED_MCP_AUDIENCE"],
 		MCPClientIDs:    strings.Split(values["NEWSFEED_MCP_CLIENT_IDS"], ","),
+	}
+	// Unset or empty keeps the article API browser-only.
+	if native := values["NEWSFEED_NATIVE_CLIENT_IDS"]; native != "" {
+		cfg.NativeClientIDs = strings.Split(native, ",")
 	}
 	secret, err := readPrivateFile(values["NEWSFEED_WEB_CLIENT_SECRET_FILE"])
 	if err != nil {
@@ -131,6 +139,16 @@ func (cfg *Config) validate() error {
 	for i, client := range cfg.MCPClientIDs {
 		if !validClient(client) || client == cfg.WebClientID || slices.Contains(cfg.MCPClientIDs[:i], client) {
 			return fmt.Errorf("newsfeed client IDs must be distinct bounded identifiers")
+		}
+	}
+	// A native app client must be dedicated: sharing an ID with the browser or an
+	// MCP client would let that client's tokens use the article API from a header.
+	if len(cfg.NativeClientIDs) > 16 {
+		return fmt.Errorf("at most sixteen newsfeed native app clients are allowed")
+	}
+	for i, client := range cfg.NativeClientIDs {
+		if !validClient(client) || client == cfg.WebClientID || slices.Contains(cfg.MCPClientIDs, client) || slices.Contains(cfg.NativeClientIDs[:i], client) {
+			return fmt.Errorf("newsfeed native app client IDs must be distinct bounded identifiers, separate from the web and MCP clients")
 		}
 	}
 	return nil

@@ -3,8 +3,6 @@ package web
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,7 +10,6 @@ import (
 	"agentnewsfeed/internal/feed"
 	"agentnewsfeed/internal/identity"
 	"agentnewsfeed/internal/store/sqlite"
-	"agentnewsfeed/internal/strictjson"
 )
 
 type settingsPage struct {
@@ -87,19 +84,9 @@ func writeRecommendationError(w http.ResponseWriter, err error) {
 }
 func recommendationJSON[In, Out any](call func(context.Context, identity.Principal, In) (Out, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-		if err != nil || media != "application/json" {
-			writeRecommendationError(w, feed.ErrInvalid)
-			return
-		}
-		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
-		if err != nil {
-			writeRecommendationError(w, feed.ErrInvalid)
-			return
-		}
 		var input In
-		if strictjson.Decode(raw, &input) != nil {
-			writeRecommendationError(w, feed.ErrInvalid)
+		if err := readJSONBody(w, r, 64<<10, &input); err != nil {
+			writeRecommendationError(w, err)
 			return
 		}
 		p, _ := identity.FromContext(r.Context())

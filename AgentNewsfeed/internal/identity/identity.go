@@ -149,7 +149,12 @@ type accessClaims struct {
 // verifyAccess validates a Keycloak access JWT, never an ID token. Restrict the
 // JOSE algorithm before using the rotating remote key set, then validate all
 // resource-server claims independently of OIDC ID-token semantics.
-func (m *Manager) verifyAccess(ctx context.Context, raw, audience string) (accessClaims, error) {
+//
+// allowedClients lists the only clients (azp) accepted for this audience. The
+// caller chooses them because the API audience reaches two credential paths:
+// verifySessionAccess allows only the web client, and AuthenticateBearer allows
+// only bearerClients, the clients permitted in an Authorization header.
+func (m *Manager) verifyAccess(ctx context.Context, raw, audience string, allowedClients []string) (accessClaims, error) {
 	if len(raw) == 0 || len(raw) > 32<<10 {
 		return accessClaims{}, ErrUnauthenticated
 	}
@@ -176,11 +181,7 @@ func (m *Manager) verifyAccess(ctx context.Context, raw, audience string) (acces
 		claims.Expiry-claims.IssuedAt > int64(accessLifetime/time.Second) || claims.NotBefore > now {
 		return accessClaims{}, ErrUnauthenticated
 	}
-	if audience == m.cfg.APIAudience {
-		if claims.ClientID != m.cfg.WebClientID {
-			return accessClaims{}, ErrUnauthenticated
-		}
-	} else if audience != m.cfg.MCPAudience || !slices.Contains(m.cfg.MCPClientIDs, claims.ClientID) {
+	if !slices.Contains(allowedClients, claims.ClientID) {
 		return accessClaims{}, ErrUnauthenticated
 	}
 	for scope := range strings.FieldsSeq(claims.Scope) {
@@ -203,6 +204,7 @@ func (m *Manager) principal(ctx context.Context, claims accessClaims) (Principal
 	return Principal{owner: owner, identity: identity, clientID: claims.ClientID, scopes: strings.Fields(claims.Scope)}, nil
 }
 
+// AuthenticateBearer verifies a token presented in an Authorization header.
 func (m *Manager) AuthenticateBearer(ctx context.Context, raw, audience string) (Principal, error) {
 	if m.cfg.MCPAuthMode == "gateway" && audience == m.cfg.MCPAudience {
 		claims, err := m.verifyGateway(raw)
@@ -211,11 +213,26 @@ func (m *Manager) AuthenticateBearer(ctx context.Context, raw, audience string) 
 		}
 		return m.principal(ctx, claims)
 	}
-	claims, err := m.verifyAccess(ctx, raw, audience)
+	claims, err := m.verifyAccess(ctx, raw, audience, m.bearerClients(audience))
 	if err != nil {
 		return Principal{}, err
 	}
 	return m.principal(ctx, claims)
+}
+
+// bearerClients names the clients whose tokens may arrive in an Authorization
+// header for audience. The web client's API tokens stay inside its encrypted
+// session and are never accepted here, so without native clients the API
+// accepts no header tokens.
+func (m *Manager) bearerClients(audience string) []string {
+	switch audience {
+	case m.cfg.APIAudience:
+		return m.cfg.NativeClientIDs
+	case m.cfg.MCPAudience:
+		return m.cfg.MCPClientIDs
+	default:
+		return nil
+	}
 }
 
 func (m *Manager) APIAudience() string { return m.cfg.APIAudience }

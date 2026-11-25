@@ -11,22 +11,31 @@ func TestBrowserClientRequiresExplicitNewsfeedPermissions(t *testing.T) {
 	m, issuer, _, _ := testManager(t)
 	enroll(t, m, "alice")
 	for _, tc := range []struct {
-		scope, audience, client string
-		allowed                 bool
+		scope, client string
+		allowed       bool
 	}{
-		{Read, m.APIAudience(), "newsfeed-web", true},
-		{Read + " " + ArticlesWrite, m.APIAudience(), "newsfeed-web", true},
-		{Read + " sshmcp:admin", m.APIAudience(), "newsfeed-web", false},
-		{Read, m.APIAudience(), "newsfeed-codex", false},
-		{Read, m.MCPAudience(), "newsfeed-web", false},
+		{Read, "newsfeed-web", true},
+		{Read + " " + ArticlesWrite, "newsfeed-web", true},
+		{Read + " sshmcp:admin", "newsfeed-web", false},
+		{Read, "newsfeed-codex", false},
 	} {
-		raw := issuer.bearer("alice", tc.client, tc.audience, tc.scope, nil)
-		principal, err := m.AuthenticateBearer(t.Context(), raw, tc.audience)
+		// The browser's API grant is only ever verified from its encrypted session.
+		claims, err := m.verifySessionAccess(t.Context(), issuer.bearer("alice", tc.client, m.APIAudience(), tc.scope, nil))
 		if (err == nil) != tc.allowed {
 			t.Fatalf("browser grant %s accepted=%v", tc.scope, err == nil)
 		}
-		if err == nil && principal.Allows(ArticlesWrite) != (tc.scope == Read+" "+ArticlesWrite) {
+		if err != nil {
+			continue
+		}
+		principal, err := m.principal(t.Context(), claims)
+		if err != nil || principal.Allows(ArticlesWrite) != (tc.scope == Read+" "+ArticlesWrite) {
 			t.Fatal("browser write permission did not match its explicit grant")
+		}
+	}
+	for _, audience := range []string{m.APIAudience(), m.MCPAudience()} {
+		raw := issuer.bearer("alice", "newsfeed-web", audience, Read, nil)
+		if _, err := m.AuthenticateBearer(t.Context(), raw, audience); err == nil {
+			t.Fatalf("browser grant accepted in an Authorization header for %s", audience)
 		}
 	}
 	writeOnly := issuer.bearer("alice", "newsfeed-codex", m.MCPAudience(), ArticlesWrite, nil)

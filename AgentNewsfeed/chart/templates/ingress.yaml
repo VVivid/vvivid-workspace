@@ -1,4 +1,4 @@
-# The shared gateway owns OAuth metadata. This new private route does not
+# The shared gateway owns MCP OAuth metadata. This new private route does not
 # transfer ownership of existing ingress or Demo A routes into this release.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -51,6 +51,16 @@ spec:
             backend:
               service:
                 name: {{ $.Release.Name }}
+                port: {number: 8091}
+          {{- end }}
+          {{- if include "newsfeed.nativeClientIDs" . }}
+          # Native apps find the issuer through the API resource metadata that
+          # their 401/403 challenges name. The browser app does not use it.
+          - path: /.well-known/oauth-protected-resource/api/v1
+            pathType: Exact
+            backend:
+              service:
+                name: {{ .Release.Name }}
                 port: {number: 8091}
           {{- end }}
           {{- range list "/articles/" "/api/v1/articles" "/static/assets/" "/thumbnails/" }}

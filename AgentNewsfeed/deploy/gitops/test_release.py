@@ -53,6 +53,7 @@ class ReleasePolicyTests(unittest.TestCase):
         document = initial()
         document["helm"]["values"]["resources"]["requests"]["cpu"] = "125m"
         document["helm"]["values"]["tls"]["productionEnabled"] = True
+        document["helm"]["values"]["identity"] = {"nativeClientIDs": "newsfeed-android"}
         before = copy.deepcopy(document)
         self.assertTrue(update_desired_state(document, candidate(), DIGEST, CHART_DIGEST))
         expected = copy.deepcopy(before)

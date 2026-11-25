@@ -125,6 +125,48 @@ func (m *Manager) BearerMiddleware(audience string, scopes []string, next http.H
 	})
 }
 
+// BrowserOrNativeAppMiddleware authenticates routes shared by the browser and
+// native apps. Any Authorization header selects the native app path, and that
+// header alone decides the request: an empty, malformed or rejected bearer token
+// never falls back to the session cookie. That path accepts only the configured
+// native app clients (see bearerClients), never the web client's own token. The
+// bearer path needs no CSRF token or Origin header because browsers never attach
+// a bearer token automatically. Without configured native app clients the route
+// stays browser-only and ignores Authorization.
+func (m *Manager) BrowserOrNativeAppMiddleware(scopes []string, next http.Handler) http.Handler {
+	return m.browserOrNativeAppMiddleware(scopes, false, next, next)
+}
+
+// BrowserFormOrNativeAppMiddleware serves a write route whose two clients send
+// different requests. A browser posts an HTML form, checked exactly like
+// BrowserFormMiddleware and handled by browserForm. A configured native app
+// sends its own bearer token, chosen and checked exactly like
+// BrowserOrNativeAppMiddleware, and nativeApp handles its request body. Both
+// paths require the same scopes.
+func (m *Manager) BrowserFormOrNativeAppMiddleware(scopes []string, browserForm, nativeApp http.Handler) http.Handler {
+	return m.browserOrNativeAppMiddleware(scopes, true, browserForm, nativeApp)
+}
+
+// browserOrNativeAppMiddleware implements both middlewares above. Requests
+// without an Authorization header, and every request while no native app client
+// is configured, take the browser path: browserMiddleware, with form selecting
+// BrowserFormMiddleware's HTML form checks, then browser. Requests with the
+// header take the API-audience BearerMiddleware, then nativeApp.
+func (m *Manager) browserOrNativeAppMiddleware(scopes []string, form bool, browser, nativeApp http.Handler) http.Handler {
+	browserPath := m.browserMiddleware(scopes, form, browser)
+	if len(m.cfg.NativeClientIDs) == 0 {
+		return browserPath
+	}
+	nativeAppPath := m.BearerMiddleware(m.cfg.APIAudience, scopes, nativeApp)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(r.Header.Values("Authorization")) > 0 {
+			nativeAppPath.ServeHTTP(w, r)
+			return
+		}
+		browserPath.ServeHTTP(w, r)
+	})
+}
+
 func (m *Manager) resourceMetadata(resource string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

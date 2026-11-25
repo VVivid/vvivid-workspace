@@ -147,7 +147,7 @@ func (m *Manager) newSessionState(ctx context.Context, access, refresh, rawID, t
 	if err != nil || !constantEqual(id.Nonce, nonce) {
 		return sessionState{}, Principal{}, ErrUnauthenticated
 	}
-	claims, err := m.verifyAccess(ctx, access, m.cfg.APIAudience)
+	claims, err := m.verifySessionAccess(ctx, access)
 	if err != nil || claims.Subject != id.Subject {
 		return sessionState{}, Principal{}, ErrUnauthenticated
 	}
@@ -157,6 +157,12 @@ func (m *Manager) newSessionState(ctx context.Context, access, refresh, rawID, t
 	}
 	state := sessionState{AccessToken: access, RefreshToken: refresh, IDToken: rawID, Nonce: nonce, CSRF: rand.Text(), VerifiedAt: m.now().Unix(), AccessExpiry: claims.Expiry, Subject: claims.Subject}
 	return state, principal, nil
+}
+
+// verifySessionAccess validates an API access token that the browser session
+// obtained through its own sign-in or refresh, so only the web client is valid.
+func (m *Manager) verifySessionAccess(ctx context.Context, raw string) (accessClaims, error) {
+	return m.verifyAccess(ctx, raw, m.cfg.APIAudience, []string{m.cfg.WebClientID})
 }
 
 func (m *Manager) verifyBrowserID(ctx context.Context, raw, access string) (*oidc.IDToken, error) {
@@ -215,7 +221,11 @@ func (m *Manager) browserSession(r *http.Request) (sqlite.Session, sessionState,
 			return sqlite.Session{}, sessionState{}, Principal{}, ErrUnauthenticated
 		}
 	}
-	principal, err := m.AuthenticateBearer(r.Context(), state.AccessToken, m.cfg.APIAudience)
+	claims, err := m.verifySessionAccess(r.Context(), state.AccessToken)
+	if err != nil {
+		return sqlite.Session{}, sessionState{}, Principal{}, ErrUnauthenticated
+	}
+	principal, err := m.principal(r.Context(), claims)
 	if err != nil || principal.Owner().ID() != session.Owner.ID() {
 		return sqlite.Session{}, sessionState{}, Principal{}, ErrUnauthenticated
 	}
@@ -241,7 +251,7 @@ func (m *Manager) refresh(ctx context.Context, previous sessionState) (sessionSt
 	if json.Unmarshal(response, &tokens) != nil || !strings.EqualFold(tokens.TokenType, "Bearer") {
 		return sessionState{}, ErrUnauthenticated
 	}
-	claims, err := m.verifyAccess(ctx, tokens.AccessToken, m.cfg.APIAudience)
+	claims, err := m.verifySessionAccess(ctx, tokens.AccessToken)
 	if err != nil {
 		return sessionState{}, err
 	}

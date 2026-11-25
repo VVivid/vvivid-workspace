@@ -152,10 +152,14 @@ func TestGatewayModeKeepsBrowserLoginRefreshAndAPITrust(t *testing.T) {
 		t.Fatalf("gateway mode browser refresh: %v", err)
 	}
 	api := issuer.bearer("alice", "newsfeed-web", m.APIAudience(), Read, nil)
-	if _, err := m.AuthenticateBearer(t.Context(), api, m.APIAudience()); err != nil {
-		t.Fatalf("direct API verification: %v", err)
+	if _, err := m.verifySessionAccess(t.Context(), api); err != nil {
+		t.Fatalf("direct browser API verification: %v", err)
 	}
-	if _, err := m.AuthenticateBearer(t.Context(), gatewayToken(t, m, key, gatewayTokenType, "gateway-key", nil), m.APIAudience()); err == nil {
+	native := withNativeClients(t, m, nativeClient)
+	if _, err := native.AuthenticateBearer(t.Context(), issuer.bearer("alice", nativeClient, m.APIAudience(), Read, nil), m.APIAudience()); err != nil {
+		t.Fatalf("direct native app API verification: %v", err)
+	}
+	if _, err := native.AuthenticateBearer(t.Context(), gatewayToken(t, m, key, gatewayTokenType, "gateway-key", nil), m.APIAudience()); err == nil {
 		t.Fatal("gateway credential accepted at direct API")
 	}
 	for path, status := range map[string]int{"/.well-known/oauth-protected-resource/mcp": 404, "/.well-known/oauth-protected-resource/api/v1": 200} {

@@ -68,6 +68,7 @@
         "gatewayIssuer",
         "gatewayAudience",
         "mcpClientIDs",
+        "nativeClientIDs",
         "existingGatewayJWKS"
       ],
       "additionalProperties": false,
@@ -90,6 +91,14 @@
         },
         "mcpClientIDs": {
           "const": "newsfeed-chatgpt"
+        },
+        "nativeClientIDs": {
+          "$comment": "Empty, or 1-16 comma-separated IDs of [A-Za-z0-9._-]. The not-pattern rejects any 257-character run without a comma, limiting each ID to 256 characters. The newsfeed.nativeClientIDs template helper rejects repeated IDs and the web or MCP client.",
+          "type": "string",
+          "pattern": "^([A-Za-z0-9._-]+(,[A-Za-z0-9._-]+){0,15})?$",
+          "not": {
+            "pattern": "[^,]{257}"
+          }
         },
         "existingGatewayJWKS": {
           "type": "string",
