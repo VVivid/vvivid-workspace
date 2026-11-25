@@ -15,6 +15,9 @@ identity:
   gatewayIssuer: https://mcp.rd.lab.vvivid.dev
   gatewayAudience: agent-newsfeed-mcp
   mcpClientIDs: newsfeed-chatgpt
+  # Comma-separated public native app clients, e.g. newsfeed-android. Empty
+  # disables native app bearer access and its public discovery route.
+  nativeClientIDs: ''
   existingGatewayJWKS: rd-gateway-public-jwks
 thumbnailHosts: ''
 persistence:

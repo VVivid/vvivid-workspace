@@ -61,7 +61,7 @@ fail closed. Existing release/provenance consistency is checked. Exact repeated
 promotion is a no-op; changed digests for the same run, version reuse, source
 substitution and downgrades are rejected. Normal non-fast-forward races retry
 from fresh main, rechecking source/order each time and preserving operator TLS,
-resources, maintenance, retained claim selection and unrelated files. Authentication, protection
+resources, maintenance, retained claim selection, native app clients and unrelated files. Authentication, protection
 and transport failures stop. Tests perform actual transactions against temporary
 local bare Git remotes; no hosted credentials or services are used.
 
@@ -101,8 +101,9 @@ production issuance only after observed staging readiness, then enable browser
 ingress only after observed trusted production TLS. Values cannot establish
 actual certificate readiness. Public ingress allows the News feed, archive,
 Trash, article API and reader, `/todo`, `/api/v1/todos`, the exact login, callback
-and logout paths, static assets and thumbnails. It excludes `/mcp`, discovery,
-health and the retired Jobs routes. Prefix matches use path segments, and
+and logout paths, static assets and thumbnails. It excludes `/mcp`, health, the
+retired Jobs routes and discovery, except the exact API resource metadata that
+[native app clients](#native-app-clients) add. Prefix matches use path segments, and
 Traefik preserves the canonical Host.
 Private exact `/agent-newsfeed/mcp` and its protected-resource metadata go to
 `rd-gateway` on `platform-tls` with existing private TLS.
@@ -138,6 +139,36 @@ any DNS change. After actual-client/browser/storage and private Rancher checks,
 only `newsfeed.vvivid.dev` DNS-only A may change from `203.0.113.11` to
 `203.0.113.10`, TTL300, with separately authorized cutover. Keep the old app/data
 seven days. No old-server operations are part of this source preparation.
+
+## Native app clients
+
+`identity.nativeClientIDs` is empty by default, which keeps native app bearer
+access and its public discovery route disabled. A value such as `newsfeed-android`
+becomes the app's `NEWSFEED_NATIVE_CLIENT_IDS` and, while browser ingress is
+enabled, adds only the exact public route
+`/.well-known/oauth-protected-resource/api/v1`, whose metadata names the R&D
+issuer. Native article reads, state changes and thumbnails already use the public
+`/api/v1/articles` and `/thumbnails/` prefixes. The schema accepts up to 16
+comma-separated IDs of 1–256 letters, digits, dots, underscores or hyphens, a
+narrower character set than the app accepts. Rendering fails for a repeated ID
+or one equal to the web or MCP client, so an invalid list never replaces the
+running pod with one that cannot start.
+
+Enable it in this order:
+
+1. Release a version whose chart includes this value and confirm Fleet runs that
+   chart version. An older chart's schema rejects the unknown key, so Fleet would
+   stop applying desired state until the key is removed or a newer chart is selected.
+2. Register the native app's public Keycloak client as the
+   [identity configuration](../../README.md#exact-identity-configuration)
+   describes, and verify a newly issued token.
+3. Add `helm.values.identity.nativeClientIDs` to the production `fleet.yaml` in a
+   reviewed operator change that keeps the file JSON-formatted for `promote.py`,
+   then confirm the public metadata route returns the API resource. `promote.py`
+   changes only the release fields, so later releases keep this value.
+
+An empty value disables native access again. Remove the key before, or in the
+same change as, any explicit operator rollback to a chart without it.
 
 ## Local validation and reading order
 

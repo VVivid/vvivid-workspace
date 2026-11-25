@@ -33,6 +33,7 @@ assert service['environment']['NEWSFEED_DB_PATH'] == '/data/newsfeed.sqlite'
 assert service['environment']['NEWSFEED_WEB_CLIENT_SECRET_FILE'] == '/run/secrets/web-client'
 assert service['environment']['NEWSFEED_SESSION_KEYS_FILE'] == '/run/secrets/session-keys'
 assert service['environment']['NEWSFEED_THUMBNAIL_HOSTS'] == ''
+assert service['environment']['NEWSFEED_NATIVE_CLIENT_IDS'] == ''
 assert service['labels']['traefik.http.services.newsfeed.loadbalancer.server.port'] == '8091'
 assert config['volumes']['newsfeed-data']['name'] == 'newsfeed-synthetic-data'
 assert config['networks']['traefik']['external'] is True
