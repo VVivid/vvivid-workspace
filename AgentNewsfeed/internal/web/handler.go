@@ -10,8 +10,10 @@ import (
 	"encoding/json"
 	"errors"
 	"html/template"
+	"io"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -22,6 +24,7 @@ import (
 	"agentnewsfeed/internal/identity"
 	feedmcp "agentnewsfeed/internal/mcp"
 	"agentnewsfeed/internal/store/sqlite"
+	"agentnewsfeed/internal/strictjson"
 	"agentnewsfeed/internal/thumbnail"
 )
 
@@ -74,15 +77,19 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 	if auth != nil {
 		auth.Register(mux)
 		h.registerSettings(mux)
-		mux.Handle("GET /api/v1/articles", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.list)))
-		mux.Handle("GET /api/v1/articles/{id}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.detail)))
-		mux.Handle("POST /api/v1/articles/{id}/archive", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.archive(true)))
-		mux.Handle("POST /api/v1/articles/{id}/restore", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.archive(false)))
-		mux.Handle("POST /api/v1/articles/{id}/trash", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.trash(false)))
-		mux.Handle("POST /api/v1/articles/{id}/restore-trash", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, h.trash(true)))
+		// Article and image reads also serve configured native apps. So do the
+		// article state changes, as JSON (see nativeAppStateChange) beside the
+		// unchanged browser forms. To-do and settings writes stay browser-only.
+		mux.Handle("GET /api/v1/articles", auth.BrowserOrNativeAppMiddleware([]string{identity.Read}, http.HandlerFunc(h.list)))
+		mux.Handle("GET /api/v1/articles/{id}", auth.BrowserOrNativeAppMiddleware([]string{identity.Read}, http.HandlerFunc(h.detail)))
+		stateScopes := []string{identity.Read, identity.ArticlesWrite}
+		mux.Handle("POST /api/v1/articles/{id}/archive", auth.BrowserFormOrNativeAppMiddleware(stateScopes, h.archive(true), h.nativeAppStateChange(h.setArticleArchived(true))))
+		mux.Handle("POST /api/v1/articles/{id}/restore", auth.BrowserFormOrNativeAppMiddleware(stateScopes, h.archive(false), h.nativeAppStateChange(h.setArticleArchived(false))))
+		mux.Handle("POST /api/v1/articles/{id}/trash", auth.BrowserFormOrNativeAppMiddleware(stateScopes, h.trash(false), h.nativeAppStateChange(h.service.TrashArticle)))
+		mux.Handle("POST /api/v1/articles/{id}/restore-trash", auth.BrowserFormOrNativeAppMiddleware(stateScopes, h.trash(true), h.nativeAppStateChange(h.service.RestoreArticle)))
 		mux.Handle("POST /api/v1/todos", auth.BrowserFormMiddleware([]string{identity.Read, identity.ArticlesWrite}, http.HandlerFunc(h.todoForm)))
-		mux.Handle("GET /thumbnails/{id}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.image)))
-		mux.Handle("GET /thumbnails/{id}/content/{image}", auth.BrowserMiddleware([]string{identity.Read}, http.HandlerFunc(h.image)))
+		mux.Handle("GET /thumbnails/{id}", auth.BrowserOrNativeAppMiddleware([]string{identity.Read}, http.HandlerFunc(h.image)))
+		mux.Handle("GET /thumbnails/{id}/content/{image}", auth.BrowserOrNativeAppMiddleware([]string{identity.Read}, http.HandlerFunc(h.image)))
 		mux.Handle("/mcp", auth.BearerMiddleware(auth.MCPAudience(), nil, feedmcp.NewHandler(service, logger)))
 	} else {
 		mux.HandleFunc("/mcp", unconfigured)
@@ -115,7 +122,7 @@ func headers(next http.Handler, auth *identity.Manager) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; form-action "+formAction+"; base-uri 'none'; frame-ancestors 'none'")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		// Native POST navigations need their same-origin Origin header for CSRF.
+		// HTML form POST navigations need their same-origin Origin header for CSRF.
 		// no-referrer makes Chromium send Origin:null; same-origin still withholds
 		// all cross-origin referrers, and source links also use noreferrer.
 		w.Header().Set("Referrer-Policy", "same-origin")
@@ -423,7 +430,7 @@ func (h *handler) trash(restore bool) http.Handler {
 }
 
 // Article actions return to the current shelf or reader. Restrict this destination
-// before mutating so native forms cannot become an open redirect.
+// before mutating so HTML forms cannot become an open redirect.
 func articleReturnTo(r *http.Request) (string, error) {
 	query := r.URL.Query()
 	if !query.Has("return_to") {
@@ -457,7 +464,7 @@ func articleReturnTo(r *http.Request) (string, error) {
 	return destination.String(), nil
 }
 
-// Return the same destination to native forms and fetch requests. The latter
+// Return the same destination to HTML forms and fetch requests. The latter
 // load the new page separately, so a failed page read never repeats the write.
 func respondToStateForm(w http.ResponseWriter, r *http.Request, location string) {
 	w.Header().Add("Vary", "Accept")
@@ -489,20 +496,41 @@ func writeError(w http.ResponseWriter, err error) {
 }
 
 func writeSafeError(w http.ResponseWriter, err error, message string) {
-	status := http.StatusServiceUnavailable
+	http.Error(w, message, errorStatus(err))
+}
+
+// errorStatus maps feed, identity and storage errors to the HTTP status of both
+// browser responses and native app JSON errors.
+func errorStatus(err error) int {
 	switch {
 	case errors.Is(err, feed.ErrInvalid):
-		status = http.StatusBadRequest
+		return http.StatusBadRequest
 	case errors.Is(err, identity.ErrForbidden):
-		status = http.StatusForbidden
+		return http.StatusForbidden
 	case errors.Is(err, identity.ErrUnauthenticated):
-		status = http.StatusUnauthorized
+		return http.StatusUnauthorized
 	case errors.Is(err, sqlite.ErrNotFound):
-		status = http.StatusNotFound
+		return http.StatusNotFound
 	case errors.Is(err, sqlite.ErrLimit):
-		status = http.StatusTooManyRequests
+		return http.StatusTooManyRequests
 	case errors.Is(err, sqlite.ErrConflict), errors.Is(err, sqlite.ErrIdempotencyConflict):
-		status = http.StatusConflict
+		return http.StatusConflict
+	default:
+		return http.StatusServiceUnavailable
 	}
-	http.Error(w, message, status)
+}
+
+// readJSONBody decodes one application/json object of at most limit bytes with
+// the strict decoder: exactly the declared fields, with no unknown, duplicate,
+// null or trailing values. Every failure is reported as feed.ErrInvalid.
+func readJSONBody(w http.ResponseWriter, r *http.Request, limit int64, out any) error {
+	media, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || media != "application/json" {
+		return feed.ErrInvalid
+	}
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
+	if err != nil || strictjson.Decode(raw, out) != nil {
+		return feed.ErrInvalid
+	}
+	return nil
 }
