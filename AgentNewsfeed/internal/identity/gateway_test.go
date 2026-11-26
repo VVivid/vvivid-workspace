@@ -94,6 +94,7 @@ func TestGatewayIdentityClaimsOwnershipAndDisabledAccounts(t *testing.T) {
 		"browser client":          func(c map[string]any) { c["client_id"] = "newsfeed-web" },
 		"unknown scope":           func(c map[string]any) { c["scope"] = Read + " demo-a:use" },
 		"identity scope":          func(c map[string]any) { c["scope"] = Read + " openid" },
+		"offline access scope":    func(c map[string]any) { c["scope"] = Read + " offline_access" },
 		"expired":                 func(c map[string]any) { c["exp"] = m.now().Unix() },
 		"overlong":                func(c map[string]any) { c["exp"] = m.now().Unix() + 61 },
 		"old issued":              func(c map[string]any) { c["iat"] = m.now().Unix() - 1 },

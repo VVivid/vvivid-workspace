@@ -2,6 +2,7 @@ package identity
 
 import (
 	"crypto/sha256"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -42,6 +43,55 @@ func TestBrowserClientRequiresExplicitNewsfeedPermissions(t *testing.T) {
 	principal, err := m.AuthenticateBearer(t.Context(), writeOnly, m.MCPAudience())
 	if err != nil || principal.Require(Read) == nil || principal.Require(ArticlesWrite) != nil {
 		t.Fatal("write scope implied reading or was lost")
+	}
+}
+
+// Keycloak lists offline_access in the scope claim when a client, such as the
+// native app, asks for a long-lived refresh token. Like openid, profile and
+// email it grants nothing on any path that verifies provider access tokens, and
+// every other scope outside the newsfeed permissions is still forbidden.
+func TestOfflineAccessGrantsNothingAndOtherUnknownScopesStayForbidden(t *testing.T) {
+	browserOnly, issuer, _, _ := testManager(t)
+	m := withNativeClients(t, browserOnly, nativeClient)
+	enroll(t, m, "alice")
+	for name, authenticate := range map[string]func(t *testing.T, scope string) (Principal, error){
+		"native app bearer": func(t *testing.T, scope string) (Principal, error) {
+			return m.AuthenticateBearer(t.Context(), issuer.bearer("alice", nativeClient, m.APIAudience(), scope, nil), m.APIAudience())
+		},
+		"direct MCP bearer": func(t *testing.T, scope string) (Principal, error) {
+			return m.AuthenticateBearer(t.Context(), issuer.bearer("alice", "newsfeed-codex", m.MCPAudience(), scope, nil), m.MCPAudience())
+		},
+		"browser session grant": func(t *testing.T, scope string) (Principal, error) {
+			claims, err := m.verifySessionAccess(t.Context(), issuer.bearer("alice", "newsfeed-web", m.APIAudience(), scope, nil))
+			if err != nil {
+				return Principal{}, err
+			}
+			return m.principal(t.Context(), claims)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, tc := range []struct {
+				scope       string
+				read, write bool
+			}{
+				{"openid offline_access " + Read + " " + ArticlesWrite, true, true},
+				{"offline_access profile email " + Read, true, false},
+				{"offline_access", false, false},
+			} {
+				principal, err := authenticate(t, tc.scope)
+				if err != nil || principal.Allows(Read) != tc.read || principal.Allows(ArticlesWrite) != tc.write {
+					t.Fatalf("scope %q: read %v, write %v, error %v; want read %v, write %v, no error", tc.scope, principal.Allows(Read), principal.Allows(ArticlesWrite), err, tc.read, tc.write)
+				}
+			}
+			// Every other scope is still forbidden. Scopes match exactly, so near
+			// misses of offline_access are unknown too.
+			for _, unknown := range []string{"newsfeed:admin", "offline", "OFFLINE_ACCESS"} {
+				scope := "openid offline_access " + Read + " " + ArticlesWrite + " " + unknown
+				if _, err := authenticate(t, scope); !errors.Is(err, ErrForbidden) {
+					t.Fatalf("scope %q: error %v, want %v", scope, err, ErrForbidden)
+				}
+			}
+		})
 	}
 }
 

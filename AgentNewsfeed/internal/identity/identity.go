@@ -185,7 +185,7 @@ func (m *Manager) verifyAccess(ctx context.Context, raw, audience string, allowe
 		return accessClaims{}, ErrUnauthenticated
 	}
 	for scope := range strings.FieldsSeq(claims.Scope) {
-		if scope == "openid" || scope == "profile" || scope == "email" {
+		if slices.Contains(ignoredScopes, scope) {
 			continue
 		}
 		if !slices.Contains(newsfeedScopes, scope) {
