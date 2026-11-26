@@ -23,6 +23,14 @@ const (
 
 var newsfeedScopes = []string{Read, ArticlesWrite}
 
+// ignoredScopes are OpenID Connect scopes that Keycloak may list beside newsfeed
+// permissions in a provider access token: openid, profile and email from
+// sign-in, and offline_access when a client such as the native app asks for a
+// refresh token that outlasts its sign-in session. They grant nothing here, so
+// verifyAccess skips them instead of rejecting the token. verifyGateway accepts
+// none of them: MCPGateway's v1 wire contract carries only newsfeedScopes.
+var ignoredScopes = []string{"openid", "profile", "email", "offline_access"}
+
 type Config struct {
 	Origin          string
 	Issuer          string

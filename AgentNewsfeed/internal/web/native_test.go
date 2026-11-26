@@ -396,6 +396,72 @@ func TestNativeAppStateChangesRequireBothScopesOwnerAndOnlyTheBearerToken(t *tes
 	}
 }
 
+// The Android app asks Keycloak for offline_access to stay signed in, so its
+// access tokens list that scope. It grants nothing: native app and browser
+// grants carrying it work exactly as their newsfeed scopes allow, and any other
+// unknown scope is still refused.
+func TestOfflineAccessScopeGrantsNothingToNativeAppsOrBrowsers(t *testing.T) {
+	f, s, h := nativeApp(t, &recordingImageFetcher{})
+	alice := f.Principal(t, "alice", allScopes)
+	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "offline-access", Article: feed.Content{
+		URL: "https://example.com/offline-access", Title: "Offline access", Summary: "A sourced introduction.",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := added.Article.ID
+	list, path := "/api/v1/articles", "/api/v1/articles/"+id
+	api := f.Manager.APIAudience()
+
+	// The Android app's grant reads and changes article state.
+	android := f.Bearer("alice", nativeClient, api, "openid offline_access "+allScopes)
+	var page feed.Page
+	if response := request(h, http.MethodGet, list, nil, android); response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &page) != nil || len(page.Articles) != 1 || page.Articles[0].ID != id {
+		t.Fatalf("native list with offline_access: HTTP %d", response.Code)
+	}
+	if response := request(h, http.MethodGet, path, nil, android); response.Code != 200 {
+		t.Fatalf("native detail with offline_access: HTTP %d", response.Code)
+	}
+	archived := changeState(t, h, path+"/archive", android, 1, "offline-access-archive")
+	if archived.ArchivedAt == 0 || archived.Revision != 2 {
+		t.Fatalf("native archive with offline_access: %+v", archived)
+	}
+
+	// offline_access adds no permission, and other unknown scopes are refused.
+	resource := `Bearer resource_metadata="` + testfixture.Origin + `/.well-known/oauth-protected-resource/api/v1"`
+	readChallenge := resource + `, scope="` + identity.Read + `", error="insufficient_scope"`
+	stateChallenge := resource + `, scope="` + allScopes + `", error="insufficient_scope"`
+	readOnly := f.Bearer("alice", nativeClient, api, "openid offline_access "+identity.Read)
+	if response := post(h, path+"/restore", nativeAppHeaders(readOnly), stateBody(2, "offline-access-read-only"), nil); response.Code != 403 || response.Header().Get("WWW-Authenticate") != stateChallenge {
+		t.Fatalf("native restore with a read-only offline_access grant: HTTP %d challenge %q", response.Code, response.Header().Get("WWW-Authenticate"))
+	}
+	for i, unknown := range []string{"newsfeed:admin", "offline"} {
+		token := f.Bearer("alice", nativeClient, api, "openid offline_access "+allScopes+" "+unknown)
+		if response := request(h, http.MethodGet, list, nil, token); response.Code != 403 || response.Header().Get("WWW-Authenticate") != readChallenge {
+			t.Fatalf("native read with %s: HTTP %d challenge %q", unknown, response.Code, response.Header().Get("WWW-Authenticate"))
+		}
+		if response := post(h, path+"/restore", nativeAppHeaders(token), stateBody(2, fmt.Sprintf("offline-access-unknown-%d", i)), nil); response.Code != 403 || response.Header().Get("WWW-Authenticate") != stateChallenge {
+			t.Fatalf("native restore with %s: HTTP %d challenge %q", unknown, response.Code, response.Header().Get("WWW-Authenticate"))
+		}
+	}
+	if current, err := s.GetArticle(t.Context(), alice, id); err != nil || current != archived {
+		t.Fatal("refused grants changed the article")
+	}
+
+	// A browser grant carrying offline_access signs in, reads and restores alike.
+	cookie := f.CookieWithScopes(t, "alice", "openid offline_access "+allScopes)
+	if response := request(h, http.MethodGet, path, cookie, ""); response.Code != 200 {
+		t.Fatalf("browser read with offline_access: HTTP %d", response.Code)
+	}
+	_, csrf := f.BrowserPrincipal(t, cookie)
+	if response := postArticleForm(h, path+"/restore", cookie, csrf, testfixture.Origin); response.Code != 303 {
+		t.Fatalf("browser restore with offline_access: HTTP %d", response.Code)
+	}
+	if current, err := s.GetArticle(t.Context(), alice, id); err != nil || current.ArchivedAt != 0 || current.Revision != 3 {
+		t.Fatalf("browser restore with offline_access: %+v", current)
+	}
+}
+
 func TestNativeAppStateChangesRejectInvalidRequestsWithoutReservingKeys(t *testing.T) {
 	f, s, h := nativeApp(t, &recordingImageFetcher{})
 	alice := f.Principal(t, "alice", allScopes)
