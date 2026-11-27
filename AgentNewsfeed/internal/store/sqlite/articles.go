@@ -350,6 +350,13 @@ func mutateArticleTx(ctx context.Context, tx *sql.Tx, owner Owner, key, operatio
 		}
 		switch operation {
 		case "update_article", "patch_article":
+			// Audio speaks the article's text, so the text stays as it is until
+			// the owner deletes the audio.
+			if locked, err := articleHasAudio(ctx, tx, owner.id, a.ID); err != nil {
+				return MutationResult{}, err
+			} else if locked {
+				return MutationResult{}, ErrLocked
+			}
 			// A placeholder contains its own article ID, so it never duplicates another.
 			var duplicate bool
 			if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM articles WHERE owner_id = ? AND canonical_url = ? AND id != ?)", owner.id, storedURL(a), a.ID).Scan(&duplicate); err != nil {
@@ -375,6 +382,10 @@ func mutateArticleTx(ctx context.Context, tx *sql.Tx, owner Owner, key, operatio
 			changed := false
 			switch operation {
 			case "trash_article":
+				// Trash deletes the article's audio; restoring does not bring it back.
+				if err := deleteArticleAudioTx(ctx, tx, owner.id, a.ID); err != nil {
+					return MutationResult{}, err
+				}
 				a.TrashedAt, changed = now, true
 			case "restore_article":
 				changed = a.TrashedAt != 0

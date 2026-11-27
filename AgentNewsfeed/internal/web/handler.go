@@ -77,6 +77,7 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 	if auth != nil {
 		auth.Register(mux)
 		h.registerSettings(mux)
+		h.registerAudio(mux)
 		// Article, tag and image reads also serve configured native apps. So do
 		// the article state changes, as JSON (see nativeAppStateChange) beside the
 		// unchanged browser forms. To-do and settings writes stay browser-only.
@@ -98,6 +99,7 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 		mux.HandleFunc("/api/v1/articles", unconfigured)
 		mux.HandleFunc("/api/v1/articles/", unconfigured)
 		mux.HandleFunc("/api/v1/tags", unconfigured)
+		mux.HandleFunc("/api/v1/audio/", unconfigured)
 		mux.HandleFunc("/api/v1/todos", unconfigured)
 		mux.HandleFunc("/api/v1/settings/", unconfigured)
 		mux.HandleFunc("/auth/", unconfigured)

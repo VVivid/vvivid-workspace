@@ -16,29 +16,34 @@ import (
 
 // articleTagsDuringSeed lets current article code seed a database migrated
 // only to an earlier version. That code reads and writes article_tags
-// (migration 0009), so the table exists only until the returned function
-// drops it. The seed must store no tags, leaving the earlier schema and rows.
+// (migration 0009) and checks article audio (migration 0010), so those tables
+// exist only until the returned function drops them. The seed must store no
+// tags or audio, leaving the earlier schema and rows.
 func articleTagsDuringSeed(t *testing.T, db *sql.DB) (drop func()) {
 	t.Helper()
 	migrations, err := loadMigrations(migrationFiles)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tags := slices.IndexFunc(migrations, func(m migration) bool { return m.name == "0009_article_tags.sql" })
-	if tags < 0 {
-		t.Fatal("article tags migration is missing")
-	}
-	if _, err := db.ExecContext(t.Context(), migrations[tags].sql); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"0009_article_tags.sql", "0010_article_audio.sql"} {
+		i := slices.IndexFunc(migrations, func(m migration) bool { return m.name == name })
+		if i < 0 {
+			t.Fatalf("migration %s is missing", name)
+		}
+		if _, err := db.ExecContext(t.Context(), migrations[i].sql); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return func() {
 		t.Helper()
-		var stored int
-		if err := db.QueryRowContext(t.Context(), "SELECT count(*) FROM article_tags").Scan(&stored); err != nil || stored != 0 {
-			t.Fatalf("legacy seed stored %d tags: %v", stored, err)
-		}
-		if _, err := db.ExecContext(t.Context(), "DROP TABLE article_tags"); err != nil {
-			t.Fatal(err)
+		for _, table := range []string{"article_tags", "article_audio_segments", "article_audio"} {
+			var stored int
+			if err := db.QueryRowContext(t.Context(), "SELECT count(*) FROM "+table).Scan(&stored); err != nil || stored != 0 {
+				t.Fatalf("legacy seed stored %d rows in %s: %v", stored, table, err)
+			}
+			if _, err := db.ExecContext(t.Context(), "DROP TABLE "+table); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"agentnewsfeed/internal/audio"
 	"agentnewsfeed/internal/identity"
 	"agentnewsfeed/internal/store/sqlite"
 	"agentnewsfeed/internal/thumbnail"
@@ -26,6 +27,8 @@ type Service struct {
 	store      *sqlite.Store
 	thumbnails thumbnail.Policy
 	images     ThumbnailFetcher
+	// audio is nil when the server has no ElevenLabs key.
+	audio *audio.Engine
 }
 
 func New(store *sqlite.Store, policy thumbnail.Policy) *Service {
@@ -339,6 +342,14 @@ func (s *Service) Thumbnail(ctx context.Context, p identity.Principal, id string
 
 func SafeError(err error) string {
 	switch {
+	case errors.Is(err, ErrAudioUnavailable):
+		return "Audio isn't set up on this server."
+	case errors.Is(err, errInvalidAudio):
+		return "Invalid audio request. Choose one of the listed voices, send the article's current revision, and 1–2000 segments of spoken text, each 1–4500 bytes and 300,000 characters in all."
+	case errors.Is(err, sqlite.ErrLocked):
+		return "This article has audio, so its text is locked. Ask the user to delete the audio in the app first."
+	case errors.Is(err, sqlite.ErrAudioExists):
+		return "This article already has audio. Delete it before creating new audio."
 	case errors.Is(err, errInvalidTags):
 		return "Invalid tags. Use at most 10 tags, each 1–32 lowercase letters or digits joined by single hyphens, such as system-design. An article cannot be both explore (found on the internet) and generated (written by an agent); discovery adds explore, which counts toward the 10, and rejects generated."
 	case errors.Is(err, errInvalidGenerated):
