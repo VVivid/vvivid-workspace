@@ -37,3 +37,11 @@ func TestMarkdownImagesIgnoreNestedAltImagesAndInvalidSource(t *testing.T) {
 		}
 	}
 }
+
+func TestMarkdownImagesWithoutSourceKeepOnlyAbsoluteImages(t *testing.T) {
+	content := "![Absolute](https://cdn.example.com/a.png)\n\n![Relative](a.png)\n\n![Rooted](/b.png)\n\n![Protocol relative](//cdn.example.com/c.png)\n\n![Fragment](#top)\n\n![Empty fragment](#)\n\n![Insecure](http://cdn.example.com/d.png)"
+	want := map[string]string{"https://cdn.example.com/a.png": "https://cdn.example.com/a.png"}
+	if images := MarkdownImages("", content); !maps.Equal(images, want) {
+		t.Fatalf("an article without a source resolved relative or unsafe images: %v", images)
+	}
+}

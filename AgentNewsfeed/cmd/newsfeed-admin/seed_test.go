@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -128,5 +129,38 @@ func TestSeedReportsPartialDurableFailureAndKeepsRetrySemantics(t *testing.T) {
 	articles, err := store.ListArticles(t.Context(), owner, sqlite.Cursor{}, 10)
 	if err != nil || len(articles) != 2 {
 		t.Fatal("retry duplicated or lost a committed article")
+	}
+}
+
+func TestSeedStoresTagsAndAgentWrittenArticlesWithoutURL(t *testing.T) {
+	store, identity, owner, policy := seedFixture(t)
+	tagged := seedInput("tagged")
+	tagged.Article.Tags = []string{"Explore", "go"}
+	written := feed.AddInput{IdempotencyKey: "written", Article: feed.Content{
+		Title: "Agent notes", Summary: "Written by the agent.", ContentMarkdown: "# Notes", Tags: []string{"generated"},
+	}}
+	if count, err := seedArticles(t.Context(), store, identity, seedFile(t, []feed.AddInput{tagged, written}), policy); err != nil || count != 2 {
+		t.Fatalf("seed count=%d error=%v", count, err)
+	}
+	articles, err := store.ListArticles(t.Context(), owner, sqlite.Cursor{}, 10)
+	if err != nil || len(articles) != 2 {
+		t.Fatalf("seeded records=%#v error=%v", articles, err)
+	}
+	for _, a := range articles {
+		switch a.Title {
+		case written.Article.Title:
+			if a.URL != "" || !slices.Equal(a.Tags, []string{"generated"}) {
+				t.Fatalf("agent-written seed: %#v", a)
+			}
+		default:
+			if a.URL != "https://example.com/story" || !slices.Equal(a.Tags, []string{"explore", "go"}) {
+				t.Fatalf("tagged seed: %#v", a)
+			}
+		}
+	}
+	unsourced := seedInput("unsourced")
+	unsourced.Article.URL = ""
+	if _, err := readSeedRequests(seedFile(t, []feed.AddInput{unsourced}), policy); err == nil {
+		t.Fatal("seed accepted an article without a URL or the generated tag")
 	}
 }

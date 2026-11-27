@@ -10,7 +10,7 @@ function ArticleImage({ src, alt, title }: { src: string; alt: string; title?: s
 
 // Never enable raw HTML. Images must match the server's saved-content manifest;
 // an unknown destination renders its alt text without any browser request.
-export function ArticleMarkdown({ content, sourceURL, images = {} }: { content: string; sourceURL: string; images?: Record<string, string> }) {
+export function ArticleMarkdown({ content, sourceURL, images = {} }: { content: string; sourceURL?: string; images?: Record<string, string> }) {
   return <div className="article-prose"><Markdown
     skipHtml
     urlTransform={(value, key) => {
@@ -23,7 +23,8 @@ export function ArticleMarkdown({ content, sourceURL, images = {} }: { content: 
       try {
         // Source-relative references belong to the publication, including
         // fragment links; the reader does not serve the source's URL tree.
-        return new URL(safe, sourceURL).href
+        // Without a source (an agent-written article), only absolute links work.
+        return new URL(safe, sourceURL || undefined).href
       } catch {
         return ''
       }

@@ -26,6 +26,19 @@ function sourceHostname(url: string) {
   return new URL(url).hostname.replace(/^www\./, '')
 }
 
+// Shown in place of a source for an article an agent wrote without one.
+const agentSource = 'Your agent'
+
+function attribution(article: Article) {
+  // Agent-written content is never presented as the source's original.
+  if (article.tags?.includes('generated')) return 'Written by your agent.'
+  return article.content_markdown ? 'Original article, supplied by your agent.' : 'Source introduction, saved by your agent.'
+}
+
+function savedCopyPath(article: Article, data: Bootstrap) {
+  return urlWithPagePosition(`/articles/${encodeURIComponent(article.id)}`, data, data.view)
+}
+
 function Header({ data }: { data: Bootstrap }) {
   return (
     <header className="site-header">
@@ -89,8 +102,7 @@ function ArticleActions({ article, data, pending }: { article: Article; data: Bo
   const path = data.view === 'feed' ? '/' : `/${data.view}`
   const returnTo = encodeURIComponent(urlWithPagePosition(path, data))
   return <div className="article-actions">
-    <a href={urlWithPagePosition(`/articles/${encodeURIComponent(article.id)}`, data, data.view)}
-      aria-label={`Read saved article: ${article.title}`}>Saved copy</a>
+    <a href={savedCopyPath(article, data)} aria-label={`Read saved article: ${article.title}`}>Saved copy</a>
     {actions.map(([action, label]) => <form key={action} method="post"
       action={`/api/v1/articles/${encodeURIComponent(article.id)}/${action}?return_to=${returnTo}`}>
       <input type="hidden" name="csrf_token" value={data.csrf} />
@@ -167,14 +179,18 @@ function Shelf({ data, actionsPending, saveNotice, articleBrowseDraft, onBrowse 
           <div className="feed-columns" aria-hidden="true"><span>Article</span><span>Source</span><span>{trashed ? 'Trashed' : archived ? 'Archived' : 'Saved'}</span><span>Actions</span></div>
           {articles.map(article => {
             const timestamp = trashed ? article.trashed_at! : archived ? article.archived_at! : article.created_at
+            // Without a source, the row opens the saved copy instead of a new tab.
+            const entry = article.url
+              ? { href: article.url, target: '_blank', rel: 'noopener noreferrer' }
+              : { href: savedCopyPath(article, data) }
             return (
               <article className="feed-row" key={article.id}>
-                <a href={article.url} className="feed-entry" aria-label={article.title} target="_blank" rel="noopener noreferrer">
+                <a {...entry} className="feed-entry" aria-label={article.title}>
                   <div className="article-introduction">
-                    <h2><Highlight text={article.title} query={data.query} /> <Arrow direction="up-right" /></h2>
+                    <h2><Highlight text={article.title} query={data.query} />{article.url && <> <Arrow direction="up-right" /></>}</h2>
                     <p className="summary"><Highlight text={article.summary} query={data.query} excerpt /></p>
                   </div>
-                  <span className="feed-source"><Highlight text={sourceHostname(article.url)} query={data.query} /></span>
+                  <span className="feed-source">{article.url ? <Highlight text={sourceHostname(article.url)} query={data.query} /> : agentSource}</span>
                   <span className="feed-date"><span className="sr-only">{trashed ? 'Trashed' : archived ? 'Archived' : 'Saved'} </span>
                     <time dateTime={new Date(timestamp).toISOString()}>{formatDate(timestamp)}</time>
                   </span>
@@ -220,20 +236,21 @@ function Reader({ data, article, actionsPending, saveNotice }: {
       <article className="reader-article">
         <header className="reader-heading">
           <p className="article-meta">
-            <span className="source">{sourceHostname(article.url)}</span>
+            <span className="source">{article.url ? sourceHostname(article.url) : agentSource}</span>
             <span aria-hidden="true">·</span>
             <span>Saved <time dateTime={new Date(article.created_at).toISOString()}>{formatDate(article.created_at)}</time></span>
           </p>
           <h1>{article.title}</h1>
           <p className="reader-summary">{article.summary}</p>
           <p className="attribution">
-            From <a href={article.url} target="_blank" rel="noopener noreferrer">{sourceHostname(article.url)}</a>. {article.content_markdown ? 'Original article, supplied by your agent.' : 'Source introduction, saved by your agent.'}
+            {article.url && <>From <a href={article.url} target="_blank" rel="noopener noreferrer">{sourceHostname(article.url)}</a>. </>}
+            {attribution(article)}
           </p>
-          <div className="reader-actions">
+          {article.url && <div className="reader-actions">
             <Button asChild variant="link" className="original-link">
               <a href={article.url} target="_blank" rel="noopener noreferrer">Read original <Arrow direction="up-right" /></a>
             </Button>
-          </div>
+          </div>}
           {trashed && <p className="archive-note">In Trash since {formatDate(article.trashed_at!)}. Restore to {archived ? 'archive' : 'feed'} whenever you are ready.</p>}
           {!trashed && archived && <p className="archive-note">Archived {formatDate(article.archived_at!)}. Kept here for another day.</p>}
         </header>

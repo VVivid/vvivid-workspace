@@ -209,7 +209,7 @@ func TestDiscoveryConcurrencyBudgetsDedupeSourceAgeAndStalePreferences(t *testin
 	policy, _ := thumbnail.NewPolicy("images.example.com")
 	s = feed.New(f.Store, policy)
 	replay, err := s.IngestDiscoveryArticle(t.Context(), alice, firstInput)
-	if err != nil || replay != first {
+	if err != nil || !reflect.DeepEqual(replay, first) {
 		t.Fatal("ingestion retry after settings/restart", replay, err)
 	}
 	replayRun, err := s.StartDiscoveryRun(t.Context(), alice, start)

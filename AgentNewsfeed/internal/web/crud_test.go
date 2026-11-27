@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -68,7 +69,7 @@ func TestOfficialMCPFullReadPatchTrashRestoreArchiveAndAuthorization(t *testing.
 	add := feed.AddInput{IdempotencyKey: "full", Article: feed.Content{URL: "https://example.com/full", Title: "Source title", Summary: "Source introduction", ThumbnailURL: "https://images.example.com/a.png", ContentMarkdown: "# Complete original\n\n![Figure](https://images.example.com/figure.png)"}}
 	first := decode[sqlite.MutationResult](t, call(t, alice, "add_article", add))
 	get := feed.GetInput{ArticleID: first.Article.ID}
-	if got := decode[sqlite.Article](t, call(t, alice, "get_article", get)); got != first.Article {
+	if got := decode[sqlite.Article](t, call(t, alice, "get_article", get)); !reflect.DeepEqual(got, first.Article) {
 		t.Fatal("MCP full body read lost state")
 	}
 	if !call(t, bob, "get_article", get).IsError || !call(t, writeOnly, "get_article", get).IsError {
@@ -110,7 +111,7 @@ func TestOfficialMCPFullReadPatchTrashRestoreArchiveAndAuthorization(t *testing.
 		t.Fatal("MCP default full read included Trash")
 	}
 	get.Trashed = true
-	if got := decode[sqlite.Article](t, call(t, alice, "get_article", get)); got != trashed.Article {
+	if got := decode[sqlite.Article](t, call(t, alice, "get_article", get)); !reflect.DeepEqual(got, trashed.Article) {
 		t.Fatal("MCP explicit Trash read failed")
 	}
 	if page := decode[feed.Page](t, call(t, alice, "list_articles", feed.ListInput{Trashed: true})); len(page.Articles) != 1 || page.Articles[0].ContentMarkdown != "" {
@@ -145,10 +146,10 @@ func TestOfficialMCPFullReadPatchTrashRestoreArchiveAndAuthorization(t *testing.
 			}
 		}
 	}
-	if replay := decode[sqlite.MutationResult](t, call(t, alice, "trash_article", trash)); replay != trashed {
+	if replay := decode[sqlite.MutationResult](t, call(t, alice, "trash_article", trash)); !reflect.DeepEqual(replay, trashed) {
 		t.Fatal("MCP Trash replay changed result")
 	}
-	if current := decode[sqlite.Article](t, call(t, alice, "get_article", feed.GetInput{ArticleID: first.Article.ID})); current != restored.Article {
+	if current := decode[sqlite.Article](t, call(t, alice, "get_article", feed.GetInput{ArticleID: first.Article.ID})); !reflect.DeepEqual(current, restored.Article) {
 		t.Fatal("Trash replay applied stale state again")
 	}
 	if response := request(h, "GET", "/thumbnails/"+first.Article.ID, f.Cookie(t, "alice"), ""); response.Code != 200 || !bytes.Equal(response.Body.Bytes(), images.body) || len(inline.urls) != 0 || images.calls.Load() != 1 {
@@ -268,6 +269,8 @@ func TestRawMCPPatchRejectsAmbiguousFieldsBeforeSideEffects(t *testing.T) {
 		{"duplicate thumbnail", `"patch":{"thumbnail_url":"https://images.example.com/first.jpg","thumbnail_url":"https://images.example.com/second.jpg"}`},
 		{"duplicate thumbnail hides null", `"patch":{"thumbnail_url":null,"thumbnail_url":"https://images.example.com/second.jpg"}`},
 		{"duplicate thumbnail ends null", `"patch":{"thumbnail_url":"https://images.example.com/first.jpg","thumbnail_url":null}`},
+		{"duplicate tags", `"patch":{"tags":["go"],"tags":["rust"]}`},
+		{"duplicate tags hide an empty set", `"patch":{"tags":[],"tags":["rust"]}`},
 		{"duplicate patch objects", `"patch":{"title":"First title"},"patch":{"title":"Second title","thumbnail_url":"https://images.example.com/second.jpg"}`},
 		{"duplicate key", `"idempotency_key":"another-key","patch":{"title":"Changed title"}`},
 		{"duplicate article ID", fmt.Sprintf(`"article_id":%q,"patch":{"title":"Changed title"}`, first.Article.ID)},
@@ -277,6 +280,9 @@ func TestRawMCPPatchRejectsAmbiguousFieldsBeforeSideEffects(t *testing.T) {
 		{"null title", `"patch":{"title":null}`},
 		{"null summary", `"patch":{"summary":null}`},
 		{"null URL", `"patch":{"url":null}`},
+		{"null tags", `"patch":{"tags":null}`},
+		{"tags as a string", `"patch":{"tags":"go"}`},
+		{"invalid tag", `"patch":{"tags":["not a slug"]}`},
 		{"wrong body type", `"patch":{"content_markdown":1}`},
 		{"empty patch", `"patch":{}`},
 		{"null patch", `"patch":null`},
@@ -286,7 +292,7 @@ func TestRawMCPPatchRejectsAmbiguousFieldsBeforeSideEffects(t *testing.T) {
 			if result := patch(t, arguments("raw-rejected", 1, tc.fields)); !result.IsError || result.StructuredContent != nil {
 				t.Fatal("ambiguous or invalid raw MCP patch succeeded")
 			}
-			if current, err := s.GetArticle(t.Context(), p, first.Article.ID); err != nil || current != first.Article {
+			if current, err := s.GetArticle(t.Context(), p, first.Article.ID); err != nil || !reflect.DeepEqual(current, first.Article) {
 				t.Fatal("rejected raw patch changed the article")
 			}
 			if images.calls.Load() != 1 {
@@ -315,7 +321,7 @@ func TestRawMCPPatchRejectsAmbiguousFieldsBeforeSideEffects(t *testing.T) {
 	if clearedImage.Article.ThumbnailURL != "" || clearedImage.Article.ThumbnailHash != "" || clearedImage.Article.ContentMarkdown != "" || images.calls.Load() != 1 {
 		t.Fatal("raw null thumbnail clear fetched or retained an image")
 	}
-	if replay := decode[sqlite.MutationResult](t, patch(t, arguments("raw-clear-body", 2, `"patch":{"content_markdown":""}`))); replay != clearedBody {
+	if replay := decode[sqlite.MutationResult](t, patch(t, arguments("raw-clear-body", 2, `"patch":{"content_markdown":""}`))); !reflect.DeepEqual(replay, clearedBody) {
 		t.Fatal("raw empty/null clear retry changed the original result")
 	}
 }

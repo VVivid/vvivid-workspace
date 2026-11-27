@@ -3,7 +3,7 @@ package feed_test
 import (
 	"errors"
 	"fmt"
-	"slices"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -91,7 +91,7 @@ func TestBrowserSearchBeforePagingAndCursorIsolation(t *testing.T) {
 	}
 	input.Cursor = second.PreviousCursor
 	previous, err := s.BrowseArticles(t.Context(), alice, input, true)
-	if err != nil || !slices.Equal(previous.Articles, first.Articles) || previous.Start != 1 || previous.End != 10 {
+	if err != nil || !reflect.DeepEqual(previous.Articles, first.Articles) || previous.Start != 1 || previous.End != 10 {
 		t.Fatalf("reverse search page: %+v, %v", previous, err)
 	}
 	for _, tc := range []struct {
@@ -164,6 +164,19 @@ func TestBrowserArticlePageSizesAndValidation(t *testing.T) {
 	}
 	if _, err := s.ListArticles(t.Context(), alice, feed.ListInput{Limit: 100}); !errors.Is(err, feed.ErrInvalid) {
 		t.Fatal("browser page-size change widened MCP/API contract")
+	}
+	// Browsing has no tag filter; it must not silently list every article.
+	untagged := feed.BrowserListInput{ListInput: feed.ListInput{Limit: 10}}
+	tagged := untagged
+	tagged.Tags = []string{"explore"}
+	if err := untagged.ValidateCursor(alice.Owner()); err != nil {
+		t.Fatal(err)
+	}
+	if err := tagged.ValidateCursor(alice.Owner()); !errors.Is(err, feed.ErrInvalid) {
+		t.Fatalf("a reader position accepted a tag filter: %v", err)
+	}
+	if _, err := s.BrowseArticles(t.Context(), alice, tagged, false); !errors.Is(err, feed.ErrInvalid) {
+		t.Fatalf("browsing accepted a tag filter: %v", err)
 	}
 }
 

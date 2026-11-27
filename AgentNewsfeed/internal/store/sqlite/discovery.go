@@ -146,7 +146,7 @@ func (s *Store) DiscoveryContext(ctx context.Context, owner Owner) (DiscoveryCon
 		return out, err
 	}
 	out.RemainingToday = max(0, out.Preferences.Preferences.Discovery.MaxPerDay-out.SavedToday)
-	rows, err := s.read.QueryContext(ctx, "SELECT canonical_url FROM articles WHERE owner_id=? ORDER BY created_at DESC,id DESC LIMIT 200", owner.id)
+	rows, err := s.read.QueryContext(ctx, "SELECT a.canonical_url FROM articles a WHERE a.owner_id=? AND "+articleHasURL+" ORDER BY a.created_at DESC,a.id DESC LIMIT 200", owner.id)
 	if err != nil {
 		return out, err
 	}

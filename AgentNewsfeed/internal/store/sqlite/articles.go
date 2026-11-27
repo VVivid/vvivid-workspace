@@ -19,8 +19,11 @@ type rowQueryer interface {
 }
 
 type Article struct {
-	ID           string `json:"id"`
-	URL          string `json:"url"`
+	ID string `json:"id"`
+	// Only an agent-written article may have no source URL. Every request
+	// hashed before such articles existed had a URL, so omitting an empty one
+	// keeps old idempotency hashes.
+	URL          string `json:"url,omitempty"`
 	Title        string `json:"title"`
 	Summary      string `json:"summary"`
 	ThumbnailURL string `json:"thumbnail_url,omitempty"`
@@ -37,6 +40,8 @@ type Article struct {
 	ThumbnailWidth  int    `json:"thumbnail_width,omitzero"`
 	ThumbnailHeight int    `json:"thumbnail_height,omitzero"`
 	ThumbnailBytes  int    `json:"thumbnail_bytes,omitzero"`
+	// Sorted, distinct tags; nil when the article has none.
+	Tags []string `json:"tags,omitempty"`
 }
 
 type MutationResult struct {
@@ -53,11 +58,36 @@ type Cursor struct {
 	Before    bool   `json:"-"`
 }
 
+// An article without a source URL stores a private placeholder, noURLPrefix
+// plus its ID, in canonical_url. The column stays NOT NULL and unique per owner
+// without rebuilding the table its thumbnail and discovery records reference.
+// Canonical URLs always use https://, so a placeholder never equals one. Reads
+// return an empty URL instead, so the placeholder never leaves this package.
+const noURLPrefix = "no-url:"
+
+// SQL over the articles alias a: articleHasURL is true when canonical_url holds
+// a source URL rather than a's placeholder, and articleURL reads that URL or "".
+const articleHasURL = "a.canonical_url != ('" + noURLPrefix + "' || a.id)"
+const articleURL = "CASE WHEN " + articleHasURL + " THEN a.canonical_url ELSE '' END"
+
+// storedURL is the canonical_url value written for a.
+func storedURL(a Article) string {
+	if a.URL == "" {
+		return noURLPrefix + a.ID
+	}
+	return a.URL
+}
+
+// The schema allows only slugs, so a comma never occurs inside a tag. One
+// comma-joined value per article lets lists read tags without another query.
+const articleTags = `COALESCE((SELECT group_concat(g.tag, ',' ORDER BY g.tag) FROM article_tags g
+ WHERE g.owner_id=a.owner_id AND g.article_id=a.id), '')`
+
 const articleFrom = ` FROM articles a
  LEFT JOIN article_thumbnails t ON t.owner_id=a.owner_id AND t.article_id=a.id
  LEFT JOIN thumbnail_blobs b ON b.owner_id=t.owner_id AND b.hash=t.hash `
-const articleSummaryColumns = `a.id, a.canonical_url, a.title, a.summary, a.thumbnail_url, a.revision, a.created_at, a.updated_at,
- a.archived_at, a.trashed_at, a.thumbnail_status, COALESCE(b.hash,''), COALESCE(b.width,0), COALESCE(b.height,0), COALESCE(length(b.jpeg),0)`
+const articleSummaryColumns = `a.id, ` + articleURL + `, a.title, a.summary, a.thumbnail_url, a.revision, a.created_at, a.updated_at,
+ a.archived_at, a.trashed_at, a.thumbnail_status, COALESCE(b.hash,''), COALESCE(b.width,0), COALESCE(b.height,0), COALESCE(length(b.jpeg),0), ` + articleTags
 const articleColumns = articleSummaryColumns + ", a.content_markdown"
 
 type scanner interface{ Scan(...any) error }
@@ -65,9 +95,13 @@ type scanner interface{ Scan(...any) error }
 func scanArticle(row scanner) (Article, error) {
 	var a Article
 	var archived, trashed sql.NullInt64
+	var tags string
 	err := row.Scan(&a.ID, &a.URL, &a.Title, &a.Summary, &a.ThumbnailURL, &a.Revision, &a.CreatedAt, &a.UpdatedAt,
-		&archived, &trashed, &a.ThumbnailStatus, &a.ThumbnailHash, &a.ThumbnailWidth, &a.ThumbnailHeight, &a.ThumbnailBytes, &a.ContentMarkdown)
+		&archived, &trashed, &a.ThumbnailStatus, &a.ThumbnailHash, &a.ThumbnailWidth, &a.ThumbnailHeight, &a.ThumbnailBytes, &tags, &a.ContentMarkdown)
 	a.ArchivedAt, a.TrashedAt = archived.Int64, trashed.Int64
+	if tags != "" {
+		a.Tags = strings.Split(tags, ",")
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return Article{}, ErrNotFound
 	}
@@ -90,26 +124,31 @@ func (s *Store) ArticleInView(ctx context.Context, owner Owner, id string, trash
 }
 
 // ArticleForURL includes retained Trash to keep canonical deduplication from
-// recreating or reviving a trashed article.
+// recreating or reviving a trashed article. Without a URL, nothing duplicates.
 func (s *Store) ArticleForURL(ctx context.Context, owner Owner, canonical string) (Article, error) {
 	if owner.id == "" {
 		return Article{}, ErrOwnerRequired
+	}
+	if canonical == "" {
+		return Article{}, ErrNotFound
 	}
 	return scanArticle(s.read.QueryRowContext(ctx, "SELECT "+articleColumns+articleFrom+`
   WHERE a.owner_id=? AND a.canonical_url=? AND a.owner_id IN (SELECT id FROM accounts WHERE disabled_at IS NULL)`, owner.id, canonical))
 }
 
-func (s *Store) ListArticles(ctx context.Context, owner Owner, cursor Cursor, limit int) ([]Article, error) {
+// ListArticles reads one view in its page order. Given anyTags, it lists only
+// articles that have at least one of them.
+func (s *Store) ListArticles(ctx context.Context, owner Owner, cursor Cursor, limit int, anyTags ...string) ([]Article, error) {
 	if owner.id == "" {
 		return nil, ErrOwnerRequired
 	}
 	if limit < 1 || limit > 51 || (cursor.Archived && cursor.Trashed) {
 		return nil, ErrLimit
 	}
-	return listArticles(ctx, s.read, owner, cursor, limit, "")
+	return listArticles(ctx, s.read, owner, cursor, limit, "", anyTags)
 }
 
-func articleSelection(owner Owner, cursor Cursor, query string) (filter, order string, args []any) {
+func articleSelection(owner Owner, cursor Cursor, query string, anyTags []string) (filter, order string, args []any) {
 	filter = "a.owner_id = ? AND a.owner_id IN (SELECT id FROM accounts WHERE disabled_at IS NULL) AND "
 	args = []any{owner.id}
 	view, order := "a.trashed_at IS NULL AND a.archived_at IS NULL", "a.created_at"
@@ -120,15 +159,23 @@ func articleSelection(owner Owner, cursor Cursor, query string) (filter, order s
 	}
 	filter += view
 	for term := range strings.FieldsSeq(query) {
-		filter += " AND instr(newsfeed_lower(a.title || ' ' || a.summary || ' ' || a.canonical_url), ?) > 0"
+		filter += " AND instr(newsfeed_lower(a.title || ' ' || a.summary || ' ' || " + articleURL + "), ?) > 0"
 		args = append(args, term)
+	}
+	if len(anyTags) > 0 {
+		// The owner+tag index finds the articles carrying any requested tag.
+		filter += " AND a.id IN (SELECT article_id FROM article_tags WHERE owner_id = ? AND tag IN (?" + strings.Repeat(", ?", len(anyTags)-1) + "))"
+		args = append(args, owner.id)
+		for _, tag := range anyTags {
+			args = append(args, tag)
+		}
 	}
 	return filter, order, args
 }
 
-func listArticles(ctx context.Context, db queryer, owner Owner, cursor Cursor, limit int, query string) ([]Article, error) {
+func listArticles(ctx context.Context, db queryer, owner Owner, cursor Cursor, limit int, query string, anyTags []string) ([]Article, error) {
 	// The summary selection excludes both Markdown and JPEG payloads.
-	filter, order, args := articleSelection(owner, cursor, query)
+	filter, order, args := articleSelection(owner, cursor, query, anyTags)
 	pageSQL, pageArgs := pageRange(order, "a.id", cursor.Timestamp, cursor.ID, cursor.Before, limit)
 	rows, err := db.QueryContext(ctx, "SELECT "+articleSummaryColumns+", ''"+articleFrom+
 		"WHERE "+filter+pageSQL, append(args, pageArgs...)...)
@@ -145,6 +192,52 @@ func listArticles(ctx context.Context, db queryer, owner Owner, cursor Cursor, l
 		articles = append(articles, a)
 	}
 	return articles, rows.Err()
+}
+
+// TagCount is a tag and how many articles in the selected view have it.
+type TagCount struct {
+	Tag   string `json:"tag"`
+	Count int    `json:"count"`
+}
+
+// TagCounts lists every tag on the articles of one view, selected as in
+// ListArticles: active by default, Archive with archived, Trash with trashed.
+// The most used tags come first and equal counts sort by tag, so the order is
+// deterministic.
+func (s *Store) TagCounts(ctx context.Context, owner Owner, archived, trashed bool) ([]TagCount, error) {
+	if owner.id == "" {
+		return nil, ErrOwnerRequired
+	}
+	if archived && trashed {
+		return nil, ErrLimit
+	}
+	query, args := tagCountsQuery(owner, archived, trashed)
+	rows, err := s.read.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	tags := []TagCount{}
+	for rows.Next() {
+		var tag TagCount
+		if err := rows.Scan(&tag.Tag, &tag.Count); err != nil {
+			return nil, err
+		}
+		tags = append(tags, tag)
+	}
+	return tags, rows.Err()
+}
+
+// tagCountsQuery counts the tags of the view's articles. articleSelection
+// applies the owner and enrollment checks of every article read. Naming the
+// owner on the tag rows too lets the owner+tag index read them in tag order,
+// already grouped, joining each to its article by primary key.
+func tagCountsQuery(owner Owner, archived, trashed bool) (string, []any) {
+	filter, _, args := articleSelection(owner, Cursor{Archived: archived, Trashed: trashed}, "", nil)
+	return `SELECT g.tag, count(*) FROM article_tags g
+ JOIN articles a ON a.owner_id = g.owner_id AND a.id = g.article_id
+ WHERE g.owner_id = ? AND ` + filter + `
+ GROUP BY g.tag ORDER BY count(*) DESC, g.tag`, append([]any{owner.id}, args...)
 }
 
 func checkOwner(ctx context.Context, db rowQueryer, owner Owner) error {
@@ -221,7 +314,11 @@ func mutateArticleTx(ctx context.Context, tx *sql.Tx, owner Owner, key, operatio
 	created, contentChanged := false, false
 	switch operation {
 	case "add_article", "ingest_discovery_article":
-		existing, err := scanArticle(tx.QueryRowContext(ctx, "SELECT "+articleColumns+articleFrom+" WHERE a.owner_id = ? AND a.canonical_url = ?", owner.id, a.URL))
+		// Only a source URL can duplicate a saved article; one without is always new.
+		existing, err := Article{}, ErrNotFound
+		if a.URL != "" {
+			existing, err = scanArticle(tx.QueryRowContext(ctx, "SELECT "+articleColumns+articleFrom+" WHERE a.owner_id = ? AND a.canonical_url = ?", owner.id, a.URL))
+		}
 		if err == nil {
 			a = existing
 		} else if errors.Is(err, ErrNotFound) {
@@ -230,7 +327,10 @@ func mutateArticleTx(ctx context.Context, tx *sql.Tx, owner Owner, key, operatio
 				a.ThumbnailStatus = "legacy"
 			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO articles(owner_id,id,canonical_url,title,summary,thumbnail_url,revision,created_at,updated_at,content_markdown,thumbnail_status)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?)`, owner.id, a.ID, a.URL, a.Title, a.Summary, a.ThumbnailURL, a.Revision, a.CreatedAt, a.UpdatedAt, a.ContentMarkdown, a.ThumbnailStatus); err != nil {
+    VALUES (?,?,?,?,?,?,?,?,?,?,?)`, owner.id, a.ID, storedURL(a), a.Title, a.Summary, a.ThumbnailURL, a.Revision, a.CreatedAt, a.UpdatedAt, a.ContentMarkdown, a.ThumbnailStatus); err != nil {
+				return MutationResult{}, err
+			}
+			if err := replaceTags(ctx, tx, owner, a); err != nil {
 				return MutationResult{}, err
 			}
 			created, contentChanged = true, true
@@ -250,8 +350,9 @@ func mutateArticleTx(ctx context.Context, tx *sql.Tx, owner Owner, key, operatio
 		}
 		switch operation {
 		case "update_article", "patch_article":
+			// A placeholder contains its own article ID, so it never duplicates another.
 			var duplicate bool
-			if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM articles WHERE owner_id = ? AND canonical_url = ? AND id != ?)", owner.id, a.URL, a.ID).Scan(&duplicate); err != nil {
+			if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM articles WHERE owner_id = ? AND canonical_url = ? AND id != ?)", owner.id, storedURL(a), a.ID).Scan(&duplicate); err != nil {
 				return MutationResult{}, err
 			}
 			if duplicate {
@@ -261,7 +362,10 @@ func mutateArticleTx(ctx context.Context, tx *sql.Tx, owner Owner, key, operatio
 			a.ThumbnailStatus, a.ThumbnailHash = current.ThumbnailStatus, current.ThumbnailHash
 			a.ThumbnailWidth, a.ThumbnailHeight, a.ThumbnailBytes = current.ThumbnailWidth, current.ThumbnailHeight, current.ThumbnailBytes
 			if _, err := tx.ExecContext(ctx, `UPDATE articles SET canonical_url=?,title=?,summary=?,thumbnail_url=?,revision=?,updated_at=?,content_markdown=?
-   WHERE owner_id=? AND id=?`, a.URL, a.Title, a.Summary, a.ThumbnailURL, a.Revision, a.UpdatedAt, a.ContentMarkdown, owner.id, a.ID); err != nil {
+   WHERE owner_id=? AND id=?`, storedURL(a), a.Title, a.Summary, a.ThumbnailURL, a.Revision, a.UpdatedAt, a.ContentMarkdown, owner.id, a.ID); err != nil {
+				return MutationResult{}, err
+			}
+			if err := replaceTags(ctx, tx, owner, a); err != nil {
 				return MutationResult{}, err
 			}
 			contentChanged = true
@@ -312,6 +416,20 @@ func mutateArticleTx(ctx context.Context, tx *sql.Tx, owner Owner, key, operatio
 		return MutationResult{}, err
 	}
 	return out, nil
+}
+
+// replaceTags makes a's tags the article's complete tag set. Callers run it in
+// the transaction that writes the article and its retry result.
+func replaceTags(ctx context.Context, tx *sql.Tx, owner Owner, a Article) error {
+	if _, err := tx.ExecContext(ctx, "DELETE FROM article_tags WHERE owner_id=? AND article_id=?", owner.id, a.ID); err != nil {
+		return err
+	}
+	for _, tag := range a.Tags {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO article_tags(owner_id,article_id,tag) VALUES (?,?,?)", owner.id, a.ID, tag); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func nullableTime(timestamp int64) any {

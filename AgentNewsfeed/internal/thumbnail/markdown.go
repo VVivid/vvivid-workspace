@@ -10,11 +10,14 @@ import (
 )
 
 // MarkdownImages maps parsed image destinations to public HTTPS URLs resolved
-// against the saved source. It never fetches a page, parses HTML or discovers
-// images outside Markdown image nodes. The fetcher's policy and DNS checks still
-// apply before any connection is made.
+// against the saved source. An agent-written article may have no source URL;
+// then only absolute image URLs apply. It never fetches a page, parses HTML or
+// discovers images outside Markdown image nodes. The fetcher's policy and DNS
+// checks still apply before any connection is made.
 func MarkdownImages(sourceURL, markdown string) map[string]string {
 	images := make(map[string]string)
+	// Validate accepts "" (no URL). An empty base resolves only absolute
+	// destinations; relative ones stay relative and fail validation below.
 	base, err := url.Parse(sourceURL)
 	if err != nil || (Policy{}).Validate(sourceURL) != nil || markdown == "" {
 		return images
@@ -33,7 +36,8 @@ func MarkdownImages(sourceURL, markdown string) map[string]string {
 		reference, err := url.Parse(destination)
 		if err == nil && destination != "" {
 			resolved := base.ResolveReference(reference).String()
-			if (Policy{}).Validate(resolved) == nil {
+			// Against an empty base, a bare "#" resolves to "", which Validate accepts.
+			if resolved != "" && (Policy{}).Validate(resolved) == nil {
 				images[destination] = resolved
 			}
 		}

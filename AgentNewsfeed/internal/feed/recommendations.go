@@ -236,13 +236,26 @@ func (s *Service) IngestDiscoveryArticle(ctx context.Context, p identity.Princip
 	if !boundedText(in.IdempotencyKey, 128) || !boundedText(in.RunID, 64) || in.ExpectedPreferencesRevision < 1 || !boundedText(in.WhyMatch, 1200) || in.PublishedAt < 0 {
 		return sqlite.MutationResult{}, ErrInvalid
 	}
+	// Discovery saves content found on the internet, never an agent's writing.
+	// Rejected before normalizeContent, whose generated-article errors (such as
+	// a missing body) would hide this reason.
+	if tags, err := NormalizeTags(in.Article.Tags); err != nil || slices.Contains(tags, TagGenerated) {
+		return sqlite.MutationResult{}, errInvalidTags
+	}
 	a, err := normalizeContent(in.Article, s.thumbnails)
 	if err != nil {
 		return sqlite.MutationResult{}, err
 	}
-	// Canonical content also makes exact retries independent of tracking parameters.
-	in.Article.URL = a.URL
+	// Canonical content also makes exact retries independent of tracking
+	// parameters. Hashing the supplied tags, before explore is added below,
+	// keeps the hashes of requests made before articles had tags.
+	in.Article.URL, in.Article.Tags = a.URL, a.Tags
 	payload, _ := json.Marshal(in)
+	// Every discovered article is saved with explore. Normalizing again keeps
+	// the set sorted and distinct, and explore counts toward MaxArticleTags.
+	if a.Tags, err = NormalizeTags(append([]string{TagExplore}, a.Tags...)); err != nil {
+		return sqlite.MutationResult{}, err
+	}
 	if out, found, err := s.store.ReplayMutation(ctx, p.Owner(), in.IdempotencyKey, "ingest_discovery_article", payload); found || err != nil {
 		return out, err
 	}
@@ -291,6 +304,8 @@ func (s *Service) GetDiscoveryRun(ctx context.Context, p identity.Principal, in 
 }
 func RecommendationSafeError(err error) string {
 	switch {
+	case errors.Is(err, errInvalidTags), errors.Is(err, errInvalidGenerated):
+		return SafeError(err)
 	case errors.Is(err, ErrInvalid):
 		return "Invalid settings request. Check bounded preferences, allowed choices, revision and retry fields, or source evidence URLs."
 	case errors.Is(err, sqlite.ErrNotFound):

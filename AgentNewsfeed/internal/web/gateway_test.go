@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -93,7 +94,7 @@ func TestGatewayMCPPreservesToolsOwnershipScopesAndBrowserRecords(t *testing.T) 
 	t.Cleanup(server.Close)
 	alice := client(t, server.URL, token("alice", allScopes))
 	tools, err := alice.ListTools(t.Context(), nil)
-	if err != nil || len(tools.Tools) != 27 {
+	if err != nil || len(tools.Tools) != 28 {
 		t.Fatalf("gateway tools: %v", err)
 	}
 	input := feed.AddInput{IdempotencyKey: "gateway-add", Article: feed.Content{URL: "https://example.com/gateway-story", Title: "Gateway story", Summary: "A sourced gateway test."}}
@@ -101,7 +102,7 @@ func TestGatewayMCPPreservesToolsOwnershipScopesAndBrowserRecords(t *testing.T) 
 	if !first.Created || first.Article.Revision != 1 {
 		t.Fatal("gateway add failed")
 	}
-	if retry := decode[sqlite.MutationResult](t, call(t, alice, "add_article", input)); retry != first {
+	if retry := decode[sqlite.MutationResult](t, call(t, alice, "add_article", input)); !reflect.DeepEqual(retry, first) {
 		t.Fatal("gateway idempotent retry changed result")
 	}
 	input.Article.Title = "Updated through gateway"

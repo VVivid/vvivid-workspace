@@ -23,12 +23,14 @@ func (s *Service) GetArticleTool(ctx context.Context, p identity.Principal, in G
 
 // Patch distinguishes omission from an explicit empty string or null. Only the
 // optional body and thumbnail may be cleared; null and empty clear identically.
+// Supplied tags replace the whole tag set; an empty list clears it.
 type Patch struct {
-	URL             *string `json:"url,omitempty"`
-	Title           *string `json:"title,omitempty"`
-	Summary         *string `json:"summary,omitempty"`
-	ThumbnailURL    *string `json:"thumbnail_url,omitempty"`
-	ContentMarkdown *string `json:"content_markdown,omitempty"`
+	URL             *string   `json:"url,omitempty"`
+	Title           *string   `json:"title,omitempty"`
+	Summary         *string   `json:"summary,omitempty"`
+	ThumbnailURL    *string   `json:"thumbnail_url,omitempty"`
+	ContentMarkdown *string   `json:"content_markdown,omitempty"`
+	Tags            *[]string `json:"tags,omitempty"`
 }
 
 func (p *Patch) UnmarshalJSON(body []byte) error {
@@ -59,6 +61,13 @@ func (p *Patch) UnmarshalJSON(body []byte) error {
 			target, clearable = &p.ThumbnailURL, true
 		case "content_markdown":
 			target, clearable = &p.ContentMarkdown, true
+		case "tags":
+			// A list, not a string, so it skips the string handling below.
+			// An empty list clears tags; null is not a tag set.
+			if err := decoder.Decode(&p.Tags); err != nil || p.Tags == nil {
+				return ErrInvalid
+			}
+			continue
 		default:
 			return ErrInvalid
 		}
@@ -113,6 +122,13 @@ func (s *Service) PatchArticle(ctx context.Context, p identity.Principal, in Pat
 		(patch.ContentMarkdown != nil && !validMarkdown(*patch.ContentMarkdown)) || (patch.ThumbnailURL != nil && s.thumbnails.Validate(*patch.ThumbnailURL) != nil) {
 		return sqlite.MutationResult{}, ErrInvalid
 	}
+	if patch.Tags != nil {
+		tags, err := NormalizeTags(*patch.Tags)
+		if err != nil {
+			return sqlite.MutationResult{}, err
+		}
+		patch.Tags = &tags
+	}
 	in.Patch = patch
 	payload, _ := json.Marshal(in)
 	if out, found, err := s.store.ReplayMutation(ctx, p.Owner(), in.IdempotencyKey, "patch_article", payload); found || err != nil {
@@ -125,7 +141,7 @@ func (s *Service) PatchArticle(ctx context.Context, p identity.Principal, in Pat
 	if current.Revision != in.ExpectedRevision {
 		return sqlite.MutationResult{}, sqlite.ErrConflict
 	}
-	content := Content{URL: current.URL, Title: current.Title, Summary: current.Summary, ThumbnailURL: current.ThumbnailURL, ContentMarkdown: current.ContentMarkdown}
+	content := Content{URL: current.URL, Title: current.Title, Summary: current.Summary, ThumbnailURL: current.ThumbnailURL, ContentMarkdown: current.ContentMarkdown, Tags: current.Tags}
 	if patch.URL != nil {
 		content.URL = *patch.URL
 	}
@@ -141,6 +157,11 @@ func (s *Service) PatchArticle(ctx context.Context, p identity.Principal, in Pat
 	if patch.ContentMarkdown != nil {
 		content.ContentMarkdown = *patch.ContentMarkdown
 	}
+	if patch.Tags != nil {
+		content.Tags = *patch.Tags
+	}
+	// The patched article must still be valid as a whole: dropping generated
+	// from an article without a URL, or emptying its body, is rejected here.
 	a, err := normalizeContent(content, s.thumbnails)
 	if err != nil {
 		return sqlite.MutationResult{}, err

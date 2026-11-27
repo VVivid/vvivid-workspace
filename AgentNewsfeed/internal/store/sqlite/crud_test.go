@@ -13,6 +13,7 @@ import (
 	"image/color"
 	"image/jpeg"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -142,7 +143,7 @@ func TestThumbnailDedupCleanupOwnerIsolationRestartAndNoJSONBytes(t *testing.T) 
 	}
 	a := Article{URL: "https://example.com/one", Title: "Source title", Summary: "Source introduction", ThumbnailURL: "https://images.example.com/source.jpg", ContentMarkdown: "# Original source"}
 	payload, _ := json.Marshal(a)
-	if replay, err := s.MutateArticle(t.Context(), owner, "one", "add_article", payload, a, 0); err != nil || replay != original {
+	if replay, err := s.MutateArticle(t.Context(), owner, "one", "add_article", payload, a, 0); err != nil || !reflect.DeepEqual(replay, original) {
 		t.Fatal("thumbnail cleanup changed historical retry result")
 	}
 }
@@ -164,7 +165,7 @@ func TestPreparedThumbnailRollbackAndDedupRaceLeaveNoOrphans(t *testing.T) {
 	// Models a canonical duplicate that committed while the candidate fetched.
 	duplicate := Article{URL: one.Article.URL, Title: "Do not replace", Summary: "Do not replace", ThumbnailURL: "https://images.example.com/new.jpg"}
 	out, err := s.MutateArticle(t.Context(), owner, "racing-add", "add_article", []byte("racing-add"), duplicate, 0, newImage)
-	if err != nil || out.Created || out.Article != one.Article || countThumbnails(t, s, owner) != 2 {
+	if err != nil || out.Created || !reflect.DeepEqual(out.Article, one.Article) || countThumbnails(t, s, owner) != 2 {
 		t.Fatal("dedup race replaced article or persisted orphan")
 	}
 	if _, err := s.MutateArticle(t.Context(), owner, "collision", "patch_article", []byte("fixed"), candidate, 1, newImage); err != nil {
@@ -241,7 +242,7 @@ func TestThumbnailBudgetIncludesTrashAllowsSharingAndReplacement(t *testing.T) {
 	// An exact retry retains its original soft failure after capacity changes.
 	a = Article{URL: "https://example.com/over-budget", Title: "Source title", Summary: "Source introduction", ThumbnailURL: "https://images.example.com/source.jpg", ContentMarkdown: "# Original source"}
 	payload, _ := json.Marshal(a)
-	if replay, err := s.MutateArticle(t.Context(), owner, "over-budget", "add_article", payload, a, 0, ThumbnailChange{Replace: true, JPEG: newBody}); err != nil || replay != blocked {
+	if replay, err := s.MutateArticle(t.Context(), owner, "over-budget", "add_article", payload, a, 0, ThumbnailChange{Replace: true, JPEG: newBody}); err != nil || !reflect.DeepEqual(replay, blocked) {
 		t.Fatal("capacity change altered durable budget outcome")
 	}
 }
@@ -295,7 +296,7 @@ func TestV2MigrationPreservesBodiesArchiveURLsAndRetryBytes(t *testing.T) {
 	if err := json.Unmarshal(result, &expected); err != nil {
 		t.Fatal(err)
 	}
-	if replay, err := s.MutateArticle(t.Context(), owner, "saved", "add_article", payload, Article{}, 0); err != nil || replay != expected {
+	if replay, err := s.MutateArticle(t.Context(), owner, "saved", "add_article", payload, Article{}, 0); err != nil || !reflect.DeepEqual(replay, expected) {
 		t.Fatal("v2 durable retry lost")
 	}
 	if countThumbnails(t, s, owner) != 0 {

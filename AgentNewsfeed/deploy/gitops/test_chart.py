@@ -16,7 +16,7 @@ HELM = os.environ.get("HELM", "helm")
 FIXTURE = {"image": {"digest": "sha256:" + "a" * 64}, "provenance": {"sourceSha": "b" * 40}}
 # Public browser ingress (path, pathType) pairs while native app clients are disabled.
 PUBLIC_BROWSER_ROUTES = (
-    {(path, "Exact") for path in ("/", "/archive", "/trash", "/todo", "/settings", "/api/v1/todos",
+    {(path, "Exact") for path in ("/", "/archive", "/trash", "/todo", "/settings", "/api/v1/tags", "/api/v1/todos",
                                   "/api/v1/settings/preferences", "/api/v1/settings/suggestions/accept",
                                   "/api/v1/settings/suggestions/dismiss", "/auth/login", "/auth/callback", "/auth/logout")} |
     {(path, "Prefix") for path in ("/articles/", "/api/v1/articles", "/static/assets/", "/thumbnails/")})
@@ -136,11 +136,11 @@ class ChartTests(unittest.TestCase):
                 self.assertEqual(rule["host"], "newsfeed.vvivid.dev")
                 allowed = {(p["path"], p["pathType"]) for p in paths}
                 self.assertEqual(allowed, PUBLIC_BROWSER_ROUTES)
-                for path in ("/", "/auth/callback", "/archive", "/trash", "/api/v1/articles/abc/archive", "/articles/abc",
+                for path in ("/", "/auth/callback", "/archive", "/trash", "/api/v1/articles/abc/archive", "/articles/abc", "/api/v1/tags",
                              "/todo", "/settings", "/api/v1/todos", "/api/v1/settings/preferences", "/api/v1/settings/suggestions/accept", "/api/v1/settings/suggestions/dismiss", "/static/assets/app.js", "/thumbnails/abc", "/thumbnails/abc/content/" + "a" * 64):
                     self.assertTrue(routed(allowed, path), path)
                 for path in ("/mcp", "/mcp/", "/health/live", "/health/ready", "/.well-known/oauth-protected-resource/mcp",
-                             NATIVE_APP_DISCOVERY, "/api/admin", "/api/v1/articles-evil", "/auth/admin",
+                             NATIVE_APP_DISCOVERY, "/api/admin", "/api/v1/articles-evil", "/api/v1/tags/", "/api/v1/tags/go", "/api/v1/tags-evil", "/auth/admin",
                              "/jobs", "/jobs/", "/jobs/archive", "/jobs/trash", "/jobs/abc", "/jobs-evil", "/jobsearch",
                              "/api/v1/opportunities", "/api/v1/opportunities/abc", "/api/v1/opportunities/abc/archive",
                              "/api/v1/opportunities/abc/unarchive", "/api/v1/opportunities/abc/trash", "/api/v1/opportunities/abc/restore",
@@ -164,10 +164,11 @@ class ChartTests(unittest.TestCase):
         self.assertTrue(all(p["backend"]["service"] == {"name": "agent-newsfeed", "port": {"number": 8091}} for p in paths))
         allowed = {(p["path"], p["pathType"]) for p in paths}
         self.assertEqual(allowed, PUBLIC_BROWSER_ROUTES | {(NATIVE_APP_DISCOVERY, "Exact")})
-        # Native article reads and state changes, and thumbnails, use the existing prefixes.
+        # Native article reads and state changes, and thumbnails, use the existing prefixes;
+        # tag counts use the exact tag route that browser sessions share.
         for path in (NATIVE_APP_DISCOVERY, "/api/v1/articles", "/api/v1/articles/abc", "/api/v1/articles/abc/archive",
                      "/api/v1/articles/abc/restore", "/api/v1/articles/abc/trash", "/api/v1/articles/abc/restore-trash",
-                     "/thumbnails/abc", "/thumbnails/abc/content/" + "a" * 64):
+                     "/api/v1/tags", "/thumbnails/abc", "/thumbnails/abc/content/" + "a" * 64):
             self.assertTrue(routed(allowed, path), path)
         for path in (NATIVE_APP_DISCOVERY + "/", NATIVE_APP_DISCOVERY + "/extra", "/.well-known/oauth-protected-resource",
                      "/.well-known/oauth-protected-resource/mcp", "/.well-known/openid-configuration", "/mcp", "/health/ready"):

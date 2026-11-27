@@ -18,6 +18,8 @@ const MaxBrowserPageSize = 500
 const MaxArticleQueryBytes = 300
 
 // Browser browsing has a separate bound and cursor from the public MCP/API list.
+// It has no tag filter, so the Tags inherited from ListInput must stay empty;
+// browsing rejects them instead of silently listing every article.
 type BrowserListInput struct {
 	ListInput
 	Query string
@@ -55,7 +57,7 @@ func NormalizeArticleQuery(query string) (string, error) {
 
 func (in BrowserListInput) articleCursor(owner sqlite.Owner) (sqlite.Cursor, error) {
 	query, err := NormalizeArticleQuery(in.Query)
-	if err != nil || in.Limit < 1 || in.Limit > MaxBrowserPageSize || len(in.Cursor) > 1024 || (in.Archived && in.Trashed) {
+	if err != nil || in.Limit < 1 || in.Limit > MaxBrowserPageSize || len(in.Cursor) > 1024 || (in.Archived && in.Trashed) || len(in.Tags) != 0 {
 		return sqlite.Cursor{}, ErrInvalid
 	}
 	if in.Cursor == "" {

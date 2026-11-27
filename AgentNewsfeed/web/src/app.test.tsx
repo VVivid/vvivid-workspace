@@ -366,3 +366,42 @@ describe('recoverable Trash', () => {
     expect(screen.getByRole('link', { name: article.title })).toHaveAttribute('href', article.url)
   })
 })
+
+describe('agent-written articles', () => {
+  const written: Article = {
+    id: 'agent-written-article',
+    title: 'Two Sum, explained',
+    summary: 'An agent-written walkthrough of the one-pass solution.',
+    revision: 1,
+    created_at: 1793145600000,
+    updated_at: 1793145600000,
+    tags: ['generated', 'leetcode'],
+    content_markdown: '# Two Sum\n\n[Problem](https://leetcode.com/problems/two-sum/) [Notes](notes.md) [Top](#top)\n\n```mermaid\nflowchart LR\n  scan --> lookup\n```',
+  }
+
+  it('opens an article without a source URL in its saved reader', () => {
+    render(<App data={{ ...shelf, page: { articles: [written] } }} />)
+    const row = screen.getByRole('link', { name: written.title })
+    expect(row).toHaveAttribute('href', '/articles/agent-written-article?from=feed')
+    expect(row).not.toHaveAttribute('target')
+    expect(row).toHaveTextContent('Your agent')
+  })
+
+  it('reads an article without a source URL as agent writing, keeping only absolute links', () => {
+    const { container } = render(<App data={reader({ article: written })} />)
+    expect(screen.getByText('Your agent')).toBeVisible()
+    expect(container.querySelector('.attribution')).toHaveTextContent(/^Written by your agent\.$/)
+    expect(screen.queryByRole('link', { name: /Read original/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Problem' })).toHaveAttribute('href', 'https://leetcode.com/problems/two-sum/')
+    expect(screen.queryByRole('link', { name: 'Notes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Top' })).not.toBeInTheDocument()
+    expect(container.querySelector('code.language-mermaid')).toHaveTextContent('flowchart LR')
+  })
+
+  it('credits a generated article with a reference URL to the agent', () => {
+    const { container } = render(<App data={reader({ article: { ...written, url: 'https://leetcode.com/problems/two-sum/' } })} />)
+    expect(container.querySelector('.attribution')).toHaveTextContent(/^From leetcode\.com\. Written by your agent\.$/)
+    expect(screen.getByRole('link', { name: /Read original/ })).toHaveAttribute('href', 'https://leetcode.com/problems/two-sum/')
+    expect(screen.getByRole('link', { name: 'Notes' })).toHaveAttribute('href', 'https://leetcode.com/problems/two-sum/notes.md')
+  })
+})

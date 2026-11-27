@@ -37,7 +37,9 @@ func TestTodoMigrationPreservesExistingContentAndPersistsTasks(t *testing.T) {
 		t.Fatal(err)
 	}
 	jpeg := thumbnailJPEG(t, 150)
+	dropArticleTags := articleTagsDuringSeed(t, db)
 	article := storeArticle(t, legacy, owner, "old-article", jpeg).Article
+	dropArticleTags()
 	// Create a retired listing and retry record as they would appear in a v4 database.
 	const listingID = "legacy-listing"
 	type listingSnapshot struct {
@@ -76,7 +78,7 @@ func TestTodoMigrationPreservesExistingContentAndPersistsTasks(t *testing.T) {
 	if got, err := store.OwnerForIdentity(ctx, enrollment); err != nil || got != owner {
 		t.Fatal("migration changed enrollment")
 	}
-	if got, err := store.Article(ctx, owner, article.ID); err != nil || got != article {
+	if got, err := store.Article(ctx, owner, article.ID); err != nil || !reflect.DeepEqual(got, article) {
 		t.Fatalf("migration changed News: %#v %v", got, err)
 	}
 	if image, err := store.Thumbnail(ctx, owner, article.ID, false); err != nil || !bytes.Equal(image, jpeg) {

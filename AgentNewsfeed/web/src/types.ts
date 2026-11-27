@@ -1,6 +1,7 @@
 export interface Article {
   id: string
-  url: string
+  // Absent only for an agent-written article (tagged generated) without a source.
+  url?: string
   title: string
   summary: string
   thumbnail_url?: string
@@ -15,6 +16,7 @@ export interface Article {
   thumbnail_width?: number
   thumbnail_height?: number
   thumbnail_bytes?: number
+  tags?: string[]
 }
 
 export interface PageLinks {
