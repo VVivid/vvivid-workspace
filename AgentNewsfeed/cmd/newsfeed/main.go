@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"agentnewsfeed/internal/audio"
 	"agentnewsfeed/internal/feed"
 	"agentnewsfeed/internal/identity"
 	"agentnewsfeed/internal/store/sqlite"
@@ -88,7 +89,20 @@ func run(ctx context.Context, logger *slog.Logger) (err error) {
 		}
 	}
 	images := thumbnail.NewProxy(policy)
-	handler, err := web.New(logger, auth, feed.NewWithThumbnailFetcher(store, policy, images), images)
+	service := feed.NewWithThumbnailFetcher(store, policy, images)
+	audioConfig, err := loadAudioConfig()
+	if err != nil {
+		return err
+	}
+	if audioConfig != nil {
+		engine, err := audio.New(*audioConfig, store, logger)
+		if err != nil {
+			return err
+		}
+		service.EnableAudio(engine)
+		go engine.Run(ctx)
+	}
+	handler, err := web.New(logger, auth, service, images)
 	if err != nil {
 		return err
 	}
@@ -99,7 +113,7 @@ func run(ctx context.Context, logger *slog.Logger) (err error) {
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 32 << 10}
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- server.Serve(listener) }()
-	logger.Info("newsfeed listening", "address", listener.Addr().String(), "version", version, "identity_configured", auth != nil)
+	logger.Info("newsfeed listening", "address", listener.Addr().String(), "version", version, "identity_configured", auth != nil, "audio_configured", audioConfig != nil)
 	select {
 	case err := <-serveErr:
 		return err

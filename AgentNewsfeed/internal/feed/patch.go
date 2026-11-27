@@ -213,8 +213,14 @@ func (s *Service) mutateState(ctx context.Context, p identity.Principal, in Stat
 	return s.store.MutateArticle(ctx, p.Owner(), in.IdempotencyKey, operation, payload, state, in.ExpectedRevision)
 }
 
+// TrashArticle moves the article to Trash. That deletes its audio, so the
+// audio's files go too.
 func (s *Service) TrashArticle(ctx context.Context, p identity.Principal, in StateInput) (sqlite.MutationResult, error) {
-	return s.mutateState(ctx, p, in, "trash_article", false)
+	out, err := s.mutateState(ctx, p, in, "trash_article", false)
+	if err == nil {
+		s.sweepAudioFiles(ctx)
+	}
+	return out, err
 }
 func (s *Service) RestoreArticle(ctx context.Context, p identity.Principal, in StateInput) (sqlite.MutationResult, error) {
 	return s.mutateState(ctx, p, in, "restore_article", false)

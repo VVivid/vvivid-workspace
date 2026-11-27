@@ -19,7 +19,7 @@ PUBLIC_BROWSER_ROUTES = (
     {(path, "Exact") for path in ("/", "/archive", "/trash", "/todo", "/settings", "/api/v1/tags", "/api/v1/todos",
                                   "/api/v1/settings/preferences", "/api/v1/settings/suggestions/accept",
                                   "/api/v1/settings/suggestions/dismiss", "/auth/login", "/auth/callback", "/auth/logout")} |
-    {(path, "Prefix") for path in ("/articles/", "/api/v1/articles", "/static/assets/", "/thumbnails/")})
+    {(path, "Prefix") for path in ("/articles/", "/api/v1/articles", "/api/v1/audio/", "/static/assets/", "/thumbnails/")})
 NATIVE_APP_DISCOVERY = "/.well-known/oauth-protected-resource/api/v1"
 
 
@@ -168,11 +168,42 @@ class ChartTests(unittest.TestCase):
         # tag counts use the exact tag route that browser sessions share.
         for path in (NATIVE_APP_DISCOVERY, "/api/v1/articles", "/api/v1/articles/abc", "/api/v1/articles/abc/archive",
                      "/api/v1/articles/abc/restore", "/api/v1/articles/abc/trash", "/api/v1/articles/abc/restore-trash",
-                     "/api/v1/tags", "/thumbnails/abc", "/thumbnails/abc/content/" + "a" * 64):
+                     "/api/v1/tags", "/thumbnails/abc", "/thumbnails/abc/content/" + "a" * 64,
+                     "/api/v1/articles/abc/audio", "/api/v1/articles/abc/audio/segments/0", "/api/v1/audio/voices",
+                     "/api/v1/audio/voices/talia/sample"):
             self.assertTrue(routed(allowed, path), path)
-        for path in (NATIVE_APP_DISCOVERY + "/", NATIVE_APP_DISCOVERY + "/extra", "/.well-known/oauth-protected-resource",
+        for path in (NATIVE_APP_DISCOVERY + "/", "/api/v1/audio", "/api/v1/audio-evil", NATIVE_APP_DISCOVERY + "/extra", "/.well-known/oauth-protected-resource",
                      "/.well-known/oauth-protected-resource/mcp", "/.well-known/openid-configuration", "/mcp", "/health/ready"):
             self.assertFalse(routed(allowed, path), path)
+
+    def test_audio_secret_and_settings_only_when_configured(self):
+        def pod(values):
+            result = render(values)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            return next(d for d in yaml.safe_load_all(result.stdout) if d["kind"] == "Deployment")["spec"]["template"]["spec"]
+        off = pod(FIXTURE)
+        self.assertFalse(any(e["name"].startswith(("NEWSFEED_ELEVENLABS", "NEWSFEED_AUDIO")) for e in off["containers"][0]["env"]))
+        self.assertNotIn("audio-seed", [v["name"] for v in off["volumes"]])
+        voices = [{"id": "talia", "name": "Talia", "description": "Calm and clear", "elevenlabs_voice_id": "abcdefghij1234567890"}]
+        on = pod({**FIXTURE, "audio": {"existingSecret": "agent-newsfeed-elevenlabs", "voices": voices}})
+        init, = on["initContainers"]
+        self.assertIn("cp /audio-seed/api-key /run/identity/elevenlabs-api-key\nchmod 0600 /run/identity/elevenlabs-api-key", init["args"][0])
+        self.assertIn({"name": "audio-seed", "mountPath": "/audio-seed", "readOnly": True}, init["volumeMounts"])
+        container, = on["containers"]
+        self.assertNotIn("audio-seed", [m["name"] for m in container["volumeMounts"]])
+        volumes = {v["name"]: v for v in on["volumes"]}
+        self.assertEqual(volumes["audio-seed"]["secret"], {"secretName": "agent-newsfeed-elevenlabs", "defaultMode": 0o440,
+                                                          "items": [{"key": "api-key", "path": "api-key"}]})
+        env = {e["name"]: e["value"] for e in container["env"]}
+        self.assertEqual(env["NEWSFEED_ELEVENLABS_API_KEY_FILE"], "/run/identity/elevenlabs-api-key")
+        self.assertEqual(env["NEWSFEED_AUDIO_DIR"], "/data/audio")
+        self.assertEqual(env["NEWSFEED_ELEVENLABS_MODEL"], "eleven_multilingual_v2")
+        self.assertEqual(env["NEWSFEED_ELEVENLABS_OUTPUT_FORMAT"], "mp3_44100_64")
+        self.assertEqual(json.loads(env["NEWSFEED_AUDIO_VOICES"]), voices)
+        for audio in ({"existingSecret": "elevenlabs"}, {"voices": [{"id": "Talia", "name": "Talia", "elevenlabs_voice_id": "abcdefghij1234567890"}]},
+                      {"voices": [{"id": "talia", "name": "Talia", "elevenlabs_voice_id": "bad id"}]}, {"apiKey": "secret"}):
+            with self.subTest(audio=audio):
+                self.assertNotEqual(render({**FIXTURE, "audio": audio}).returncode, 0)
 
     def test_native_app_client_ids_follow_the_app_configuration_rules(self):
         clients = [f"newsfeed-native-{i}" for i in range(17)]
