@@ -9,6 +9,7 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -101,11 +102,11 @@ func TestReadModifyToolsRequireBothScopesBeforeMutationAndReplay(t *testing.T) {
 				t.Helper()
 				for _, actor := range principals {
 					out, err := mutate(actor.p)
-					if !errors.Is(err, identity.ErrForbidden) || out != (sqlite.MutationResult{}) {
+					if !errors.Is(err, identity.ErrForbidden) || !reflect.DeepEqual(out, sqlite.MutationResult{}) {
 						t.Fatalf("%s %s exposed a mutation result: %#v %v", stage, actor.name, out, err)
 					}
 					got, err := s.GetArticleInView(t.Context(), alice, want.ID, want.TrashedAt != 0)
-					if err != nil || got != want {
+					if err != nil || !reflect.DeepEqual(got, want) {
 						t.Fatalf("%s %s changed content, revision or state: %#v %v", stage, actor.name, got, err)
 					}
 					body, err := s.Thumbnail(t.Context(), alice, want.ID, want.TrashedAt != 0)
@@ -119,12 +120,12 @@ func TestReadModifyToolsRequireBothScopesBeforeMutationAndReplay(t *testing.T) {
 			if err != nil || out.Article.ContentMarkdown != c.ContentMarkdown || out.Article.ThumbnailHash != first.Article.ThumbnailHash {
 				t.Fatalf("fully authorized mutation lost saved content: %#v %v", out, err)
 			}
-			if tc.operation == "set_article_archived" && !tc.archived && out.Article != current {
+			if tc.operation == "set_article_archived" && !tc.archived && !reflect.DeepEqual(out.Article, current) {
 				t.Fatal("archive no-op changed the article")
 			}
 			fetches := images.calls.Load()
 			assertDenied("exact retry", out.Article, fetches)
-			if replay, err := mutate(alice); err != nil || replay != out || images.calls.Load() != fetches {
+			if replay, err := mutate(alice); err != nil || !reflect.DeepEqual(replay, out) || images.calls.Load() != fetches {
 				t.Fatalf("fully authorized exact retry changed its result or fetched: %#v %v", replay, err)
 			}
 		})
@@ -148,13 +149,13 @@ func TestLegacyAddUpdateKeepWriteOnlyContractAndReadsNeedOnlyRead(t *testing.T) 
 	if err != nil || updated.Article.Revision != 2 || updated.Article.ContentMarkdown != c.ContentMarkdown {
 		t.Fatalf("write-only update failed: %#v %v", updated, err)
 	}
-	if replay, err := s.AddArticle(t.Context(), writeOnly, add); err != nil || replay != first {
+	if replay, err := s.AddArticle(t.Context(), writeOnly, add); err != nil || !reflect.DeepEqual(replay, first) {
 		t.Fatalf("write-only add replay changed: %#v %v", replay, err)
 	}
-	if replay, err := s.UpdateArticle(t.Context(), writeOnly, update); err != nil || replay != updated {
+	if replay, err := s.UpdateArticle(t.Context(), writeOnly, update); err != nil || !reflect.DeepEqual(replay, updated) {
 		t.Fatalf("write-only update replay changed: %#v %v", replay, err)
 	}
-	if got, err := s.GetArticleTool(t.Context(), readOnly, feed.GetInput{ArticleID: first.Article.ID}); err != nil || got != updated.Article {
+	if got, err := s.GetArticleTool(t.Context(), readOnly, feed.GetInput{ArticleID: first.Article.ID}); err != nil || !reflect.DeepEqual(got, updated.Article) {
 		t.Fatalf("read-only get failed: %#v %v", got, err)
 	}
 	page, err := s.ListArticles(t.Context(), readOnly, feed.ListInput{})
@@ -194,7 +195,7 @@ func TestPartialUpdatesStoredThumbnailsAndExactReplayAfterTrashAndRestart(t *tes
 	duplicate := in
 	duplicate.IdempotencyKey = "duplicate-no-fetch"
 	duplicate.Article.ThumbnailURL = "https://images.example.com/unused.jpg"
-	if out, err := s.AddArticle(t.Context(), alice, duplicate); err != nil || out.Created || out.Article != refreshed.Article || images.calls.Load() != 2 {
+	if out, err := s.AddArticle(t.Context(), alice, duplicate); err != nil || out.Created || !reflect.DeepEqual(out.Article, refreshed.Article) || images.calls.Load() != 2 {
 		t.Fatal("canonical duplicate fetched or replaced content")
 	}
 	stale := imagePatch
@@ -206,15 +207,15 @@ func TestPartialUpdatesStoredThumbnailsAndExactReplayAfterTrashAndRestart(t *tes
 	if err != nil || trashed.Article.TrashedAt == 0 {
 		t.Fatalf("trash: %v", err)
 	}
-	if replay, err := s.PatchArticle(t.Context(), alice, patch); err != nil || replay != updated || images.calls.Load() != 2 {
+	if replay, err := s.PatchArticle(t.Context(), alice, patch); err != nil || !reflect.DeepEqual(replay, updated) || images.calls.Load() != 2 {
 		t.Fatal("patch replay depended on later Trash state")
 	}
-	if replay, err := s.AddArticle(t.Context(), alice, in); err != nil || replay != first {
+	if replay, err := s.AddArticle(t.Context(), alice, in); err != nil || !reflect.DeepEqual(replay, first) {
 		t.Fatal("add retry no longer returns original")
 	}
 	f.Reopen(t)
 	s = feed.NewWithThumbnailFetcher(f.Store, policy, images)
-	if replay, err := s.PatchArticle(t.Context(), alice, imagePatch); err != nil || replay != refreshed || images.calls.Load() != 2 {
+	if replay, err := s.PatchArticle(t.Context(), alice, imagePatch); err != nil || !reflect.DeepEqual(replay, refreshed) || images.calls.Load() != 2 {
 		t.Fatal("restart image retry refetched or changed result")
 	}
 	if body, err := s.Thumbnail(t.Context(), alice, first.Article.ID, true); err != nil || !bytes.Equal(body, images.body) {
@@ -313,7 +314,7 @@ func TestTrashRestorePreservesArchiveAndCannotBeEditedOrRevived(t *testing.T) {
 	if _, err := s.GetArticle(t.Context(), alice, first.Article.ID); !errors.Is(err, sqlite.ErrNotFound) {
 		t.Fatal("ordinary read included Trash")
 	}
-	if got, err := s.GetArticleTool(t.Context(), alice, feed.GetInput{ArticleID: first.Article.ID, Trashed: true}); err != nil || got != trashed.Article {
+	if got, err := s.GetArticleTool(t.Context(), alice, feed.GetInput{ArticleID: first.Article.ID, Trashed: true}); err != nil || !reflect.DeepEqual(got, trashed.Article) {
 		t.Fatal("explicit Trash read failed")
 	}
 	if _, err := s.GetArticleTool(t.Context(), bob, feed.GetInput{ArticleID: first.Article.ID, Trashed: true}); !errors.Is(err, sqlite.ErrNotFound) {
@@ -339,7 +340,7 @@ func TestTrashRestorePreservesArchiveAndCannotBeEditedOrRevived(t *testing.T) {
 		t.Fatal("archive tool revived Trash")
 	}
 	in.IdempotencyKey = "duplicate-trash"
-	if out, err := s.AddArticle(t.Context(), alice, in); err != nil || out.Created || out.Article != trashed.Article {
+	if out, err := s.AddArticle(t.Context(), alice, in); err != nil || out.Created || !reflect.DeepEqual(out.Article, trashed.Article) {
 		t.Fatal("canonical duplicate revived Trash")
 	}
 	restoreIn := feed.StateInput{IdempotencyKey: "restore", ArticleID: first.Article.ID, ExpectedRevision: 3}
@@ -350,10 +351,10 @@ func TestTrashRestorePreservesArchiveAndCannotBeEditedOrRevived(t *testing.T) {
 	if err != nil || restored.Article.TrashedAt != 0 || restored.Article.ArchivedAt != archived.Article.ArchivedAt || restored.Article.Revision != 4 {
 		t.Fatal("restore failed to restore Archive")
 	}
-	if replay, err := s.TrashArticle(t.Context(), alice, trashIn); err != nil || replay != trashed {
+	if replay, err := s.TrashArticle(t.Context(), alice, trashIn); err != nil || !reflect.DeepEqual(replay, trashed) {
 		t.Fatal("old Trash retry retrash changed state")
 	}
-	if current, _ := s.GetArticle(t.Context(), alice, first.Article.ID); current != restored.Article {
+	if current, _ := s.GetArticle(t.Context(), alice, first.Article.ID); !reflect.DeepEqual(current, restored.Article) {
 		t.Fatal("retry reapplied stale Trash transition")
 	}
 	if err := f.Store.DisableAccount(t.Context(), alice.Identity()); err != nil {
@@ -398,7 +399,7 @@ func TestThumbnailFetchDoesNotHoldWriteLockAndStaleResultIsDiscarded(t *testing.
 	if err := <-result; !errors.Is(err, sqlite.ErrConflict) {
 		t.Fatalf("stale fetch overwrote article: %v", err)
 	}
-	if got, _ := s.GetArticle(t.Context(), alice, first.Article.ID); got != winner.Article {
+	if got, _ := s.GetArticle(t.Context(), alice, first.Article.ID); !reflect.DeepEqual(got, winner.Article) {
 		t.Fatal("stale prepared payload changed article")
 	}
 }

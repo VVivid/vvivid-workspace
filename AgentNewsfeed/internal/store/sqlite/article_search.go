@@ -39,11 +39,11 @@ func (s *Store) BrowseArticles(ctx context.Context, owner Owner, cursor Cursor, 
 	}
 	defer tx.Rollback()
 	page := BrowserArticlePage{}
-	filter, order, args := articleSelection(owner, cursor, query)
+	filter, order, args := articleSelection(owner, cursor, query, nil)
 	if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM articles a WHERE "+filter, args...).Scan(&page.Total); err != nil {
 		return BrowserArticlePage{}, err
 	}
-	page.Articles, err = listArticles(ctx, tx, owner, cursor, limit, query)
+	page.Articles, err = listArticles(ctx, tx, owner, cursor, limit, query, nil)
 	if err != nil {
 		return BrowserArticlePage{}, err
 	}

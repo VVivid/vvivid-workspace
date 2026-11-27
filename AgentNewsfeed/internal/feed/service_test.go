@@ -3,6 +3,7 @@ package feed_test
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -43,7 +44,7 @@ func TestOwnershipDedupRevisionsAndDurableReplay(t *testing.T) {
 	duplicate.Article.Title = "New title should not overwrite"
 	duplicate.Article.URL = "https://EXAMPLE.com:443/story?fbclid=other"
 	same, err := s.AddArticle(t.Context(), alice, duplicate)
-	if err != nil || same.Created || same.Article != first.Article {
+	if err != nil || same.Created || !reflect.DeepEqual(same.Article, first.Article) {
 		t.Fatalf("dedup: %#v %v", same, err)
 	}
 	owned, err := s.AddArticle(t.Context(), bob, in)
@@ -76,11 +77,11 @@ func TestOwnershipDedupRevisionsAndDurableReplay(t *testing.T) {
 	policy, _ := thumbnail.NewPolicy("images.example.com")
 	s = feed.New(f.Store, policy)
 	replay, err := s.AddArticle(t.Context(), alice, in)
-	if err != nil || replay != first {
+	if err != nil || !reflect.DeepEqual(replay, first) {
 		t.Fatalf("restart replay changed original outcome %#v %v", replay, err)
 	}
 	replay, err = s.UpdateArticle(t.Context(), alice, update)
-	if err != nil || replay != revised {
+	if err != nil || !reflect.DeepEqual(replay, revised) {
 		t.Fatalf("restart update replay %v", err)
 	}
 	if err := f.Store.DisableAccount(t.Context(), alice.Identity()); err != nil {
@@ -238,7 +239,7 @@ func TestURLUpdateCollisionRollsBackAndDoesNotReserveKey(t *testing.T) {
 		t.Fatalf("URL collision %v", err)
 	}
 	unchanged, err := s.GetArticle(t.Context(), p, b.Article.ID)
-	if err != nil || unchanged != b.Article {
+	if err != nil || !reflect.DeepEqual(unchanged, b.Article) {
 		t.Fatal("failed update changed state")
 	}
 	in.Article = c
@@ -262,7 +263,7 @@ func TestOriginalMarkdownArchiveRestoreAndRevisionBoundaries(t *testing.T) {
 		t.Fatalf("original content changed: %v", err)
 	}
 	detail, err := s.GetArticle(t.Context(), alice, first.Article.ID)
-	if err != nil || detail != first.Article || detail.ArchivedAt != 0 {
+	if err != nil || !reflect.DeepEqual(detail, first.Article) || detail.ArchivedAt != 0 {
 		t.Fatal("reading changed saved state")
 	}
 	active, err := s.ListArticles(t.Context(), alice, feed.ListInput{})
@@ -280,7 +281,7 @@ func TestOriginalMarkdownArchiveRestoreAndRevisionBoundaries(t *testing.T) {
 	if err != nil || archived.ArchivedAt == 0 || archived.ContentMarkdown != detail.ContentMarkdown || archived.Revision != 2 {
 		t.Fatalf("archive damaged original: %#v %v", archived, err)
 	}
-	if again, err := s.SetArchived(t.Context(), alice, detail.ID, true); err != nil || again != archived {
+	if again, err := s.SetArchived(t.Context(), alice, detail.ID, true); err != nil || !reflect.DeepEqual(again, archived) {
 		t.Fatal("duplicate archive changed revision or ordering")
 	}
 	if active, _ := s.ListArticles(t.Context(), alice, feed.ListInput{}); len(active.Articles) != 0 {
@@ -302,14 +303,14 @@ func TestOriginalMarkdownArchiveRestoreAndRevisionBoundaries(t *testing.T) {
 	}
 	duplicate := in
 	duplicate.IdempotencyKey = "duplicate-archived"
-	if out, err := s.AddArticle(t.Context(), alice, duplicate); err != nil || out.Created || out.Article != revised.Article {
+	if out, err := s.AddArticle(t.Context(), alice, duplicate); err != nil || out.Created || !reflect.DeepEqual(out.Article, revised.Article) {
 		t.Fatal("duplicate add unarchived or replaced original")
 	}
 	restored, err := s.SetArchived(t.Context(), alice, detail.ID, false)
 	if err != nil || restored.ArchivedAt != 0 || restored.CreatedAt != first.Article.CreatedAt || restored.ContentMarkdown != revised.Article.ContentMarkdown || restored.Revision != 4 {
 		t.Fatal("restore did not preserve source and saved time")
 	}
-	if out, err := s.AddArticle(t.Context(), alice, in); err != nil || out != first {
+	if out, err := s.AddArticle(t.Context(), alice, in); err != nil || !reflect.DeepEqual(out, first) {
 		t.Fatal("archive or updates changed durable add replay")
 	}
 	update.IdempotencyKey, update.ExpectedRevision, update.Article.ContentMarkdown = "clear-body", 4, ""
@@ -350,7 +351,7 @@ func TestLegacyOmittedContentPayloadHashesStillReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if replay, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "legacy-add", Article: content()}); err != nil || replay != first {
+	if replay, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "legacy-add", Article: content()}); err != nil || !reflect.DeepEqual(replay, first) {
 		t.Fatalf("legacy add payload hash changed: %v", err)
 	}
 	legacyArticle.ID = first.Article.ID
@@ -365,7 +366,7 @@ func TestLegacyOmittedContentPayloadHashesStillReplay(t *testing.T) {
 	f.Reopen(t)
 	policy, _ := thumbnail.NewPolicy("images.example.com")
 	s = feed.New(f.Store, policy)
-	if replay, err := s.UpdateArticle(t.Context(), alice, feed.UpdateInput{IdempotencyKey: "legacy-update", ArticleID: first.Article.ID, ExpectedRevision: 1, Article: c}); err != nil || replay != revised {
+	if replay, err := s.UpdateArticle(t.Context(), alice, feed.UpdateInput{IdempotencyKey: "legacy-update", ArticleID: first.Article.ID, ExpectedRevision: 1, Article: c}); err != nil || !reflect.DeepEqual(replay, revised) {
 		t.Fatalf("legacy update payload hash changed after restart: %v", err)
 	}
 }

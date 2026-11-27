@@ -77,11 +77,12 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 	if auth != nil {
 		auth.Register(mux)
 		h.registerSettings(mux)
-		// Article and image reads also serve configured native apps. So do the
-		// article state changes, as JSON (see nativeAppStateChange) beside the
+		// Article, tag and image reads also serve configured native apps. So do
+		// the article state changes, as JSON (see nativeAppStateChange) beside the
 		// unchanged browser forms. To-do and settings writes stay browser-only.
 		mux.Handle("GET /api/v1/articles", auth.BrowserOrNativeAppMiddleware([]string{identity.Read}, http.HandlerFunc(h.list)))
 		mux.Handle("GET /api/v1/articles/{id}", auth.BrowserOrNativeAppMiddleware([]string{identity.Read}, http.HandlerFunc(h.detail)))
+		mux.Handle("GET /api/v1/tags", auth.BrowserOrNativeAppMiddleware([]string{identity.Read}, http.HandlerFunc(h.tags)))
 		stateScopes := []string{identity.Read, identity.ArticlesWrite}
 		mux.Handle("POST /api/v1/articles/{id}/archive", auth.BrowserFormOrNativeAppMiddleware(stateScopes, h.archive(true), h.nativeAppStateChange(h.setArticleArchived(true))))
 		mux.Handle("POST /api/v1/articles/{id}/restore", auth.BrowserFormOrNativeAppMiddleware(stateScopes, h.archive(false), h.nativeAppStateChange(h.setArticleArchived(false))))
@@ -96,6 +97,7 @@ func New(logger *slog.Logger, auth *identity.Manager, service *feed.Service, pro
 		// Limit setup responses to the active API families so retired paths return 404.
 		mux.HandleFunc("/api/v1/articles", unconfigured)
 		mux.HandleFunc("/api/v1/articles/", unconfigured)
+		mux.HandleFunc("/api/v1/tags", unconfigured)
 		mux.HandleFunc("/api/v1/todos", unconfigured)
 		mux.HandleFunc("/api/v1/settings/", unconfigured)
 		mux.HandleFunc("/auth/", unconfigured)
@@ -247,23 +249,16 @@ func (h *handler) renderPage(w http.ResponseWriter, r *http.Request, status int,
 
 func (h *handler) list(w http.ResponseWriter, r *http.Request) {
 	p, _ := identity.FromContext(r.Context())
-	in := feed.ListInput{Cursor: r.URL.Query().Get("cursor")}
-	if raw := r.URL.Query().Get("archived"); raw != "" {
-		if raw != "true" && raw != "false" {
-			writeError(w, feed.ErrInvalid)
-			return
-		}
-		in.Archived = raw == "true"
+	query := r.URL.Query()
+	archived, trashed, err := articleShelf(query)
+	if err != nil {
+		writeError(w, err)
+		return
 	}
-	if raw := r.URL.Query().Get("trashed"); raw != "" {
-		if raw != "true" && raw != "false" {
-			writeError(w, feed.ErrInvalid)
-			return
-		}
-		in.Trashed = raw == "true"
-	}
-	if raw := r.URL.Query().Get("limit"); raw != "" {
-		var err error
+	// Each repeated tag parameter is one tag of the filter, as in MCP
+	// list_articles: an article matches when it has any of them.
+	in := feed.ListInput{Cursor: query.Get("cursor"), Archived: archived, Trashed: trashed, Tags: query["tag"]}
+	if raw := query.Get("limit"); raw != "" {
 		in.Limit, err = strconv.Atoi(raw)
 		if err != nil {
 			writeError(w, feed.ErrInvalid)
@@ -277,6 +272,47 @@ func (h *handler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(page)
+}
+
+// tags answers the tags on the shelf that the list route would show, as MCP
+// list_tags does: {"tags":[{"tag":...,"count":...}]}, most used first.
+func (h *handler) tags(w http.ResponseWriter, r *http.Request) {
+	p, _ := identity.FromContext(r.Context())
+	archived, trashed, err := articleShelf(r.URL.Query())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	tags, err := h.service.ListTags(r.Context(), p, feed.ListTagsInput{Archived: archived, Trashed: trashed})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(tags)
+}
+
+// articleShelf reads the shelf of the article list and tag routes: optional
+// archived and trashed parameters, each true or false, where an absent or
+// empty value means false. The feed rejects selecting both.
+func articleShelf(query url.Values) (archived, trashed bool, err error) {
+	archived, archivedValid := queryFlag(query.Get("archived"))
+	trashed, trashedValid := queryFlag(query.Get("trashed"))
+	if !archivedValid || !trashedValid {
+		return false, false, feed.ErrInvalid
+	}
+	return archived, trashed, nil
+}
+
+func queryFlag(raw string) (value, valid bool) {
+	switch raw {
+	case "true":
+		return true, true
+	case "", "false":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 func (h *handler) detail(w http.ResponseWriter, r *http.Request) {

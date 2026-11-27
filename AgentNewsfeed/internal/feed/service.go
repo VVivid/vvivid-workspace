@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -42,12 +43,17 @@ func NewWithThumbnailFetcher(store *sqlite.Store, policy thumbnail.Policy, image
 
 func (s *Service) Ready(ctx context.Context) error { return s.store.Ready(ctx) }
 
+// Content is what an agent supplies for an article. URL may be empty only for
+// an article tagged generated (see normalizeContent). Omitting empty url and
+// tags makes both optional in the MCP input schema, and omitting nil tags keeps
+// the discovery retry hashes of requests made before tags existed.
 type Content struct {
-	URL             string `json:"url"`
-	Title           string `json:"title"`
-	Summary         string `json:"summary"`
-	ThumbnailURL    string `json:"thumbnail_url,omitempty"`
-	ContentMarkdown string `json:"content_markdown,omitempty"`
+	URL             string   `json:"url,omitempty"`
+	Title           string   `json:"title"`
+	Summary         string   `json:"summary"`
+	ThumbnailURL    string   `json:"thumbnail_url,omitempty"`
+	ContentMarkdown string   `json:"content_markdown,omitempty"`
+	Tags            []string `json:"tags,omitempty"`
 }
 type AddInput struct {
 	IdempotencyKey string  `json:"idempotency_key"`
@@ -64,6 +70,8 @@ type ListInput struct {
 	Cursor   string `json:"cursor,omitempty"`
 	Archived bool   `json:"archived,omitzero"`
 	Trashed  bool   `json:"trashed,omitzero"`
+	// Tags keeps the articles that have at least one of them.
+	Tags []string `json:"tags,omitempty"`
 }
 type Page struct {
 	Articles   []sqlite.Article `json:"articles"`
@@ -86,12 +94,34 @@ func (s *Service) authorize(ctx context.Context, p identity.Principal, scopes ..
 	return nil
 }
 
+// normalizeContent validates a complete article, as added or as it would be
+// after an update or patch. Without the generated tag the source rules apply:
+// a public HTTPS URL is required and Markdown is optional. An article tagged
+// generated was written by an agent, so it must have a body and may omit the URL.
 func normalizeContent(c Content, thumbnails thumbnail.Policy) (sqlite.Article, error) {
-	canonical, err := urls.Canonical(c.URL)
-	if err != nil || !boundedText(c.Title, 300) || !boundedText(c.Summary, 1200) || thumbnails.Validate(c.ThumbnailURL) != nil || !validMarkdown(c.ContentMarkdown) {
+	tags, err := NormalizeTags(c.Tags)
+	if err != nil {
+		return sqlite.Article{}, err
+	}
+	generated := slices.Contains(tags, TagGenerated)
+	if generated && slices.Contains(tags, TagExplore) {
+		return sqlite.Article{}, errInvalidTags
+	}
+	if !boundedText(c.Title, 300) || !boundedText(c.Summary, 1200) || thumbnails.Validate(c.ThumbnailURL) != nil || !validMarkdown(c.ContentMarkdown) {
 		return sqlite.Article{}, ErrInvalid
 	}
-	return sqlite.Article{URL: canonical, Title: c.Title, Summary: c.Summary, ThumbnailURL: c.ThumbnailURL, ContentMarkdown: c.ContentMarkdown}, nil
+	a := sqlite.Article{Title: c.Title, Summary: c.Summary, ThumbnailURL: c.ThumbnailURL, ContentMarkdown: c.ContentMarkdown, Tags: tags}
+	if generated && strings.TrimSpace(c.ContentMarkdown) == "" {
+		return sqlite.Article{}, errInvalidGenerated
+	}
+	// Only an agent-written article may omit its source URL.
+	if generated && c.URL == "" {
+		return a, nil
+	}
+	if a.URL, err = urls.Canonical(c.URL); err != nil {
+		return sqlite.Article{}, ErrInvalid
+	}
+	return a, nil
 }
 
 // Markdown preserves the source's whitespace. Line breaks and tabs are text;
@@ -187,47 +217,74 @@ func (s *Service) listArticles(ctx context.Context, p identity.Principal, in Lis
 	if in.Limit < 1 || in.Limit > 50 {
 		return listPage[sqlite.Article]{}, ErrInvalid
 	}
+	// The MCP schema accepts at most MaxArticleTags filter tags as supplied;
+	// counting before normalization merges duplicates holds the API's repeated
+	// tag parameters to the same bound.
+	if len(in.Tags) > MaxArticleTags {
+		return listPage[sqlite.Article]{}, errInvalidTags
+	}
+	tags, err := NormalizeTags(in.Tags)
+	if err != nil {
+		return listPage[sqlite.Article]{}, err
+	}
 	owner := p.Owner()
-	cursor, err := in.articleCursor(owner)
+	cursor, err := in.articleCursor(owner, tags)
 	if err != nil {
 		return listPage[sqlite.Article]{}, err
 	}
 	return loadPage(in.Limit, mode, in.Cursor != "", cursor,
-		func(boundary sqlite.Cursor, before bool, limit int) ([]sqlite.Article, error) {
+		func(boundary articleListCursor, before bool, limit int) ([]sqlite.Article, error) {
 			boundary.Before = before
-			return s.store.ListArticles(ctx, owner, boundary, limit)
+			return s.store.ListArticles(ctx, owner, boundary.Cursor, limit, tags...)
 		},
-		func(article sqlite.Article) sqlite.Cursor {
+		func(article sqlite.Article) articleListCursor {
 			timestamp := article.CreatedAt
 			if in.Archived {
 				timestamp = article.ArchivedAt
 			} else if in.Trashed {
 				timestamp = article.TrashedAt
 			}
-			return sqlite.Cursor{Timestamp: timestamp, ID: article.ID, Owner: owner.ID(), Archived: in.Archived, Trashed: in.Trashed}
+			return articleListCursor{
+				Cursor:   sqlite.Cursor{Timestamp: timestamp, ID: article.ID, Owner: owner.ID(), Archived: in.Archived, Trashed: in.Trashed},
+				TagsHash: cursor.TagsHash,
+			}
 		})
+}
+
+// articleListCursor is an MCP/API list position. TagsHash binds it to one
+// normalized tag filter, so it cannot continue a list with another filter.
+// Unfiltered cursors omit it and keep their earlier encoding. With 26-character
+// IDs a filtered cursor encodes to about 230 bytes, inside the 256-byte bound.
+type articleListCursor struct {
+	sqlite.Cursor
+	TagsHash string `json:"tags_hash,omitempty"`
 }
 
 // ValidateCursor checks a reader's return position without loading its list.
 func (in ListInput) ValidateCursor(owner sqlite.Owner) error {
-	_, err := in.articleCursor(owner)
+	tags, err := NormalizeTags(in.Tags)
+	if err != nil {
+		return err
+	}
+	_, err = in.articleCursor(owner, tags)
 	return err
 }
 
-func (in ListInput) articleCursor(owner sqlite.Owner) (sqlite.Cursor, error) {
+func (in ListInput) articleCursor(owner sqlite.Owner, tags []string) (articleListCursor, error) {
 	if len(in.Cursor) > 256 || (in.Archived && in.Trashed) {
-		return sqlite.Cursor{}, ErrInvalid
+		return articleListCursor{}, ErrInvalid
 	}
+	filter := tagFilterHash(tags)
 	if in.Cursor == "" {
-		return sqlite.Cursor{Owner: owner.ID(), Archived: in.Archived, Trashed: in.Trashed}, nil
+		return articleListCursor{Cursor: sqlite.Cursor{Owner: owner.ID(), Archived: in.Archived, Trashed: in.Trashed}, TagsHash: filter}, nil
 	}
-	var cursor sqlite.Cursor
+	var cursor articleListCursor
 	raw, err := base64.RawURLEncoding.DecodeString(in.Cursor)
 	decoder := json.NewDecoder(strings.NewReader(string(raw)))
 	decoder.DisallowUnknownFields()
 	if err != nil || decoder.Decode(&cursor) != nil || decoder.InputOffset() != int64(len(raw)) || cursor.Timestamp < 1 || !boundedText(cursor.ID, 64) ||
-		cursor.Owner != owner.ID() || cursor.Archived != in.Archived || cursor.Trashed != in.Trashed {
-		return sqlite.Cursor{}, ErrInvalid
+		cursor.Owner != owner.ID() || cursor.Archived != in.Archived || cursor.Trashed != in.Trashed || cursor.TagsHash != filter {
+		return articleListCursor{}, ErrInvalid
 	}
 	return cursor, nil
 }
@@ -282,8 +339,12 @@ func (s *Service) Thumbnail(ctx context.Context, p identity.Principal, id string
 
 func SafeError(err error) string {
 	switch {
+	case errors.Is(err, errInvalidTags):
+		return "Invalid tags. Use at most 10 tags, each 1–32 lowercase letters or digits joined by single hyphens, such as system-design. An article cannot be both explore (found on the internet) and generated (written by an agent); discovery adds explore, which counts toward the 10, and rejects generated."
+	case errors.Is(err, errInvalidGenerated):
+		return "Invalid generated article. An article tagged generated needs its agent-written content_markdown; its source URL is optional."
 	case errors.Is(err, ErrInvalid):
-		return "Invalid article request. Use a public HTTPS source URL, title (1–300 bytes), short introduction (1–1200 bytes), optional original-source Markdown (up to 256 KiB), and an optional source-provided public HTTPS thumbnail allowed by the image policy."
+		return "Invalid article request. Use a public HTTPS source URL (optional only for an article tagged generated), title (1–300 bytes), short introduction (1–1200 bytes), optional original-source Markdown (up to 256 KiB), an optional source-provided public HTTPS thumbnail allowed by the image policy, and at most 10 tags."
 	case errors.Is(err, identity.ErrUnauthenticated):
 		return "Authentication required."
 	case errors.Is(err, identity.ErrForbidden), errors.Is(err, sqlite.ErrOwnerRequired):

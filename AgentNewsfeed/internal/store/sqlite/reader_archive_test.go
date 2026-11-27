@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -65,7 +66,7 @@ func TestReaderMigrationPreservesExistingArticlesAndRetryBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 	replay, err := store.MutateArticle(t.Context(), owner, "legacy-key", "add_article", payload, Article{}, 0)
-	if err != nil || replay != expected {
+	if err != nil || !reflect.DeepEqual(replay, expected) {
 		t.Fatalf("legacy retry lost: %v", err)
 	}
 	if err := store.Ready(t.Context()); err != nil {

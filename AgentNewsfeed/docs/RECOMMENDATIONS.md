@@ -90,11 +90,17 @@ links open with `noopener noreferrer`.
 3. Research externally within the user's brief/interests/sources. For each
    selected article call `ingest_discovery_article` with `idempotency_key`,
    `run_id`, `expected_preferences_revision`, existing article content
-   `{url,title,summary,thumbnail_url?,content_markdown?}`, `why_match` (1–1200
-   bytes), `published_at` (UTC milliseconds; **0 means honestly unknown**), and
-   `evergreen` boolean. Never invent a publication date or original article body.
-   Source-provided original Markdown and thumbnails retain the existing article
-   validation, network-safe image preparation and private thumbnail storage.
+   `{url,title,summary,thumbnail_url?,content_markdown?,tags?}`, `why_match`
+   (1–1200 bytes), `published_at` (UTC milliseconds; **0 means honestly
+   unknown**), and `evergreen` boolean. Never invent a publication date or
+   original article body. Source-provided original Markdown and thumbnails
+   retain the existing article validation, network-safe image preparation and
+   private thumbnail storage. Discovery saves only content found on the
+   internet: the server adds the `explore` tag to every ingested article, where
+   it counts toward the 10 tags, and rejects `generated`, so `url` is always
+   required. Optional topic tags follow the
+   [article tag rules](../README.md#article-tags-and-agent-written-articles);
+   requests without tags keep their earlier retry hashes.
 4. The server checks enabled/current preferences and the run's same revision,
    active/unexpired lease, exact source, per-run/day budgets, publication window
    and canonical duplicate before image preparation and again under the final

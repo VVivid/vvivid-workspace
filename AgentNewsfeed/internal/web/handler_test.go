@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -116,7 +117,7 @@ func TestOfficialMCPAddListUpdateAndBrowserSharePrivateRecords(t *testing.T) {
 		}
 	}
 	slices.Sort(names)
-	if strings.Join(names, ",") != "accept_recommendation_suggestion,add_article,add_todo,dismiss_recommendation_suggestion,finish_discovery_run,get_article,get_discovery_context,get_discovery_run,get_recommendation_preferences,get_recommendation_suggestion,get_todo,ingest_discovery_article,list_articles,list_discovery_runs,list_recommendation_suggestions,list_todos,patch_article,remove_todo,restore_article,set_article_archived,set_todo_completed,start_discovery_run,submit_recommendation_suggestion,trash_article,undo_todo_removal,update_article,update_recommendation_preferences" {
+	if strings.Join(names, ",") != "accept_recommendation_suggestion,add_article,add_todo,dismiss_recommendation_suggestion,finish_discovery_run,get_article,get_discovery_context,get_discovery_run,get_recommendation_preferences,get_recommendation_suggestion,get_todo,ingest_discovery_article,list_articles,list_discovery_runs,list_recommendation_suggestions,list_tags,list_todos,patch_article,remove_todo,restore_article,set_article_archived,set_todo_completed,start_discovery_run,submit_recommendation_suggestion,trash_article,undo_todo_removal,update_article,update_recommendation_preferences" {
 		t.Fatalf("unexpected tools %v", names)
 	}
 	if init := c.InitializeResult(); init == nil || strings.Contains(init.Instructions, "Jobs & Internships") || strings.Contains(init.Instructions, "_opportunit") {
@@ -140,11 +141,11 @@ func TestOfficialMCPAddListUpdateAndBrowserSharePrivateRecords(t *testing.T) {
 	if first.Article.ThumbnailURL != in.Article.ThumbnailURL {
 		t.Fatal("MCP did not preserve the supplied public HTTPS thumbnail")
 	}
-	if again := decode[sqlite.MutationResult](t, call(t, c, "add_article", in)); again != first {
+	if again := decode[sqlite.MutationResult](t, call(t, c, "add_article", in)); !reflect.DeepEqual(again, first) {
 		t.Fatal("MCP replay changed original result")
 	}
 	page := decode[feed.Page](t, call(t, c, "list_articles", feed.ListInput{}))
-	if len(page.Articles) != 1 || page.Articles[0] != first.Article {
+	if len(page.Articles) != 1 || !reflect.DeepEqual(page.Articles[0], first.Article) {
 		t.Fatal("MCP list did not see write")
 	}
 	in.Article.Title = `<img src=x onerror=alert(1)>`
@@ -293,7 +294,7 @@ func TestUnconfiguredShellFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/", "/archive", "/articles/anything", "/health/ready", "/mcp", "/api/v1/articles", "/api/v1/articles/anything", "/todo", "/api/v1/todos", "/auth/login", "/thumbnails/anything", "/thumbnails/anything/content/image"} {
+	for _, path := range []string{"/", "/archive", "/articles/anything", "/health/ready", "/mcp", "/api/v1/articles", "/api/v1/articles/anything", "/api/v1/tags", "/todo", "/api/v1/todos", "/auth/login", "/thumbnails/anything", "/thumbnails/anything/content/image"} {
 		if out := request(h, "GET", path, nil, ""); out.Code != 503 {
 			t.Fatalf("unconfigured %s returned %d", path, out.Code)
 		}
@@ -477,7 +478,7 @@ func TestReaderDetailArchiveFormsRequireOwnerScopesAndCSRF(t *testing.T) {
 	}
 	var detail sqlite.Article
 	response := request(h, "GET", path, cookie, "")
-	if json.Unmarshal(response.Body.Bytes(), &detail) != nil || detail != out.Article {
+	if json.Unmarshal(response.Body.Bytes(), &detail) != nil || !reflect.DeepEqual(detail, out.Article) {
 		t.Fatal("detail omitted or changed source content")
 	}
 	if response := request(h, "GET", "/api/v1/articles", cookie, ""); strings.Contains(response.Body.String(), "content_markdown") {
@@ -502,7 +503,7 @@ func TestReaderDetailArchiveFormsRequireOwnerScopesAndCSRF(t *testing.T) {
 			t.Fatalf("archive boundary status %d wanted %d", response.Code, tc.status)
 		}
 	}
-	if current, err := s.GetArticle(t.Context(), p, id); err != nil || current != out.Article {
+	if current, err := s.GetArticle(t.Context(), p, id); err != nil || !reflect.DeepEqual(current, out.Article) {
 		t.Fatal("reader or failed forms changed source/state")
 	}
 	if response := request(h, "GET", path+"/archive", cookie, ""); response.Code != 405 {

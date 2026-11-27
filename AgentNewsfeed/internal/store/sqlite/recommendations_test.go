@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -28,7 +29,9 @@ func TestRecommendationMigrationFromV7PreservesArticlesTasksAndRetries(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
+	dropArticleTags := articleTagsDuringSeed(t, db)
 	article := storeArticle(t, legacy, owner, "legacy", thumbnailJPEG(t, 90))
+	dropArticleTags()
 	var retry, hash []byte
 	if err = db.QueryRowContext(t.Context(), "SELECT result,payload_hash FROM idempotency_results WHERE owner_id=? AND key='legacy'", owner.id).Scan(&retry, &hash); err != nil {
 		t.Fatal(err)
@@ -45,7 +48,7 @@ func TestRecommendationMigrationFromV7PreservesArticlesTasksAndRetries(t *testin
 	}
 	defer store.Close()
 	got, err := store.Article(t.Context(), owner, article.Article.ID)
-	if err != nil || got != article.Article {
+	if err != nil || !reflect.DeepEqual(got, article.Article) {
 		t.Fatal("article changed", got, err)
 	}
 	tasks, err := store.ListTodo(t.Context(), owner)

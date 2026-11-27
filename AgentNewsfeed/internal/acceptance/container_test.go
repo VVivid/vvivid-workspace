@@ -264,7 +264,7 @@ func assertFailClosed(t *testing.T) {
 	}
 	client := &http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{Proxy: nil}}
 	defer client.CloseIdleConnections()
-	for _, path := range []string{"/", "/archive", "/trash", "/articles/synthetic", "/thumbnails/synthetic", "/health/ready", "/api/v1/articles", "/api/v1/articles/synthetic", "/todo", "/api/v1/todos", "/mcp"} {
+	for _, path := range []string{"/", "/archive", "/trash", "/articles/synthetic", "/thumbnails/synthetic", "/health/ready", "/api/v1/articles", "/api/v1/articles/synthetic", "/api/v1/tags", "/todo", "/api/v1/todos", "/mcp"} {
 		request, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1:8091"+path, nil)
 		response, err := client.Do(request)
 		if err != nil {
@@ -314,21 +314,21 @@ func verifyPersistence(t *testing.T) {
 	articles, err := store.ListArticles(t.Context(), owner, sqlite.Cursor{Archived: true}, 10)
 	summary := expected.Current
 	summary.ContentMarkdown = ""
-	if err != nil || len(articles) != 1 || articles[0] != summary {
+	if err != nil || len(articles) != 1 || !reflect.DeepEqual(articles[0], summary) {
 		t.Fatalf("durable article changed: %#v %v", articles, err)
 	}
 	current, err := store.Article(t.Context(), owner, expected.Current.ID)
-	if err != nil || current != expected.Current || current.ContentMarkdown == "" || current.ArchivedAt == 0 {
+	if err != nil || !reflect.DeepEqual(current, expected.Current) || current.ContentMarkdown == "" || current.ArchivedAt == 0 {
 		t.Fatal("archived original did not persist")
 	}
 	trashed, err := store.ArticleInView(t.Context(), owner, expected.Trashed.ID, true)
-	if err != nil || trashed != expected.Trashed {
+	if err != nil || !reflect.DeepEqual(trashed, expected.Trashed) {
 		t.Fatal("retained Trash fixture did not persist")
 	}
 	trashPage, err := store.ListArticles(t.Context(), owner, sqlite.Cursor{Trashed: true}, 10)
 	trashSummary := expected.Trashed
 	trashSummary.ContentMarkdown = ""
-	if err != nil || len(trashPage) != 1 || trashPage[0] != trashSummary {
+	if err != nil || len(trashPage) != 1 || !reflect.DeepEqual(trashPage[0], trashSummary) {
 		t.Fatal("retained Trash list did not persist")
 	}
 	for _, a := range []sqlite.Article{current, trashed} {
@@ -345,22 +345,22 @@ func verifyPersistence(t *testing.T) {
 	if _, err := store.Thumbnail(t.Context(), owner, trashed.ID, false); !errors.Is(err, sqlite.ErrNotFound) {
 		t.Fatal("ordinary thumbnail read included Trash")
 	}
-	if replay, err := store.MutateArticle(t.Context(), owner, "container-thumbnail", "patch_article", []byte("container-thumbnail"), sqlite.Article{ID: current.ID}, 1); err != nil || replay != expected.ThumbnailPatch {
+	if replay, err := store.MutateArticle(t.Context(), owner, "container-thumbnail", "patch_article", []byte("container-thumbnail"), sqlite.Article{ID: current.ID}, 1); err != nil || !reflect.DeepEqual(replay, expected.ThumbnailPatch) {
 		t.Fatal("stored thumbnail retry changed after restart")
 	}
-	if replay, err := store.MutateArticle(t.Context(), owner, "container-trash", "trash_article", []byte("container-trash"), sqlite.Article{ID: current.ID}, 3); err != nil || replay != expected.TrashRetry {
+	if replay, err := store.MutateArticle(t.Context(), owner, "container-trash", "trash_article", []byte("container-trash"), sqlite.Article{ID: current.ID}, 3); err != nil || !reflect.DeepEqual(replay, expected.TrashRetry) {
 		t.Fatal("Trash retry changed after restore/restart")
 	}
-	if replay, err := store.MutateArticle(t.Context(), owner, "container-restore", "restore_article", []byte("container-restore"), sqlite.Article{ID: current.ID}, 4); err != nil || replay != expected.RestoreRetry {
+	if replay, err := store.MutateArticle(t.Context(), owner, "container-restore", "restore_article", []byte("container-restore"), sqlite.Article{ID: current.ID}, 4); err != nil || !reflect.DeepEqual(replay, expected.RestoreRetry) {
 		t.Fatal("Restore retry changed after restart")
 	}
-	if actual, err := store.Article(t.Context(), owner, current.ID); err != nil || actual != expected.Current {
+	if actual, err := store.Article(t.Context(), owner, current.ID); err != nil || !reflect.DeepEqual(actual, expected.Current) {
 		t.Fatal("historical retries reapplied state changes")
 	}
 	article := sqlite.Article{URL: "https://example.com/container-story", Title: "Synthetic container article", Summary: "Only local acceptance fixture data.", ThumbnailURL: "https://images.example.com/container.jpg", ContentMarkdown: "## Synthetic original\n\nPersisted source Markdown."}
 	payload, _ := json.Marshal(article)
 	replay, err := store.MutateArticle(t.Context(), owner, "container-write", "add_article", payload, article, 0)
-	if err != nil || replay != expected.Retry {
+	if err != nil || !reflect.DeepEqual(replay, expected.Retry) {
 		t.Fatalf("durable retry result changed: %#v %v", replay, err)
 	}
 	verifyTodoPersistence(t, store, owner, expected.Todos)

@@ -100,8 +100,8 @@ The chart requests staging DNS-01 first with public ingress absent; enable
 production issuance only after observed staging readiness, then enable browser
 ingress only after observed trusted production TLS. Values cannot establish
 actual certificate readiness. Public ingress allows the News feed, archive,
-Trash, article API and reader, `/todo`, `/api/v1/todos`, the exact login, callback
-and logout paths, static assets and thumbnails. It excludes `/mcp`, health, the
+Trash, article API and reader, the exact `/api/v1/tags`, `/todo`, `/api/v1/todos`,
+the exact login, callback and logout paths, static assets and thumbnails. It excludes `/mcp`, health, the
 retired Jobs routes and discovery, except the exact API resource metadata that
 [native app clients](#native-app-clients) add. Prefix matches use path segments, and
 Traefik preserves the canonical Host.
@@ -148,7 +148,8 @@ becomes the app's `NEWSFEED_NATIVE_CLIENT_IDS` and, while browser ingress is
 enabled, adds only the exact public route
 `/.well-known/oauth-protected-resource/api/v1`, whose metadata names the R&D
 issuer. Native article reads, state changes and thumbnails already use the public
-`/api/v1/articles` and `/thumbnails/` prefixes. The schema accepts up to 16
+`/api/v1/articles` and `/thumbnails/` prefixes, and tag counts the exact public
+`/api/v1/tags` route that browser sessions share. The schema accepts up to 16
 comma-separated IDs of 1–256 letters, digits, dots, underscores or hyphens, a
 narrower character set than the app accepts. Rendering fails for a repeated ID
 or one equal to the web or MCP client, so an invalid list never replaces the

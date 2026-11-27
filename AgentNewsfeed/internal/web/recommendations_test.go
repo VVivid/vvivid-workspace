@@ -256,11 +256,11 @@ func TestDiscoveryHistoryKeepsOriginalSourceAfterPatchAndRestart(t *testing.T) {
 			t.Fatal("browser history lost the original source snapshot", selected.Settings.SelectedRun)
 		}
 		current := decode[sqlite.Article](t, call(t, alice, "get_article", feed.GetInput{ArticleID: saved.Article.ID}))
-		if current != patched.Article || current.URL == originalHistory.Articles[0].URL || current.Title == originalHistory.Articles[0].Title {
+		if !reflect.DeepEqual(current, patched.Article) || current.URL == originalHistory.Articles[0].URL || current.Title == originalHistory.Articles[0].Title {
 			t.Fatal("current article was not independently editable", current)
 		}
 		replay := decode[sqlite.MutationResult](t, call(t, alice, "ingest_discovery_article", input))
-		if replay != saved {
+		if !reflect.DeepEqual(replay, saved) {
 			t.Fatal("historical ingestion retry changed", replay)
 		}
 	}

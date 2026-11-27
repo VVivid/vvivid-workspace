@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -87,7 +88,7 @@ func TestNativeAppBearerReadsOwnedArticlesAndImagesOnly(t *testing.T) {
 		t.Fatal("native reads must stay private and grant no CORS access")
 	}
 	var article sqlite.Article
-	if response := request(h, http.MethodGet, detail, nil, alice); response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &article) != nil || article != added.Article {
+	if response := request(h, http.MethodGet, detail, nil, alice); response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &article) != nil || !reflect.DeepEqual(article, added.Article) {
 		t.Fatalf("native detail: HTTP %d", response.Code)
 	}
 	for _, path := range images {
@@ -193,7 +194,7 @@ func TestNativeAppBearerIsIgnoredWithoutConfiguredNativeClients(t *testing.T) {
 			t.Fatalf("native token at %s: HTTP %d", action, response.Code)
 		}
 	}
-	if current, err := s.GetArticle(t.Context(), f.Principal(t, "alice", allScopes), id); err != nil || current != added.Article {
+	if current, err := s.GetArticle(t.Context(), f.Principal(t, "alice", allScopes), id); err != nil || !reflect.DeepEqual(current, added.Article) {
 		t.Fatal("native write attempt changed the article")
 	}
 	cookie := f.CookieWithScopes(t, "alice", allScopes)
@@ -278,10 +279,10 @@ func TestNativeAppStateChangesMatchMCPSemantics(t *testing.T) {
 
 	// The result has the detail route's shape, including the saved body.
 	archived := changeState(t, h, path+"/archive", writer, 1, "native-archive")
-	if archived.ArchivedAt == 0 || archived.Revision != 2 || archived.ContentMarkdown != added.Article.ContentMarkdown || readDetail(path) != archived {
+	if archived.ArchivedAt == 0 || archived.Revision != 2 || archived.ContentMarkdown != added.Article.ContentMarkdown || !reflect.DeepEqual(readDetail(path), archived) {
 		t.Fatalf("native archive result: %+v", archived)
 	}
-	if again := changeState(t, h, path+"/archive", writer, 1, "native-archive"); again != archived {
+	if again := changeState(t, h, path+"/archive", writer, 1, "native-archive"); !reflect.DeepEqual(again, archived) {
 		t.Fatal("exact native retry changed the original result")
 	}
 	// MCP set_article_archived is the same operation, so the same key and input replay it.
@@ -289,7 +290,7 @@ func TestNativeAppStateChangesMatchMCPSemantics(t *testing.T) {
 	defer server.Close()
 	mcp := client(t, server.URL, f.Bearer("alice", "newsfeed-codex", f.Manager.MCPAudience(), allScopes))
 	replayed := decode[sqlite.MutationResult](t, call(t, mcp, "set_article_archived", feed.ArchiveInput{IdempotencyKey: "native-archive", ArticleID: id, ExpectedRevision: 1, Archived: true}))
-	if replayed.Article != archived {
+	if !reflect.DeepEqual(replayed.Article, archived) {
 		t.Fatal("MCP did not replay the native archive result")
 	}
 
@@ -297,38 +298,38 @@ func TestNativeAppStateChangesMatchMCPSemantics(t *testing.T) {
 	// carry a new intent.
 	requireNativeAppError(t, post(h, path+"/restore", nativeAppHeaders(writer), stateBody(1, "native-restore"), nil), 409)
 	requireNativeAppError(t, post(h, path+"/restore", nativeAppHeaders(writer), stateBody(2, "native-archive"), nil), 409)
-	if readDetail(path) != archived {
+	if !reflect.DeepEqual(readDetail(path), archived) {
 		t.Fatal("rejected native restore changed the article")
 	}
 	restored := changeState(t, h, path+"/restore", writer, 2, "native-restore")
 	if restored.ArchivedAt != 0 || restored.Revision != 3 {
 		t.Fatalf("native restore result: %+v", restored)
 	}
-	if unchanged := changeState(t, h, path+"/restore", writer, 3, "native-restore-again"); unchanged != restored {
+	if unchanged := changeState(t, h, path+"/restore", writer, 3, "native-restore-again"); !reflect.DeepEqual(unchanged, restored) {
 		t.Fatal("setting the current archive state was not a no-op")
 	}
 
 	// Trash keeps the archive state, and no archive action edits Trash.
 	rearchived := changeState(t, h, path+"/archive", writer, 3, "native-rearchive")
 	trashed := changeState(t, h, path+"/trash", writer, 4, "native-trash")
-	if trashed.TrashedAt == 0 || trashed.ArchivedAt != rearchived.ArchivedAt || trashed.Revision != 5 || readDetail(path+"?trashed=true") != trashed {
+	if trashed.TrashedAt == 0 || trashed.ArchivedAt != rearchived.ArchivedAt || trashed.Revision != 5 || !reflect.DeepEqual(readDetail(path+"?trashed=true"), trashed) {
 		t.Fatalf("native Trash result: %+v", trashed)
 	}
 	for i, action := range []string{"/archive", "/restore", "/trash"} {
 		requireNativeAppError(t, post(h, path+action, nativeAppHeaders(writer), stateBody(5, fmt.Sprintf("native-edit-trash-%d", i)), nil), 404)
 	}
 	untrashed := changeState(t, h, path+"/restore-trash", writer, 5, "native-restore-trash")
-	if untrashed.TrashedAt != 0 || untrashed.ArchivedAt != rearchived.ArchivedAt || untrashed.Revision != 6 || readDetail(path) != untrashed {
+	if untrashed.TrashedAt != 0 || untrashed.ArchivedAt != rearchived.ArchivedAt || untrashed.Revision != 6 || !reflect.DeepEqual(readDetail(path), untrashed) {
 		t.Fatalf("native restore-trash lost the original archive state: %+v", untrashed)
 	}
-	if unchanged := changeState(t, h, path+"/restore-trash", writer, 6, "native-restore-trash-again"); unchanged != untrashed {
+	if unchanged := changeState(t, h, path+"/restore-trash", writer, 6, "native-restore-trash-again"); !reflect.DeepEqual(unchanged, untrashed) {
 		t.Fatal("restoring an article outside Trash was not a no-op")
 	}
 	// An exact retry still returns its original result after later changes, without reapplying it.
-	if again := changeState(t, h, path+"/trash", writer, 4, "native-trash"); again != trashed {
+	if again := changeState(t, h, path+"/trash", writer, 4, "native-trash"); !reflect.DeepEqual(again, trashed) {
 		t.Fatal("exact native Trash retry changed the original result")
 	}
-	if current, err := s.GetArticle(t.Context(), alice, id); err != nil || current != untrashed {
+	if current, err := s.GetArticle(t.Context(), alice, id); err != nil || !reflect.DeepEqual(current, untrashed) {
 		t.Fatal("exact native Trash retry applied the old transition again")
 	}
 }
@@ -391,7 +392,7 @@ func TestNativeAppStateChangesRequireBothScopesOwnerAndOnlyTheBearerToken(t *tes
 			}
 		}
 	}
-	if current, err := s.GetArticle(t.Context(), alice, added.Article.ID); err != nil || current != added.Article {
+	if current, err := s.GetArticle(t.Context(), alice, added.Article.ID); err != nil || !reflect.DeepEqual(current, added.Article) {
 		t.Fatal("rejected native state changes changed the article")
 	}
 }
@@ -444,7 +445,7 @@ func TestOfflineAccessScopeGrantsNothingToNativeAppsOrBrowsers(t *testing.T) {
 			t.Fatalf("native restore with %s: HTTP %d challenge %q", unknown, response.Code, response.Header().Get("WWW-Authenticate"))
 		}
 	}
-	if current, err := s.GetArticle(t.Context(), alice, id); err != nil || current != archived {
+	if current, err := s.GetArticle(t.Context(), alice, id); err != nil || !reflect.DeepEqual(current, archived) {
 		t.Fatal("refused grants changed the article")
 	}
 
@@ -512,7 +513,7 @@ func TestNativeAppStateChangesRejectInvalidRequestsWithoutReservingKeys(t *testi
 		})
 	}
 	requireNativeAppError(t, post(h, "/api/v1/articles/"+strings.Repeat("a", 65)+"/archive", nativeAppHeaders(writer), valid, nil), 400)
-	if current, err := s.GetArticle(t.Context(), alice, added.Article.ID); err != nil || current != added.Article {
+	if current, err := s.GetArticle(t.Context(), alice, added.Article.ID); err != nil || !reflect.DeepEqual(current, added.Article) {
 		t.Fatal("rejected native state change changed the article")
 	}
 	// Rejected requests reserve no key, and a media type parameter is accepted.
@@ -560,7 +561,7 @@ func TestBrowserStateFormsAreUnchangedBesideNativeApps(t *testing.T) {
 			t.Fatalf("%s: HTTP %d", name, response.Code)
 		}
 	}
-	if current, err := s.GetArticle(t.Context(), alice, id); err != nil || current != added.Article {
+	if current, err := s.GetArticle(t.Context(), alice, id); err != nil || !reflect.DeepEqual(current, added.Article) {
 		t.Fatal("unverified browser state change changed the article")
 	}
 

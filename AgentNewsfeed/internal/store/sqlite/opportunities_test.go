@@ -31,6 +31,7 @@ func TestOpportunityMigrationPreservesArticlesThumbnailsHistoryAndRetryBytes(t *
 		t.Fatal(err)
 	}
 	jpeg := thumbnailJPEG(t, 150)
+	dropArticleTags := articleTagsDuringSeed(t, db)
 	first := storeArticle(t, legacy, owner, "legacy-add", jpeg)
 	archived, err := legacy.MutateArticle(t.Context(), owner, "legacy-archive", "set_article_archived", []byte("legacy archive intent"), Article{ID: first.Article.ID, ArchivedAt: 1}, 1)
 	if err != nil {
@@ -40,6 +41,7 @@ func TestOpportunityMigrationPreservesArticlesThumbnailsHistoryAndRetryBytes(t *
 	if err != nil {
 		t.Fatal(err)
 	}
+	dropArticleTags()
 	if archived.Article.ArchivedAt == 0 || trashed.Article.TrashedAt == 0 {
 		t.Fatal("legacy fixture did not exercise reading state")
 	}
@@ -78,7 +80,7 @@ func TestOpportunityMigrationPreservesArticlesThumbnailsHistoryAndRetryBytes(t *
 		t.Fatal(err)
 	}
 	defer store.Close()
-	if got, err := store.ArticleInView(t.Context(), owner, first.Article.ID, true); err != nil || got != trashed.Article {
+	if got, err := store.ArticleInView(t.Context(), owner, first.Article.ID, true); err != nil || !reflect.DeepEqual(got, trashed.Article) {
 		t.Fatalf("migration changed full article/content/image/state: %#v %v", got, err)
 	}
 	if image, err := store.Thumbnail(t.Context(), owner, first.Article.ID, true); err != nil || !bytes.Equal(image, jpeg) {
@@ -105,7 +107,7 @@ func TestOpportunityMigrationPreservesArticlesThumbnailsHistoryAndRetryBytes(t *
 	}
 	legacyArticle := Article{URL: "https://example.com/legacy-add", Title: "Source title", Summary: "Source introduction", ThumbnailURL: "https://images.example.com/source.jpg", ContentMarkdown: "# Original source"}
 	payload, _ := json.Marshal(legacyArticle)
-	if out, err := store.MutateArticle(t.Context(), owner, "legacy-add", "add_article", payload, Article{}, 0); err != nil || out != first {
+	if out, err := store.MutateArticle(t.Context(), owner, "legacy-add", "add_article", payload, Article{}, 0); err != nil || !reflect.DeepEqual(out, first) {
 		t.Fatal("article retry failed after opportunity migration")
 	}
 }
