@@ -48,9 +48,9 @@ func TestBrowserSearchBeforePagingAndCursorIsolation(t *testing.T) {
 	f, s, alice, bob := setup(t)
 	add := func(p identity.Principal, key, title string) sqlite.Article {
 		t.Helper()
-		out, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: key, Article: feed.Content{
+		out, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: key, Article: narrated(feed.Content{
 			URL: "https://publisher.example/" + key, Title: title, Summary: "A CAFÉ résumé from the source", ContentMarkdown: "bodyonlyneedle",
-		}})
+		})})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -136,9 +136,9 @@ func TestBrowserSearchBeforePagingAndCursorIsolation(t *testing.T) {
 func TestBrowserArticlePageSizesAndValidation(t *testing.T) {
 	_, s, alice, _ := setup(t)
 	for i := range 505 {
-		_, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: fmt.Sprintf("large-%d", i), Article: feed.Content{
+		_, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: fmt.Sprintf("large-%d", i), Article: narrated(feed.Content{
 			URL: fmt.Sprintf("https://publisher.example/large-%d", i), Title: "Synthetic size fixture", Summary: "Source introduction",
-		}})
+		})})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -183,9 +183,9 @@ func TestBrowserArticlePageSizesAndValidation(t *testing.T) {
 func TestBrowserSearchStalePageKeepsCurrentCount(t *testing.T) {
 	_, s, alice, _ := setup(t)
 	for i := range 3 {
-		if _, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: fmt.Sprintf("stale-%d", i), Article: feed.Content{
+		if _, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: fmt.Sprintf("stale-%d", i), Article: narrated(feed.Content{
 			URL: fmt.Sprintf("https://publisher.example/stale-%d", i), Title: "Stale fixture", Summary: "Source introduction",
-		}}); err != nil {
+		})}); err != nil {
 			t.Fatal(err)
 		}
 	}

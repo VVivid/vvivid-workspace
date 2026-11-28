@@ -86,7 +86,7 @@ func TestContainerProcessAndPrivatePersistence(t *testing.T) {
 	if err := os.WriteFile(subjectFile, []byte(syntheticIdentity.Subject), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	inputs, _ := json.Marshal([]feed.AddInput{{IdempotencyKey: "container-write", Article: feed.Content{URL: article.URL, Title: article.Title, Summary: article.Summary, ThumbnailURL: article.ThumbnailURL, ContentMarkdown: article.ContentMarkdown}}})
+	inputs, _ := json.Marshal([]feed.AddInput{{IdempotencyKey: "container-write", Article: narrated(feed.Content{URL: article.URL, Title: article.Title, Summary: article.Summary, ThumbnailURL: article.ThumbnailURL, ContentMarkdown: article.ContentMarkdown})}})
 	if err := os.WriteFile(seedFile, inputs, 0o600); err != nil {
 		t.Fatal(err)
 	}

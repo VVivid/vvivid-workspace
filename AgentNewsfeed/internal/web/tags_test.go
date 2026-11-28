@@ -63,19 +63,39 @@ func TestMCPArticleToolsDescribeAndEnforceTags(t *testing.T) {
 			t.Fatalf("%s does not bound its tags: %#v", name, tags)
 		}
 	}
+	// Every article an agent saves carries a narration script.
+	for _, name := range []string{"add_article", "update_article", "ingest_discovery_article"} {
+		article := schemas[name].Properties["article"]
+		narration := article.Properties["narration"]
+		if !slices.Contains(article.Required, "narration") || narration == nil || narration.MinItems == nil || *narration.MinItems != 1 || narration.Items == nil {
+			t.Fatalf("%s does not require narration: %#v", name, article)
+		}
+		part := narration.Items
+		if !slices.Equal(part.Required, []string{"say"}) || !slices.Equal(part.Properties["describe"].Enum, []any{feed.DescribeCode, feed.DescribeDiagram, feed.DescribeTable}) ||
+			*part.Properties["say"].MaxLength != feed.MaxNarrationSayBytes || *part.Properties["text"].MaxLength != feed.MaxNarrationTextBytes {
+			t.Fatalf("%s narration parts are unbounded: %#v", name, part)
+		}
+	}
+	if schemas["patch_article"].Properties["patch"].Properties["narration"] == nil {
+		t.Fatal("patch_article cannot replace narration")
+	}
+	if !strings.Contains(instructions, "Narration: every article you add, update or ingest needs narration") || !strings.Contains(instructions, "$100 as a hundred dollars") {
+		t.Fatal("instructions do not teach narration")
+	}
 	if article := schemas["add_article"].Properties["article"]; slices.Contains(article.Required, "url") || !slices.Contains(article.Required, "title") {
 		t.Fatalf("add_article must allow a generated article without url: %v", article.Required)
 	}
 
 	tagged := decode[sqlite.MutationResult](t, call(t, c, "add_article", map[string]any{"idempotency_key": "tagged", "article": map[string]any{
 		"url": "https://example.com/go", "title": "Go story", "summary": "A sourced introduction.", "tags": []string{"Explore", "go"},
+		"narration": feed.PlainNarration("Go story", ""),
 	}}))
 	if !slices.Equal(tagged.Article.Tags, []string{"explore", "go"}) {
 		t.Fatalf("MCP add did not normalize tags: %#v", tagged.Article)
 	}
-	written := call(t, c, "add_article", feed.AddInput{IdempotencyKey: "written", Article: feed.Content{
+	written := call(t, c, "add_article", feed.AddInput{IdempotencyKey: "written", Article: narrated(feed.Content{
 		Title: "Two Sum, explained", Summary: "An agent-written walkthrough.", ContentMarkdown: "# Two Sum\n\n```mermaid\nflowchart LR\n  a --> b\n```", Tags: []string{"generated"},
-	}})
+	})})
 	raw, err := json.Marshal(written.StructuredContent)
 	if err != nil || written.IsError || strings.Contains(string(raw), `"url"`) || strings.Contains(string(raw), "no-url") {
 		t.Fatalf("MCP result for an article without a URL: %s %v", raw, err)
@@ -121,9 +141,9 @@ func TestArticleWithoutURLRendersSafelyInBrowserAPIAndMCP(t *testing.T) {
 	}
 	const absoluteImage = "https://images.example.com/diagram.png"
 	body := "# Agent notes\n\n![Diagram](" + absoluteImage + ")\n\n![Local](diagram.png)\n\n[Relative](notes.md)\n\n```mermaid\nflowchart LR\n  a --> b\n```\n"
-	out, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "written", Article: feed.Content{
+	out, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "written", Article: narrated(feed.Content{
 		Title: "Agent notes", Summary: "Written by the agent.", ContentMarkdown: body, Tags: []string{"generated"},
-	}})
+	})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,12 +211,12 @@ func taggedShelves(t *testing.T, f *testfixture.Identity, s *feed.Service) map[s
 		ids[key] = out.Article.ID
 	}
 	sourced := func(key string, tags ...string) feed.Content {
-		return feed.Content{URL: "https://example.com/" + key, Title: "Story " + key, Summary: "A sourced introduction.", Tags: tags}
+		return narrated(feed.Content{URL: "https://example.com/" + key, Title: "Story " + key, Summary: "A sourced introduction.", Tags: tags})
 	}
 	add(alice, "go", sourced("go", "explore", "go"))
 	add(alice, "go-again", sourced("go-again", "go"))
 	add(alice, "rust", sourced("rust", "explore", "rust"))
-	add(alice, "written", feed.Content{Title: "Two Sum, explained", Summary: "An agent-written walkthrough.", ContentMarkdown: "# Two Sum", Tags: []string{"generated", "leetcode"}})
+	add(alice, "written", narrated(feed.Content{Title: "Two Sum, explained", Summary: "An agent-written walkthrough.", ContentMarkdown: "# Two Sum", Tags: []string{"generated", "leetcode"}}))
 	add(alice, "untagged", sourced("untagged"))
 	add(alice, "archived", sourced("archived", "explore", "go"))
 	if _, err := s.SetArchived(ctx, alice, ids["archived"], true); err != nil {

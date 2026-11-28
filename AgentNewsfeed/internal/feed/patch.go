@@ -31,6 +31,8 @@ type Patch struct {
 	ThumbnailURL    *string   `json:"thumbnail_url,omitempty"`
 	ContentMarkdown *string   `json:"content_markdown,omitempty"`
 	Tags            *[]string `json:"tags,omitempty"`
+	// Narration replaces the whole narration script.
+	Narration *[]sqlite.NarrationPart `json:"narration,omitempty"`
 }
 
 func (p *Patch) UnmarshalJSON(body []byte) error {
@@ -65,6 +67,12 @@ func (p *Patch) UnmarshalJSON(body []byte) error {
 			// A list, not a string, so it skips the string handling below.
 			// An empty list clears tags; null is not a tag set.
 			if err := decoder.Decode(&p.Tags); err != nil || p.Tags == nil {
+				return ErrInvalid
+			}
+			continue
+		case "narration":
+			// A script can be replaced, not cleared.
+			if err := decoder.Decode(&p.Narration); err != nil || p.Narration == nil || len(*p.Narration) == 0 {
 				return ErrInvalid
 			}
 			continue
@@ -122,6 +130,10 @@ func (s *Service) PatchArticle(ctx context.Context, p identity.Principal, in Pat
 		(patch.ContentMarkdown != nil && !validMarkdown(*patch.ContentMarkdown)) || (patch.ThumbnailURL != nil && s.thumbnails.Validate(*patch.ThumbnailURL) != nil) {
 		return sqlite.MutationResult{}, ErrInvalid
 	}
+	// A script can be replaced, not cleared.
+	if patch.Narration != nil && len(*patch.Narration) == 0 {
+		return sqlite.MutationResult{}, ErrInvalid
+	}
 	if patch.Tags != nil {
 		tags, err := NormalizeTags(*patch.Tags)
 		if err != nil {
@@ -141,7 +153,7 @@ func (s *Service) PatchArticle(ctx context.Context, p identity.Principal, in Pat
 	if current.Revision != in.ExpectedRevision {
 		return sqlite.MutationResult{}, sqlite.ErrConflict
 	}
-	content := Content{URL: current.URL, Title: current.Title, Summary: current.Summary, ThumbnailURL: current.ThumbnailURL, ContentMarkdown: current.ContentMarkdown, Tags: current.Tags}
+	content := Content{URL: current.URL, Title: current.Title, Summary: current.Summary, ThumbnailURL: current.ThumbnailURL, ContentMarkdown: current.ContentMarkdown, Tags: current.Tags, Narration: current.Narration}
 	if patch.URL != nil {
 		content.URL = *patch.URL
 	}
@@ -159,6 +171,16 @@ func (s *Service) PatchArticle(ctx context.Context, p identity.Principal, in Pat
 	}
 	if patch.Tags != nil {
 		content.Tags = *patch.Tags
+	}
+	if patch.Narration != nil {
+		content.Narration = *patch.Narration
+	}
+	// New words need a script that reads them. An article saved before scripts
+	// existed may still change its tags, summary, URL or thumbnail without one.
+	if patch.Title != nil || patch.ContentMarkdown != nil {
+		if err := requireNarration(content); err != nil {
+			return sqlite.MutationResult{}, err
+		}
 	}
 	// The patched article must still be valid as a whole: dropping generated
 	// from an article without a URL, or emptying its body, is rejected here.

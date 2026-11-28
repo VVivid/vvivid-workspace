@@ -16,16 +16,17 @@ import (
 
 // articleTagsDuringSeed lets current article code seed a database migrated
 // only to an earlier version. That code reads and writes article_tags
-// (migration 0009) and checks article audio (migration 0010), so those tables
-// exist only until the returned function drops them. The seed must store no
-// tags or audio, leaving the earlier schema and rows.
+// (migration 0009), checks article audio (migration 0010) and reads and writes
+// the narration column (migration 0011), so those exist only until the
+// returned function drops them. The seed must store no tags, audio or
+// narration, leaving the earlier schema and rows.
 func articleTagsDuringSeed(t *testing.T, db *sql.DB) (drop func()) {
 	t.Helper()
 	migrations, err := loadMigrations(migrationFiles)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"0009_article_tags.sql", "0010_article_audio.sql"} {
+	for _, name := range []string{"0009_article_tags.sql", "0010_article_audio.sql", "0011_article_narration.sql"} {
 		i := slices.IndexFunc(migrations, func(m migration) bool { return m.name == name })
 		if i < 0 {
 			t.Fatalf("migration %s is missing", name)
@@ -44,6 +45,13 @@ func articleTagsDuringSeed(t *testing.T, db *sql.DB) (drop func()) {
 			if _, err := db.ExecContext(t.Context(), "DROP TABLE "+table); err != nil {
 				t.Fatal(err)
 			}
+		}
+		var narrated int
+		if err := db.QueryRowContext(t.Context(), "SELECT count(*) FROM articles WHERE narration != ''").Scan(&narrated); err != nil || narrated != 0 {
+			t.Fatalf("legacy seed stored %d narrations: %v", narrated, err)
+		}
+		if _, err := db.ExecContext(t.Context(), "ALTER TABLE articles DROP COLUMN narration"); err != nil {
+			t.Fatal(err)
 		}
 	}
 }

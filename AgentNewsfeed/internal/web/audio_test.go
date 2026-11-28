@@ -129,9 +129,9 @@ func waitForAudio(t *testing.T, h http.Handler, path, token, want string) feed.A
 func TestNativeAppCreatesPlaysAndDeletesArticleAudio(t *testing.T) {
 	f, s, h, tts := audioApp(t)
 	alice := f.Principal(t, "alice", allScopes)
-	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "audio-source", Article: feed.Content{
+	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "audio-source", Article: narrated(feed.Content{
 		Title: "Payments", Summary: "How payments settle.", ContentMarkdown: "# Payments\n\nA wire arrives.", Tags: []string{"generated"},
-	}})
+	})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestNativeAppCreatesPlaysAndDeletesArticleAudio(t *testing.T) {
 
 	// The text is locked while the audio exists; archiving still works.
 	title := "New title"
-	_, err = s.PatchArticle(t.Context(), alice, feed.PatchInput{IdempotencyKey: "locked-patch", ArticleID: id, ExpectedRevision: revision, Patch: feed.Patch{Title: &title}})
+	_, err = s.PatchArticle(t.Context(), alice, feed.PatchInput{IdempotencyKey: "locked-patch", ArticleID: id, ExpectedRevision: revision, Patch: feed.Patch{Title: &title, Narration: narrationFor(title, added.Article.ContentMarkdown)}})
 	if err == nil || feed.SafeError(err) != "This article has audio, so its text is locked. Ask the user to delete the audio in the app first." {
 		t.Fatalf("patch of locked article: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestNativeAppCreatesPlaysAndDeletesArticleAudio(t *testing.T) {
 	if deleted := send(h, http.MethodDelete, path, token, ""); deleted.Code != http.StatusNoContent {
 		t.Fatalf("second delete: HTTP %d", deleted.Code)
 	}
-	patched, err := s.PatchArticle(t.Context(), alice, feed.PatchInput{IdempotencyKey: "unlocked-patch", ArticleID: id, ExpectedRevision: archived.Revision, Patch: feed.Patch{Title: &title}})
+	patched, err := s.PatchArticle(t.Context(), alice, feed.PatchInput{IdempotencyKey: "unlocked-patch", ArticleID: id, ExpectedRevision: archived.Revision, Patch: feed.Patch{Title: &title, Narration: narrationFor(title, added.Article.ContentMarkdown)}})
 	if err != nil {
 		t.Fatalf("patch after deleting audio: %v", err)
 	}
@@ -218,9 +218,9 @@ func TestNativeAppCreatesPlaysAndDeletesArticleAudio(t *testing.T) {
 
 func TestArticleAudioFailureIsReadableAndReplaceable(t *testing.T) {
 	f, s, h, tts := audioApp(t)
-	added, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "quota", Article: feed.Content{
+	added, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "quota", Article: narrated(feed.Content{
 		Title: "Short", Summary: "A short one.", ContentMarkdown: "Words.", Tags: []string{"generated"},
-	}})
+	})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,9 +248,9 @@ func TestArticleAudioFailureIsReadableAndReplaceable(t *testing.T) {
 
 func TestAudioRoutesWithoutElevenLabsKeyOrInBrowser(t *testing.T) {
 	f, s, h := nativeApp(t, &recordingImageFetcher{})
-	added, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "no-audio", Article: feed.Content{
+	added, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "no-audio", Article: narrated(feed.Content{
 		Title: "Plain", Summary: "No audio here.", ContentMarkdown: "Text.", Tags: []string{"generated"},
-	}})
+	})})
 	if err != nil {
 		t.Fatal(err)
 	}

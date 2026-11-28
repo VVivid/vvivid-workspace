@@ -20,7 +20,7 @@ const diagramBody = "# Two Sum\n\nA hash map finds each complement in one pass.\
 
 // written is an agent-written article without a source URL.
 func written() feed.Content {
-	return feed.Content{Title: "Two Sum, explained", Summary: "An agent-written walkthrough of the one-pass hash map solution.", ContentMarkdown: diagramBody, Tags: []string{"generated", "leetcode"}}
+	return narrated(feed.Content{Title: "Two Sum, explained", Summary: "An agent-written walkthrough of the one-pass hash map solution.", ContentMarkdown: diagramBody, Tags: []string{"generated", "leetcode"}})
 }
 
 func tenTags() []string {
@@ -85,6 +85,7 @@ func TestArticleTagsAreNormalizedReplacedAndReplayed(t *testing.T) {
 	}
 	both := content()
 	both.URL, both.ContentMarkdown, both.Tags = "https://example.com/both", "# Body", []string{"explore", "generated"}
+	both = narrated(both)
 	if _, err := s.AddArticle(ctx, alice, feed.AddInput{IdempotencyKey: "both", Article: both}); !errors.Is(err, feed.ErrInvalid) || !strings.HasPrefix(feed.SafeError(err), "Invalid tags.") {
 		t.Fatalf("explore and generated together: %v", err)
 	}
@@ -100,7 +101,7 @@ func TestArticleTagsAreNormalizedReplacedAndReplayed(t *testing.T) {
 	if err != nil || !slices.Equal(retagged.Article.Tags, []string{"rust", "system-design"}) {
 		t.Fatalf("patch did not replace tags: %#v %v", retagged, err)
 	}
-	renamed, err := s.PatchArticle(ctx, alice, feed.PatchInput{IdempotencyKey: "rename", ArticleID: id, ExpectedRevision: 3, Patch: feed.Patch{Title: new("Renamed story")}})
+	renamed, err := s.PatchArticle(ctx, alice, feed.PatchInput{IdempotencyKey: "rename", ArticleID: id, ExpectedRevision: 3, Patch: feed.Patch{Title: new("Renamed story"), Narration: narrationFor("Renamed story", retagged.Article.ContentMarkdown)}})
 	if err != nil || !slices.Equal(renamed.Article.Tags, retagged.Article.Tags) {
 		t.Fatalf("patch without tags changed them: %#v %v", renamed, err)
 	}
@@ -194,7 +195,7 @@ func TestGeneratedArticlesNeedABodyAndMayOmitTheURL(t *testing.T) {
 	if got, err := s.GetArticle(ctx, alice, id); err != nil || !reflect.DeepEqual(got, first.Article) {
 		t.Fatal("rejected edits changed the article")
 	}
-	renamed, err := s.PatchArticle(ctx, alice, feed.PatchInput{IdempotencyKey: "invalid-patch", ArticleID: id, ExpectedRevision: 1, Patch: feed.Patch{Title: new("Two Sum, revisited")}})
+	renamed, err := s.PatchArticle(ctx, alice, feed.PatchInput{IdempotencyKey: "invalid-patch", ArticleID: id, ExpectedRevision: 1, Patch: feed.Patch{Title: new("Two Sum, revisited"), Narration: narrationFor("Two Sum, revisited", diagramBody)}})
 	if err != nil || renamed.Article.URL != "" || !slices.Equal(renamed.Article.Tags, first.Article.Tags) || renamed.Article.ContentMarkdown != diagramBody {
 		t.Fatalf("valid patch of an article without a URL: %#v %v", renamed, err)
 	}
@@ -388,7 +389,7 @@ func TestDiscoveryAddsExploreAndRejectsGenerated(t *testing.T) {
 	runID, revision := startDiscovery(t, s, alice)
 	ingest := func(key string, tags ...string) feed.IngestDiscoveryInput {
 		return feed.IngestDiscoveryInput{IdempotencyKey: key, RunID: runID, ExpectedPreferencesRevision: revision,
-			Article:  feed.Content{URL: "https://example.com/found/" + key, Title: "Found " + key, Summary: "A sourced introduction.", Tags: tags},
+			Article:  narrated(feed.Content{URL: "https://example.com/found/" + key, Title: "Found " + key, Summary: "A sourced introduction.", Tags: tags}),
 			WhyMatch: "Explains a topic the reader follows.", PublishedAt: time.Now().UnixMilli()}
 	}
 	untagged, err := s.IngestDiscoveryArticle(ctx, alice, ingest("untagged"))
@@ -409,6 +410,7 @@ func TestDiscoveryAddsExploreAndRejectsGenerated(t *testing.T) {
 	}
 	withBody := ingest("generated-with-body", "generated")
 	withBody.Article.ContentMarkdown = "# Agent writing"
+	withBody.Article = narrated(withBody.Article)
 	for _, in := range []feed.IngestDiscoveryInput{ingest("generated", "generated"), withBody, ingest("eleven", tenTags()...)} {
 		if _, err := s.IngestDiscoveryArticle(ctx, alice, in); !errors.Is(err, feed.ErrInvalid) || !strings.HasPrefix(feed.RecommendationSafeError(err), "Invalid tags.") {
 			t.Fatalf("discovery accepted invalid tags %q: %v %q", in.Article.Tags, err, feed.RecommendationSafeError(err))
@@ -434,6 +436,7 @@ func TestUntaggedRequestsKeepTheirPreTagPayloadHashes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Retries from before scripts existed carry no narration and still replay.
 	c := feed.Content{URL: article.URL, Title: article.Title, Summary: article.Summary, ThumbnailURL: article.ThumbnailURL, ContentMarkdown: article.ContentMarkdown}
 	if replay, err := s.AddArticle(ctx, alice, feed.AddInput{IdempotencyKey: "legacy-add", Article: c}); err != nil || !reflect.DeepEqual(replay, added) {
 		t.Fatalf("add_article hash changed: %v", err)

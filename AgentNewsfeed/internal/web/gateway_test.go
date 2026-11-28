@@ -97,7 +97,7 @@ func TestGatewayMCPPreservesToolsOwnershipScopesAndBrowserRecords(t *testing.T) 
 	if err != nil || len(tools.Tools) != 28 {
 		t.Fatalf("gateway tools: %v", err)
 	}
-	input := feed.AddInput{IdempotencyKey: "gateway-add", Article: feed.Content{URL: "https://example.com/gateway-story", Title: "Gateway story", Summary: "A sourced gateway test."}}
+	input := feed.AddInput{IdempotencyKey: "gateway-add", Article: narrated(feed.Content{URL: "https://example.com/gateway-story", Title: "Gateway story", Summary: "A sourced gateway test."})}
 	first := decode[sqlite.MutationResult](t, call(t, alice, "add_article", input))
 	if !first.Created || first.Article.Revision != 1 {
 		t.Fatal("gateway add failed")
@@ -106,6 +106,7 @@ func TestGatewayMCPPreservesToolsOwnershipScopesAndBrowserRecords(t *testing.T) 
 		t.Fatal("gateway idempotent retry changed result")
 	}
 	input.Article.Title = "Updated through gateway"
+	input.Article = narrated(input.Article)
 	update := feed.UpdateInput{IdempotencyKey: "gateway-update", ArticleID: first.Article.ID, ExpectedRevision: 1, Article: input.Article}
 	updated := decode[sqlite.MutationResult](t, call(t, alice, "update_article", update))
 	if updated.Article.Revision != 2 || updated.Article.Title != input.Article.Title {
