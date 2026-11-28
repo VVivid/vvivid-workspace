@@ -44,9 +44,9 @@ func TestBrowserSearchExpandingCaseBoundaryNavigation(t *testing.T) {
 	rawQuery := strings.Repeat("Ⱥ", 100)
 	query := strings.Repeat("ⱥ", 100)
 	for i := range 2 {
-		_, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: fmt.Sprintf("case-boundary-%d", i), Article: feed.Content{
+		_, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: fmt.Sprintf("case-boundary-%d", i), Article: narrated(feed.Content{
 			URL: fmt.Sprintf("https://publisher.example/case-boundary-%d", i), Title: rawQuery, Summary: "Source introduction",
-		}})
+		})})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -93,9 +93,9 @@ func TestBrowserSearchURLsAndReaderActionsKeepContext(t *testing.T) {
 	p := f.Principal(t, "alice", allScopes)
 	cookie := f.CookieWithScopes(t, "alice", allScopes)
 	_, csrf := f.BrowserPrincipal(t, cookie)
-	out, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: "search-context", Article: feed.Content{
+	out, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: "search-context", Article: narrated(feed.Content{
 		URL: "https://publisher.example/native", Title: "Native's 50%_ [x]", Summary: "Source introduction",
-	}})
+	})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,9 +181,9 @@ func seedPaginationView(t *testing.T, s *feed.Service, p identity.Principal, vie
 	t.Helper()
 	for i := range 8 {
 		key := fmt.Sprintf("%s-%d", view, i)
-		article, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: key, Article: feed.Content{
+		article, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: key, Article: narrated(feed.Content{
 			URL: "https://publisher.example/" + key, Title: "Source story " + key, Summary: "Source introduction",
-		}})
+		})})
 		if err != nil {
 			t.Fatal(err)
 		}

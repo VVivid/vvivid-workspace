@@ -66,6 +66,7 @@ func TestReadModifyToolsRequireBothScopesBeforeMutationAndReplay(t *testing.T) {
 			s := feed.NewWithThumbnailFetcher(f.Store, policy, images)
 			c := content()
 			c.ContentMarkdown, c.ThumbnailURL = "# Private original body", "https://images.example.com/source.jpg"
+			c = narrated(c)
 			first, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "source", Article: c})
 			if err != nil {
 				t.Fatal(err)
@@ -82,7 +83,7 @@ func TestReadModifyToolsRequireBothScopesBeforeMutationAndReplay(t *testing.T) {
 			mutate := func(p identity.Principal) (sqlite.MutationResult, error) {
 				switch tc.operation {
 				case "patch_article":
-					return s.PatchArticle(t.Context(), p, feed.PatchInput{IdempotencyKey: state.IdempotencyKey, ArticleID: state.ArticleID, ExpectedRevision: state.ExpectedRevision, Patch: feed.Patch{Title: new("Corrected title"), ThumbnailURL: new(c.ThumbnailURL)}})
+					return s.PatchArticle(t.Context(), p, feed.PatchInput{IdempotencyKey: state.IdempotencyKey, ArticleID: state.ArticleID, ExpectedRevision: state.ExpectedRevision, Patch: feed.Patch{Title: new("Corrected title"), ThumbnailURL: new(c.ThumbnailURL), Narration: narrationFor("Corrected title", c.ContentMarkdown)}})
 				case "trash_article":
 					return s.TrashArticle(t.Context(), p, state)
 				case "restore_article":
@@ -138,12 +139,14 @@ func TestLegacyAddUpdateKeepWriteOnlyContractAndReadsNeedOnlyRead(t *testing.T) 
 	readOnly := f.Principal(t, "alice", identity.Read)
 	c := content()
 	c.ContentMarkdown = "# Original body"
+	c = narrated(c)
 	add := feed.AddInput{IdempotencyKey: "legacy-add", Article: c}
 	first, err := s.AddArticle(t.Context(), writeOnly, add)
 	if err != nil || first.Article.ContentMarkdown != c.ContentMarkdown {
 		t.Fatalf("write-only add failed: %#v %v", first, err)
 	}
 	c.Title, c.ContentMarkdown = "Replacement title", "# Replacement body"
+	c = narrated(c)
 	update := feed.UpdateInput{IdempotencyKey: "legacy-update", ArticleID: first.Article.ID, ExpectedRevision: 1, Article: c}
 	updated, err := s.UpdateArticle(t.Context(), writeOnly, update)
 	if err != nil || updated.Article.Revision != 2 || updated.Article.ContentMarkdown != c.ContentMarkdown {
@@ -171,6 +174,7 @@ func TestPartialUpdatesStoredThumbnailsAndExactReplayAfterTrashAndRestart(t *tes
 	s := feed.NewWithThumbnailFetcher(f.Store, policy, images)
 	c := content()
 	c.ContentMarkdown, c.ThumbnailURL = "# Original source\n\nKeep this body.", "https://images.example.com/a.png"
+	c = narrated(c)
 	in := feed.AddInput{IdempotencyKey: "stored", Article: c}
 	first, err := s.AddArticle(t.Context(), alice, in)
 	if err != nil || first.Article.ThumbnailStatus != "stored" || first.Article.ThumbnailHash == "" || first.Article.ThumbnailWidth != 160 || first.Article.ThumbnailBytes != len(images.body) {
@@ -182,7 +186,7 @@ func TestPartialUpdatesStoredThumbnailsAndExactReplayAfterTrashAndRestart(t *tes
 	if _, err := s.Thumbnail(t.Context(), bob, first.Article.ID, false); !errors.Is(err, sqlite.ErrNotFound) {
 		t.Fatal("foreign thumbnail exposed")
 	}
-	patch := feed.PatchInput{IdempotencyKey: "title-only", ArticleID: first.Article.ID, ExpectedRevision: 1, Patch: feed.Patch{Title: new("A corrected source title")}}
+	patch := feed.PatchInput{IdempotencyKey: "title-only", ArticleID: first.Article.ID, ExpectedRevision: 1, Patch: feed.Patch{Title: new("A corrected source title"), Narration: narrationFor("A corrected source title", c.ContentMarkdown)}}
 	updated, err := s.PatchArticle(t.Context(), alice, patch)
 	if err != nil || updated.Article.ContentMarkdown != c.ContentMarkdown || updated.Article.ThumbnailHash != first.Article.ThumbnailHash || images.calls.Load() != 1 {
 		t.Fatalf("partial update lost omitted fields: %v", err)
@@ -235,6 +239,7 @@ func TestPatchPresenceValidationScopesAndClear(t *testing.T) {
 	f, s, alice, bob := setup(t)
 	c := content()
 	c.ContentMarkdown = "# Original body"
+	c = narrated(c)
 	first, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "first", Article: c})
 	if err != nil {
 		t.Fatal(err)
@@ -251,7 +256,8 @@ func TestPatchPresenceValidationScopesAndClear(t *testing.T) {
 		}
 	}
 	var patch feed.Patch
-	if err := json.Unmarshal([]byte(`{"content_markdown":null,"thumbnail_url":""}`), &patch); err != nil {
+	script, _ := json.Marshal(feed.PlainNarration(c.Title, ""))
+	if err := json.Unmarshal(fmt.Appendf(nil, `{"content_markdown":null,"thumbnail_url":"","narration":%s}`, script), &patch); err != nil {
 		t.Fatal(err)
 	}
 	in := feed.PatchInput{IdempotencyKey: "not-reserved", ArticleID: first.Article.ID, ExpectedRevision: 1, Patch: patch}
@@ -391,7 +397,7 @@ func TestThumbnailFetchDoesNotHoldWriteLockAndStaleResultIsDiscarded(t *testing.
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
-	winner, err := s.PatchArticle(ctx, alice, feed.PatchInput{IdempotencyKey: "winner", ArticleID: first.Article.ID, ExpectedRevision: 1, Patch: feed.Patch{Title: new("The concurrent edit wins")}})
+	winner, err := s.PatchArticle(ctx, alice, feed.PatchInput{IdempotencyKey: "winner", ArticleID: first.Article.ID, ExpectedRevision: 1, Patch: feed.Patch{Title: new("The concurrent edit wins"), Narration: narrationFor("The concurrent edit wins", first.Article.ContentMarkdown)}})
 	if err != nil {
 		t.Fatalf("fetch held writer lock: %v", err)
 	}

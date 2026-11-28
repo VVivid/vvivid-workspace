@@ -23,7 +23,7 @@ func loadAudioConfig() (*audio.Config, error) {
 	}
 	cfg := audio.Config{
 		APIKey:       strings.TrimSpace(string(key)),
-		Model:        setting("NEWSFEED_ELEVENLABS_MODEL", "eleven_multilingual_v2"),
+		Model:        setting("NEWSFEED_ELEVENLABS_MODEL", "eleven_v4"),
 		OutputFormat: setting("NEWSFEED_ELEVENLABS_OUTPUT_FORMAT", "mp3_44100_64"),
 		Dir:          setting("NEWSFEED_AUDIO_DIR", "data/audio"),
 		BaseURL:      setting("NEWSFEED_ELEVENLABS_BASE_URL", audio.DefaultBaseURL),

@@ -16,8 +16,8 @@ import (
 // DefaultBaseURL is ElevenLabs' API.
 const DefaultBaseURL = "https://api.elevenlabs.io"
 
-// maxResponseBytes bounds one response: a 4500-byte segment is about five
-// minutes of speech, a few megabytes of MP3 once base64-encoded.
+// maxResponseBytes bounds one response: a take of maxTakeCharacters is about
+// six minutes of speech, a few megabytes of MP3 once base64-encoded.
 const maxResponseBytes = 32 << 20
 
 // maxContextBytes bounds the neighbouring text sent for natural flow between
@@ -30,12 +30,14 @@ type errPermanent struct{ message string }
 
 func (e errPermanent) Error() string { return e.message }
 
-// speech is one synthesized segment: MP3 bytes and when each code point of the
-// text starts.
+// speech is one synthesized text: MP3 bytes and when each code point of the
+// text starts and ends. aligned is false when ElevenLabs sent no timing.
 type speech struct {
 	audio        []byte
 	durationMS   int64
 	charStartsMS []int64
+	charEndsMS   []int64
+	aligned      bool
 }
 
 // elevenLabs calls the text-to-speech API with timestamps.
@@ -123,15 +125,18 @@ func (e *elevenLabs) synthesize(ctx context.Context, voiceID, text, previous, ne
 	if err != nil || len(audio) == 0 {
 		return speech{}, errors.New("elevenlabs returned no audio")
 	}
-	result := speech{audio: audio, charStartsMS: make([]int64, utf8.RuneCountInString(text))}
+	runes := utf8.RuneCountInString(text)
+	result := speech{audio: audio, charStartsMS: make([]int64, runes), charEndsMS: make([]int64, runes)}
 	if a := out.Alignment; a != nil && len(a.Starts) > 0 && len(a.Starts) == len(a.Ends) {
 		result.durationMS = int64(a.Ends[len(a.Ends)-1] * 1000)
+		result.aligned = true
 		// The alignment normally has one entry per code point of the text. If
-		// it differs, each code point takes the start of the entry at the same
-		// relative position, which keeps highlighting close.
-		for i := range result.charStartsMS {
-			j := i * len(a.Starts) / len(result.charStartsMS)
+		// it differs, each code point takes the entry at the same relative
+		// position, which keeps highlighting close.
+		for i := range runes {
+			j := i * len(a.Starts) / runes
 			result.charStartsMS[i] = int64(a.Starts[j] * 1000)
+			result.charEndsMS[i] = int64(a.Ends[j] * 1000)
 		}
 	}
 	return result, nil

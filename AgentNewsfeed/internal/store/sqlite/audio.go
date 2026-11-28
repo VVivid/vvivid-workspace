@@ -42,22 +42,40 @@ type ArticleAudio struct {
 	DurationMS    int64
 }
 
-// AudioSegment is one spoken piece of an article, in reading order. CharStartsMS
-// holds, once Done, the start time of each Unicode code point of Text.
+// AudioSegment is one spoken piece of an article, in reading order. Text is
+// what the reader shows; the voice says Spoken, or Text when Spoken is empty,
+// and Sync maps one onto the other. CharStartsMS holds, once Done, the start
+// time of each Unicode code point of Text.
 type AudioSegment struct {
 	Index        int
 	Block        int
 	Text         string
+	Spoken       string
+	Sync         []SyncPoint
 	Done         bool
 	DurationMS   int64
 	CharStartsMS []int64
 }
 
+// SpokenText is what the voice says for the segment.
+func (s AudioSegment) SpokenText() string {
+	if s.Spoken == "" {
+		return s.Text
+	}
+	return s.Spoken
+}
+
 // NewAudioSegment is what the owner's app asks to have spoken.
 type NewAudioSegment struct {
-	Block int
-	Text  string
+	Block  int
+	Text   string
+	Spoken string
+	Sync   []SyncPoint
 }
+
+// SyncPoint pairs a code point offset in a segment's shown text with the
+// offset in its spoken text where the same words start.
+type SyncPoint [2]int
 
 const audioColumns = `au.id, au.owner_id, au.article_id, au.voice, au.status, au.error, au.characters, au.created_at, au.updated_at,
   (SELECT count(*) FROM article_audio_segments s WHERE s.audio_id = au.id),
@@ -86,7 +104,7 @@ func (s *Store) AudioByID(ctx context.Context, id string) (ArticleAudio, error) 
 
 // AudioSegments returns every segment of the audio, in order.
 func (s *Store) AudioSegments(ctx context.Context, audioID string) ([]AudioSegment, error) {
-	rows, err := s.read.QueryContext(ctx, "SELECT idx, block, text, done, duration_ms, char_starts_ms FROM article_audio_segments WHERE audio_id = ? ORDER BY idx", audioID)
+	rows, err := s.read.QueryContext(ctx, "SELECT idx, block, text, spoken, sync, done, duration_ms, char_starts_ms FROM article_audio_segments WHERE audio_id = ? ORDER BY idx", audioID)
 	if err != nil {
 		return nil, err
 	}
@@ -94,8 +112,11 @@ func (s *Store) AudioSegments(ctx context.Context, audioID string) ([]AudioSegme
 	var segments []AudioSegment
 	for rows.Next() {
 		var seg AudioSegment
-		var starts string
-		if err := rows.Scan(&seg.Index, &seg.Block, &seg.Text, &seg.Done, &seg.DurationMS, &starts); err != nil {
+		var sync, starts string
+		if err := rows.Scan(&seg.Index, &seg.Block, &seg.Text, &seg.Spoken, &sync, &seg.Done, &seg.DurationMS, &starts); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(sync), &seg.Sync); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(starts), &seg.CharStartsMS); err != nil {
@@ -150,7 +171,11 @@ func (s *Store) CreateArticleAudio(ctx context.Context, owner Owner, articleID s
 		return ArticleAudio{}, err
 	}
 	for i, seg := range segments {
-		if _, err := tx.ExecContext(ctx, "INSERT INTO article_audio_segments(audio_id, idx, block, text) VALUES (?,?,?,?)", id, i, seg.Block, seg.Text); err != nil {
+		sync := []byte("[]")
+		if len(seg.Sync) > 0 {
+			sync, _ = json.Marshal(seg.Sync)
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO article_audio_segments(audio_id, idx, block, text, spoken, sync) VALUES (?,?,?,?,?,?)", id, i, seg.Block, seg.Text, seg.Spoken, string(sync)); err != nil {
 			return ArticleAudio{}, err
 		}
 	}

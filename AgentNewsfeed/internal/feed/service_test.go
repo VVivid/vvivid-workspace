@@ -26,7 +26,7 @@ func setup(t *testing.T) (*testfixture.Identity, *feed.Service, identity.Princip
 	return f, feed.NewWithThumbnailFetcher(f.Store, policy, &preparedImages{err: errors.New("image unavailable")}), f.Principal(t, "alice", scopes), f.Principal(t, "bob", scopes)
 }
 func content() feed.Content {
-	return feed.Content{URL: "https://example.com/story?utm_source=agent#top", Title: "A sourced story", Summary: "A short introduction supplied by the source."}
+	return narrated(feed.Content{URL: "https://example.com/story?utm_source=agent#top", Title: "A sourced story", Summary: "A short introduction supplied by the source."})
 }
 
 func TestOwnershipDedupRevisionsAndDurableReplay(t *testing.T) {
@@ -42,6 +42,7 @@ func TestOwnershipDedupRevisionsAndDurableReplay(t *testing.T) {
 	duplicate := in
 	duplicate.IdempotencyKey = "duplicate"
 	duplicate.Article.Title = "New title should not overwrite"
+	duplicate.Article = narrated(duplicate.Article)
 	duplicate.Article.URL = "https://EXAMPLE.com:443/story?fbclid=other"
 	same, err := s.AddArticle(t.Context(), alice, duplicate)
 	if err != nil || same.Created || !reflect.DeepEqual(same.Article, first.Article) {
@@ -56,6 +57,7 @@ func TestOwnershipDedupRevisionsAndDurableReplay(t *testing.T) {
 	}
 	update := feed.UpdateInput{IdempotencyKey: "revise", ArticleID: first.Article.ID, ExpectedRevision: 1, Article: content()}
 	update.Article.Title = "Revised story"
+	update.Article = narrated(update.Article)
 	if _, err := s.UpdateArticle(t.Context(), bob, update); !errors.Is(err, sqlite.ErrNotFound) {
 		t.Fatalf("foreign update %v", err)
 	}
@@ -70,6 +72,7 @@ func TestOwnershipDedupRevisionsAndDurableReplay(t *testing.T) {
 	}
 	changed := in
 	changed.Article.Title = "Different intent"
+	changed.Article = narrated(changed.Article)
 	if _, err := s.AddArticle(t.Context(), alice, changed); !errors.Is(err, sqlite.ErrIdempotencyConflict) {
 		t.Fatalf("changed replay %v", err)
 	}
@@ -138,6 +141,7 @@ func TestConcurrentDedupAndSingleRevisionWinner(t *testing.T) {
 		group.Go(func() {
 			in := feed.UpdateInput{IdempotencyKey: fmt.Sprintf("edit-%d", i), ArticleID: id, ExpectedRevision: 1, Article: content()}
 			in.Article.Title = fmt.Sprintf("Edit %d", i)
+			in.Article = narrated(in.Article)
 			_, err := s.UpdateArticle(t.Context(), alice, in)
 			errorsOut <- err
 		})
@@ -244,6 +248,7 @@ func TestURLUpdateCollisionRollsBackAndDoesNotReserveKey(t *testing.T) {
 	}
 	in.Article = c
 	in.Article.Title = "Corrected"
+	in.Article = narrated(in.Article)
 	updated, err := s.UpdateArticle(t.Context(), p, in)
 	if err != nil || updated.Article.Revision != 2 {
 		t.Fatalf("failed operation reserved key %v", err)
@@ -257,6 +262,7 @@ func TestOriginalMarkdownArchiveRestoreAndRevisionBoundaries(t *testing.T) {
 	f, s, alice, bob := setup(t)
 	original := content()
 	original.ContentMarkdown = "# Source heading\n\nThe original paragraph.\n\n> A source quotation.\n\n- Source point\n"
+	original = narrated(original)
 	in := feed.AddInput{IdempotencyKey: "full-source", Article: original}
 	first, err := s.AddArticle(t.Context(), alice, in)
 	if err != nil || first.Article.ContentMarkdown != original.ContentMarkdown {
@@ -297,6 +303,7 @@ func TestOriginalMarkdownArchiveRestoreAndRevisionBoundaries(t *testing.T) {
 	}
 	update.ExpectedRevision = 2
 	update.Article.ContentMarkdown = "## Revised original from the source\n\nMore source text."
+	update.Article = narrated(update.Article)
 	revised, err := s.UpdateArticle(t.Context(), alice, update)
 	if err != nil || revised.Article.ArchivedAt != archived.ArchivedAt || revised.Article.ContentMarkdown != update.Article.ContentMarkdown {
 		t.Fatal("content update lost archive state")
@@ -314,6 +321,7 @@ func TestOriginalMarkdownArchiveRestoreAndRevisionBoundaries(t *testing.T) {
 		t.Fatal("archive or updates changed durable add replay")
 	}
 	update.IdempotencyKey, update.ExpectedRevision, update.Article.ContentMarkdown = "clear-body", 4, ""
+	update.Article = narrated(update.Article)
 	if out, err := s.UpdateArticle(t.Context(), alice, update); err != nil || out.Article.ContentMarkdown != "" {
 		t.Fatal("full replacement did not clear omitted content")
 	}
@@ -330,12 +338,14 @@ func TestMarkdownByteBoundsAndFailedContentDoesNotReserveKey(t *testing.T) {
 	for _, body := range []string{strings.Repeat("a", feed.MaxContentBytes+1), strings.Repeat("é", feed.MaxContentBytes/2+1), "source\x00text", string([]byte{0xff})} {
 		c := content()
 		c.ContentMarkdown = body
+		c = narrated(c)
 		if _, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "body-bound", Article: c}); !errors.Is(err, feed.ErrInvalid) {
 			t.Fatal("invalid Markdown accepted")
 		}
 	}
 	c := content()
 	c.ContentMarkdown = strings.Repeat("a", feed.MaxContentBytes-3) + "\n\t\r"
+	c = narrated(c)
 	if _, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "body-bound", Article: c}); err != nil {
 		t.Fatalf("maximum valid source rejected or failed validation reserved key: %v", err)
 	}
@@ -351,7 +361,10 @@ func TestLegacyOmittedContentPayloadHashesStillReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if replay, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "legacy-add", Article: content()}); err != nil || !reflect.DeepEqual(replay, first) {
+	// Retries from before scripts existed carry no narration and still replay.
+	legacy := content()
+	legacy.Narration = nil
+	if replay, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "legacy-add", Article: legacy}); err != nil || !reflect.DeepEqual(replay, first) {
 		t.Fatalf("legacy add payload hash changed: %v", err)
 	}
 	legacyArticle.ID = first.Article.ID
@@ -361,7 +374,7 @@ func TestLegacyOmittedContentPayloadHashesStillReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := content()
+	c := legacy
 	c.Title = "Original revision"
 	f.Reopen(t)
 	policy, _ := thumbnail.NewPolicy("images.example.com")

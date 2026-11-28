@@ -57,6 +57,9 @@ type Content struct {
 	ThumbnailURL    string   `json:"thumbnail_url,omitempty"`
 	ContentMarkdown string   `json:"content_markdown,omitempty"`
 	Tags            []string `json:"tags,omitempty"`
+	// Narration is how the article is read aloud. Agents must supply it (see
+	// requireNarration); the offline seed may omit it.
+	Narration []sqlite.NarrationPart `json:"narration,omitempty"`
 }
 type AddInput struct {
 	IdempotencyKey string  `json:"idempotency_key"`
@@ -117,6 +120,12 @@ func normalizeContent(c Content, thumbnails thumbnail.Policy) (sqlite.Article, e
 	if generated && strings.TrimSpace(c.ContentMarkdown) == "" {
 		return sqlite.Article{}, errInvalidGenerated
 	}
+	if len(c.Narration) > 0 {
+		if err := validateNarration(c.Title, c.ContentMarkdown, c.Narration); err != nil {
+			return sqlite.Article{}, err
+		}
+		a.Narration = c.Narration
+	}
 	// Only an agent-written article may omit its source URL.
 	if generated && c.URL == "" {
 		return a, nil
@@ -145,6 +154,15 @@ func NormalizeAddInput(in AddInput, thumbnails thumbnail.Policy) (sqlite.Article
 	return normalizeContent(in.Article, thumbnails)
 }
 
+// requireNarration rejects an agent's article without a narration script:
+// every article an agent saves is ready to be read aloud well.
+func requireNarration(c Content) error {
+	if len(c.Narration) == 0 {
+		return errMissingNarration
+	}
+	return nil
+}
+
 func (s *Service) AddArticle(ctx context.Context, p identity.Principal, in AddInput) (sqlite.MutationResult, error) {
 	if err := s.authorize(ctx, p, identity.ArticlesWrite); err != nil {
 		return sqlite.MutationResult{}, err
@@ -156,6 +174,11 @@ func (s *Service) AddArticle(ctx context.Context, p identity.Principal, in AddIn
 	payload, _ := json.Marshal(a)
 	if out, found, err := s.store.ReplayMutation(ctx, p.Owner(), in.IdempotencyKey, "add_article", payload); found || err != nil {
 		return out, err
+	}
+	// After the replay check, so a retry from before scripts existed still
+	// returns its original result.
+	if err := requireNarration(in.Article); err != nil {
+		return sqlite.MutationResult{}, err
 	}
 	// Canonical duplicates, including retained Trash, do not fetch a new image.
 	if _, err := s.store.ArticleForURL(ctx, p.Owner(), a.URL); err == nil {
@@ -185,6 +208,9 @@ func (s *Service) UpdateArticle(ctx context.Context, p identity.Principal, in Up
 	}{a, in.ExpectedRevision})
 	if out, found, err := s.store.ReplayMutation(ctx, p.Owner(), in.IdempotencyKey, "update_article", payload); found || err != nil {
 		return out, err
+	}
+	if err := requireNarration(in.Article); err != nil {
+		return sqlite.MutationResult{}, err
 	}
 	current, err := s.store.Article(ctx, p.Owner(), a.ID)
 	if err != nil {
@@ -340,12 +366,20 @@ func (s *Service) Thumbnail(ctx context.Context, p identity.Principal, id string
 	return s.store.Thumbnail(ctx, p.Owner(), id, trashed)
 }
 
+// narrationRules is appended to narration errors, so the agent can fix its script.
+const narrationRules = " Send narration: parts in reading order covering the title and the whole body; text parts copy a passage of one heading or paragraph as the article shows it (compared by letters and digits, so punctuation and Markdown marks don't matter), and one describe part (code, diagram or table) stands for each such block. The summary is not narrated."
+
 func SafeError(err error) string {
+	if invalid, ok := errors.AsType[narrationError](err); ok {
+		return "Invalid narration: " + invalid.message + "." + narrationRules
+	}
 	switch {
+	case errors.Is(err, errMissingNarration):
+		return "Narration required. Every article you save needs a narration script that the app reads aloud." + narrationRules
 	case errors.Is(err, ErrAudioUnavailable):
 		return "Audio isn't set up on this server."
 	case errors.Is(err, errInvalidAudio):
-		return "Invalid audio request. Choose one of the listed voices, send the article's current revision, and 1–2000 segments of spoken text, each 1–4500 bytes and 300,000 characters in all."
+		return "Invalid audio request. Choose one of the listed voices, send the article's current revision, and 1–2000 segments of spoken text, each 1–4500 bytes and 300,000 characters in all. A segment's optional spoken text follows the same rules, and its sync points must move forward through both texts and stay inside them."
 	case errors.Is(err, sqlite.ErrLocked):
 		return "This article has audio, so its text is locked. Ask the user to delete the audio in the app first."
 	case errors.Is(err, sqlite.ErrAudioExists):

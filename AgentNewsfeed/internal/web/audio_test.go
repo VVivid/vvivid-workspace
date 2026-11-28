@@ -23,8 +23,9 @@ import (
 
 const fakeElevenLabsKey = "test-elevenlabs-key"
 
-// fakeElevenLabs answers text-to-speech requests like ElevenLabs: the "MP3" is
-// the spoken text itself, and each character starts 50 ms after the previous.
+// fakeElevenLabs answers text-to-speech requests like ElevenLabs: each
+// character starts 50 ms after the previous, and the MP3 is that long, made of
+// silent 64 kbit/s frames that carry the spoken text in their payload.
 // quotaExceeded makes every request fail the way an empty account does.
 type fakeElevenLabs struct {
 	mu            sync.Mutex
@@ -63,9 +64,34 @@ func (f *fakeElevenLabs) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ends = append(ends, float64(i+1)*0.05)
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"audio_base64": base64.StdEncoding.EncodeToString([]byte("MP3:" + in.Text)),
+		"audio_base64": base64.StdEncoding.EncodeToString(fakeMP3(in.Text, float64(len(chars))*50)),
 		"alignment":    map[string]any{"characters": chars, "character_start_times_seconds": starts, "character_end_times_seconds": ends},
 	})
+}
+
+// fakeFrameBytes is one MPEG-1 layer III frame at 64 kbit/s and 44.1 kHz,
+// without padding; each lasts 1152 samples.
+const fakeFrameBytes = 208
+
+var fakeFrameMS = 1152 * 1000 / 44100.0
+
+// fakeMP3 is about durationMS of frames whose payload spells out text.
+func fakeMP3(text string, durationMS float64) []byte {
+	frames := max(int(durationMS/fakeFrameMS)+1, len(text)/(fakeFrameBytes-4)+1)
+	payload := []byte(text)
+	var out []byte
+	for range frames {
+		frame := make([]byte, fakeFrameBytes)
+		copy(frame, []byte{0xff, 0xfb, 0x50, 0xc4})
+		payload = payload[copy(frame[4:], payload):]
+		out = append(out, frame...)
+	}
+	return out
+}
+
+// isFakeMP3 reports whether body is whole frames of fakeMP3.
+func isFakeMP3(body []byte) bool {
+	return len(body) > 0 && len(body)%fakeFrameBytes == 0 && body[0] == 0xff && body[1] == 0xfb
 }
 
 func (f *fakeElevenLabs) spoken() []string {
@@ -129,9 +155,9 @@ func waitForAudio(t *testing.T, h http.Handler, path, token, want string) feed.A
 func TestNativeAppCreatesPlaysAndDeletesArticleAudio(t *testing.T) {
 	f, s, h, tts := audioApp(t)
 	alice := f.Principal(t, "alice", allScopes)
-	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "audio-source", Article: feed.Content{
+	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "audio-source", Article: narrated(feed.Content{
 		Title: "Payments", Summary: "How payments settle.", ContentMarkdown: "# Payments\n\nA wire arrives.", Tags: []string{"generated"},
-	}})
+	})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +172,7 @@ func TestNativeAppCreatesPlaysAndDeletesArticleAudio(t *testing.T) {
 		t.Fatalf("voices: HTTP %d %s", voices.Code, voices.Body)
 	}
 	if sample := send(h, http.MethodGet, "/api/v1/audio/voices/talia/sample", readOnly, ""); sample.Code != 200 ||
-		sample.Header().Get("Content-Type") != "audio/mpeg" || !strings.HasPrefix(sample.Body.String(), "MP3:Hi, I'm Talia.") {
+		sample.Header().Get("Content-Type") != "audio/mpeg" || !isFakeMP3(sample.Body.Bytes()) || !strings.Contains(sample.Body.String(), "Hi, I'm Talia.") {
 		t.Fatalf("sample: HTTP %d %s", sample.Code, sample.Body)
 	}
 	requireNativeAppError(t, send(h, http.MethodGet, path, token, ""), http.StatusNotFound)
@@ -170,23 +196,32 @@ func TestNativeAppCreatesPlaysAndDeletesArticleAudio(t *testing.T) {
 		ready.Characters != utf8.RuneCountInString("Payments. How payments settle.A wire arrives — café.") {
 		t.Fatalf("ready audio: %+v", ready)
 	}
-	second := ready.Segments[1]
-	if second.Block != 0 || len(second.CharStartsMS) != utf8.RuneCountInString(second.Text) || second.CharStartsMS[2] != 100 || second.DurationMS != int64(len(second.CharStartsMS))*50 {
-		t.Fatalf("segment timing: %+v", second)
-	}
-	if spoken := tts.spoken(); len(spoken) != 3 || spoken[2] != "A wire arrives — café." {
+	// Both segments are spoken in one take, then cut between MP3 frames in
+	// the pause between them: the second clip starts shortly before its first
+	// word, and its timing is relative to the clip.
+	if spoken := tts.spoken(); len(spoken) != 2 || spoken[1] != "Payments. How payments settle.\n\nA wire arrives — café." {
 		t.Fatalf("spoken texts: %q", spoken)
 	}
+	first, second := ready.Segments[0], ready.Segments[1]
+	if second.Block != 0 || len(second.CharStartsMS) != utf8.RuneCountInString(second.Text) ||
+		second.CharStartsMS[0] <= 0 || second.CharStartsMS[0] >= 100 || second.CharStartsMS[2]-second.CharStartsMS[0] != 100 ||
+		second.DurationMS <= second.CharStartsMS[len(second.CharStartsMS)-1] {
+		t.Fatalf("segment timing: %+v", second)
+	}
+	if first.CharStartsMS[0] != 0 || first.DurationMS < first.CharStartsMS[len(first.CharStartsMS)-1]+50 {
+		t.Fatalf("first segment timing: %+v", first)
+	}
 	clip := send(h, http.MethodGet, path+"/segments/1", readOnly, "")
-	if clip.Code != 200 || clip.Header().Get("Content-Type") != "audio/mpeg" || clip.Body.String() != "MP3:A wire arrives — café." {
-		t.Fatalf("segment: HTTP %d %s", clip.Code, clip.Body)
+	if clip.Code != 200 || clip.Header().Get("Content-Type") != "audio/mpeg" || !isFakeMP3(clip.Body.Bytes()) ||
+		int64(float64(clip.Body.Len()/fakeFrameBytes)*fakeFrameMS) != second.DurationMS {
+		t.Fatalf("segment: HTTP %d, %d bytes", clip.Code, clip.Body.Len())
 	}
 	requireNativeAppError(t, send(h, http.MethodGet, path+"/segments/2", readOnly, ""), http.StatusNotFound)
 	requireNativeAppError(t, send(h, http.MethodGet, path, bob, ""), http.StatusNotFound)
 
 	// The text is locked while the audio exists; archiving still works.
 	title := "New title"
-	_, err = s.PatchArticle(t.Context(), alice, feed.PatchInput{IdempotencyKey: "locked-patch", ArticleID: id, ExpectedRevision: revision, Patch: feed.Patch{Title: &title}})
+	_, err = s.PatchArticle(t.Context(), alice, feed.PatchInput{IdempotencyKey: "locked-patch", ArticleID: id, ExpectedRevision: revision, Patch: feed.Patch{Title: &title, Narration: narrationFor(title, added.Article.ContentMarkdown)}})
 	if err == nil || feed.SafeError(err) != "This article has audio, so its text is locked. Ask the user to delete the audio in the app first." {
 		t.Fatalf("patch of locked article: %v", err)
 	}
@@ -200,7 +235,7 @@ func TestNativeAppCreatesPlaysAndDeletesArticleAudio(t *testing.T) {
 	if deleted := send(h, http.MethodDelete, path, token, ""); deleted.Code != http.StatusNoContent {
 		t.Fatalf("second delete: HTTP %d", deleted.Code)
 	}
-	patched, err := s.PatchArticle(t.Context(), alice, feed.PatchInput{IdempotencyKey: "unlocked-patch", ArticleID: id, ExpectedRevision: archived.Revision, Patch: feed.Patch{Title: &title}})
+	patched, err := s.PatchArticle(t.Context(), alice, feed.PatchInput{IdempotencyKey: "unlocked-patch", ArticleID: id, ExpectedRevision: archived.Revision, Patch: feed.Patch{Title: &title, Narration: narrationFor(title, added.Article.ContentMarkdown)}})
 	if err != nil {
 		t.Fatalf("patch after deleting audio: %v", err)
 	}
@@ -218,9 +253,9 @@ func TestNativeAppCreatesPlaysAndDeletesArticleAudio(t *testing.T) {
 
 func TestArticleAudioFailureIsReadableAndReplaceable(t *testing.T) {
 	f, s, h, tts := audioApp(t)
-	added, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "quota", Article: feed.Content{
+	added, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "quota", Article: narrated(feed.Content{
 		Title: "Short", Summary: "A short one.", ContentMarkdown: "Words.", Tags: []string{"generated"},
-	}})
+	})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,9 +283,9 @@ func TestArticleAudioFailureIsReadableAndReplaceable(t *testing.T) {
 
 func TestAudioRoutesWithoutElevenLabsKeyOrInBrowser(t *testing.T) {
 	f, s, h := nativeApp(t, &recordingImageFetcher{})
-	added, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "no-audio", Article: feed.Content{
+	added, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "no-audio", Article: narrated(feed.Content{
 		Title: "Plain", Summary: "No audio here.", ContentMarkdown: "Text.", Tags: []string{"generated"},
-	}})
+	})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,4 +309,55 @@ func TestAudioRoutesWithoutElevenLabsKeyOrInBrowser(t *testing.T) {
 func jsonInt(n int64) string {
 	b, _ := json.Marshal(n)
 	return string(b)
+}
+
+// With a narration script, the voice says the spoken text while highlighting
+// times the shown text: sync points tie the same words together, and the cost
+// counts what is spoken.
+func TestNarratedAudioSpeaksTheScriptAndTimesTheShownText(t *testing.T) {
+	f, s, h, tts := audioApp(t)
+	alice := f.Principal(t, "alice", allScopes)
+	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "narrated-audio", Article: narrated(feed.Content{
+		Title: "Wires", Summary: "Small payments.", ContentMarkdown: "A $5 wire arrives.", Tags: []string{"generated"},
+	})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := f.Bearer("alice", nativeClient, f.Manager.APIAudience(), allScopes)
+	path := "/api/v1/articles/" + added.Article.ID + "/audio"
+	segment := `{"block":0,"text":"A $5 wire arrives.","spoken":"A five-dollar wire arrives.","sync":%s}`
+	create := func(sync string) string {
+		return `{"voice":"talia","expected_revision":` + jsonInt(added.Article.Revision) + `,"segments":[{"block":-1,"text":"Wires","spoken":"Wires."},` + strings.Replace(segment, "%s", sync, 1) + `]}`
+	}
+	// Sync points must move forward in both texts and stay inside them.
+	for _, sync := range []string{`[[5,14],[5,20]]`, `[[5,14],[7,10]]`, `[[18,14]]`, `[[5,27]]`, `[[0,0]]`} {
+		requireNativeAppError(t, send(h, http.MethodPost, path, token, create(sync)), http.StatusBadRequest)
+	}
+	requireNativeAppError(t, send(h, http.MethodPost, path, token, `{"voice":"talia","expected_revision":`+jsonInt(added.Article.Revision)+`,"segments":[{"block":0,"text":"A $5 wire arrives.","sync":[[5,14]]}]}`), http.StatusBadRequest)
+	if started := send(h, http.MethodPost, path, token, create(`[[5,14]]`)); started.Code != http.StatusAccepted {
+		t.Fatalf("create: HTTP %d %s", started.Code, started.Body)
+	}
+	ready := waitForAudio(t, h, path, token, sqlite.AudioReady)
+	if ready.Characters != utf8.RuneCountInString("Wires.A five-dollar wire arrives.") {
+		t.Fatalf("characters must count the spoken text: %d", ready.Characters)
+	}
+	if spoken := tts.spoken(); len(spoken) != 1 || spoken[0] != "Wires.\n\nA five-dollar wire arrives." {
+		t.Fatalf("spoken texts: %q", spoken)
+	}
+	shown := ready.Segments[1]
+	starts := shown.CharStartsMS
+	if shown.Text != "A $5 wire arrives." || len(starts) != utf8.RuneCountInString(shown.Text) {
+		t.Fatalf("segment: %+v", shown)
+	}
+	// "wire" is shown at code point 5 and spoken at 14, so it starts 14 spoken
+	// characters, 700 ms, after the segment's first word, and its letters
+	// then follow the voice one by one.
+	if starts[5]-starts[0] != 700 || starts[6]-starts[5] != 50 {
+		t.Fatalf("shown text timing: %v", starts)
+	}
+	for i := 1; i < len(starts); i++ {
+		if starts[i] < starts[i-1] {
+			t.Fatalf("timing goes backwards: %v", starts)
+		}
+	}
 }

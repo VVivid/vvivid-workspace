@@ -14,8 +14,10 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"agentnewsfeed/internal/store/sqlite"
 )
@@ -80,7 +82,7 @@ func New(cfg Config, store *sqlite.Store, logger *slog.Logger) (*Engine, error) 
 	return &Engine{
 		cfg: cfg, store: store, logger: logger,
 		tts: &elevenLabs{
-			client: &http.Client{Timeout: 3 * time.Minute}, baseURL: cfg.BaseURL, apiKey: cfg.APIKey,
+			client: &http.Client{Timeout: 6 * time.Minute}, baseURL: cfg.BaseURL, apiKey: cfg.APIKey,
 			model: cfg.Model, outputFormat: cfg.OutputFormat,
 		},
 		wake:    make(chan struct{}, 1),
@@ -174,18 +176,11 @@ func (e *Engine) generate(parent context.Context, audioID string) {
 		e.logger.Error("audio directory unavailable", "error", err)
 		return
 	}
-	for i, seg := range segments {
-		if seg.Done {
-			continue
-		}
-		var previous, next string
-		if i > 0 {
-			previous = segments[i-1].Text
-		}
-		if i+1 < len(segments) {
-			next = segments[i+1].Text
-		}
-		spoken, err := e.synthesize(ctx, voice.ElevenLabsID, seg.Text, previous, next)
+	pending := slices.DeleteFunc(slices.Clone(segments), func(seg sqlite.AudioSegment) bool { return seg.Done })
+	for len(pending) > 0 {
+		take := nextTake(pending)
+		pending = pending[len(take):]
+		clips, err := e.speakTake(ctx, voice.ElevenLabsID, segments, take)
 		if ctx.Err() != nil {
 			return
 		}
@@ -193,18 +188,149 @@ func (e *Engine) generate(parent context.Context, audioID string) {
 			e.fail(ctx, audioID, err)
 			return
 		}
-		if err := writeFile(e.segmentPath(audioID, seg.Index), spoken.audio); err != nil {
-			e.logger.Error("audio segment not saved", "error", err)
-			return
-		}
-		if err := e.store.CompleteAudioSegment(ctx, audioID, seg.Index, spoken.durationMS, spoken.charStartsMS); err != nil {
-			// The owner deleted the audio while this segment was spoken.
-			if errors.Is(err, sqlite.ErrNotFound) {
-				e.removeFiles(audioID)
+		for i, seg := range take {
+			if err := writeFile(e.segmentPath(audioID, seg.Index), clips[i].audio); err != nil {
+				e.logger.Error("audio segment not saved", "error", err)
+				return
 			}
-			return
+			if err := e.store.CompleteAudioSegment(ctx, audioID, seg.Index, clips[i].durationMS, clips[i].charStartsMS); err != nil {
+				// The owner deleted the audio while this take was spoken.
+				if errors.Is(err, sqlite.ErrNotFound) {
+					e.removeFiles(audioID)
+				}
+				return
+			}
 		}
 	}
+}
+
+// maxTakeCharacters bounds one take: long enough for the voice to carry its
+// tone from paragraph to paragraph, short enough that a failed take costs
+// little to retry.
+const maxTakeCharacters = 5000
+
+// takeSeparator separates segments in a take, so the voice pauses between
+// paragraphs as a reader would.
+const takeSeparator = "\n\n"
+
+// nextTake is the run of consecutive segments at the start of pending that one
+// request speaks: at least one segment, and more while they fit.
+func nextTake(pending []sqlite.AudioSegment) []sqlite.AudioSegment {
+	n, characters := 1, utf8.RuneCountInString(pending[0].SpokenText())
+	for n < len(pending) && pending[n].Index == pending[n-1].Index+1 {
+		characters += len(takeSeparator) + utf8.RuneCountInString(pending[n].SpokenText())
+		if characters > maxTakeCharacters {
+			break
+		}
+		n++
+	}
+	return pending[:n]
+}
+
+// clip is one segment's audio, ready to save.
+type clip struct {
+	audio        []byte
+	durationMS   int64
+	charStartsMS []int64
+}
+
+// speakTake speaks take, a run of consecutive segments of all, in one request,
+// then cuts the MP3 between frames halfway through the pause between each two
+// segments. The voice keeps its tone across paragraphs that way, as when one
+// person reads the article. If the audio cannot be cut, each segment is spoken
+// on its own.
+func (e *Engine) speakTake(ctx context.Context, voiceID string, all, take []sqlite.AudioSegment) ([]clip, error) {
+	var previous, next string
+	if first := take[0].Index; first > 0 {
+		previous = all[first-1].SpokenText()
+	}
+	if last := take[len(take)-1].Index; last+1 < len(all) {
+		next = all[last+1].SpokenText()
+	}
+	texts := make([]string, len(take))
+	offsets := make([]int, len(take))
+	for i, seg := range take {
+		texts[i] = seg.SpokenText()
+		if i > 0 {
+			offsets[i] = offsets[i-1] + utf8.RuneCountInString(texts[i-1]) + len(takeSeparator)
+		}
+	}
+	spoken, err := e.synthesize(ctx, voiceID, strings.Join(texts, takeSeparator), previous, next)
+	if err != nil {
+		return nil, err
+	}
+	if len(take) == 1 {
+		return []clip{{audio: spoken.audio, durationMS: spoken.durationMS, charStartsMS: shownStarts(take[0], spoken.charStartsMS)}}, nil
+	}
+	stream, err := parseMP3(spoken.audio)
+	if err != nil || !spoken.aligned {
+		e.logger.Warn("audio take not cut; speaking its segments one by one", "error", err)
+		return e.speakEach(ctx, voiceID, all, take)
+	}
+	cuts := make([]int, len(take)+1)
+	cuts[len(take)] = len(stream.frames)
+	for i := 1; i < len(take); i++ {
+		end := spoken.charEndsMS[offsets[i-1]+utf8.RuneCountInString(texts[i-1])-1]
+		start := spoken.charStartsMS[offsets[i]]
+		cuts[i] = max(stream.frameAt(float64(end+start)/2), cuts[i-1])
+	}
+	clips := make([]clip, len(take))
+	for i, seg := range take {
+		from, to := cuts[i], max(cuts[i+1], cuts[i])
+		if from == to {
+			return e.speakEach(ctx, voiceID, all, take)
+		}
+		begin := int64(float64(from) * stream.frameMS)
+		starts := make([]int64, utf8.RuneCountInString(texts[i]))
+		for j := range starts {
+			starts[j] = max(spoken.charStartsMS[offsets[i]+j]-begin, 0)
+		}
+		clips[i] = clip{audio: stream.clip(from, to), durationMS: int64(float64(to-from) * stream.frameMS), charStartsMS: shownStarts(seg, starts)}
+	}
+	return clips, nil
+}
+
+// speakEach speaks each segment of take in its own request.
+func (e *Engine) speakEach(ctx context.Context, voiceID string, all, take []sqlite.AudioSegment) ([]clip, error) {
+	clips := make([]clip, len(take))
+	for i, seg := range take {
+		var previous, next string
+		if seg.Index > 0 {
+			previous = all[seg.Index-1].SpokenText()
+		}
+		if seg.Index+1 < len(all) {
+			next = all[seg.Index+1].SpokenText()
+		}
+		spoken, err := e.synthesize(ctx, voiceID, seg.SpokenText(), previous, next)
+		if err != nil {
+			return nil, err
+		}
+		clips[i] = clip{audio: spoken.audio, durationMS: spoken.durationMS, charStartsMS: shownStarts(seg, spoken.charStartsMS)}
+	}
+	return clips, nil
+}
+
+// shownStarts times each code point of the segment's shown text from the start
+// times of its spoken text. Between two sync points, the shown words take the
+// spoken times at the same relative position.
+func shownStarts(seg sqlite.AudioSegment, spokenStarts []int64) []int64 {
+	if seg.Spoken == "" || len(spokenStarts) == 0 {
+		return spokenStarts
+	}
+	shown := utf8.RuneCountInString(seg.Text)
+	points := append(append([]sqlite.SyncPoint{{0, 0}}, seg.Sync...), sqlite.SyncPoint{shown, len(spokenStarts)})
+	starts := make([]int64, shown)
+	for p := 1; p < len(points); p++ {
+		from, to := points[p-1], points[p]
+		for i := from[0]; i < to[0]; i++ {
+			j := from[1] + (i-from[0])*(to[1]-from[1])/(to[0]-from[0])
+			starts[i] = spokenStarts[min(j, len(spokenStarts)-1)]
+		}
+	}
+	for i := 1; i < shown; i++ {
+		starts[i] = max(starts[i], starts[i-1])
+	}
+	return starts
 }
 
 // synthesize tries a segment a few times, waiting longer after each failure.

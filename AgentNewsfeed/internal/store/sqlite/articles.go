@@ -42,6 +42,27 @@ type Article struct {
 	ThumbnailBytes  int    `json:"thumbnail_bytes,omitzero"`
 	// Sorted, distinct tags; nil when the article has none.
 	Tags []string `json:"tags,omitempty"`
+	// Narration is how the article is read aloud; nil for an article saved
+	// before scripts existed. Lists omit it, like the body.
+	Narration []NarrationPart `json:"narration,omitempty"`
+}
+
+// NarrationPart is one part of an article's narration script, in reading
+// order: what the voice says (Say) for a passage of the article's text (Text),
+// or for the code block, diagram or table it describes (Describe).
+type NarrationPart struct {
+	Text     string `json:"text,omitempty"`
+	Describe string `json:"describe,omitempty"`
+	Say      string `json:"say"`
+}
+
+// narrationJSON is the stored form of an article's narration: ” for none.
+func narrationJSON(parts []NarrationPart) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	raw, _ := json.Marshal(parts)
+	return string(raw)
 }
 
 type MutationResult struct {
@@ -88,24 +109,32 @@ const articleFrom = ` FROM articles a
  LEFT JOIN thumbnail_blobs b ON b.owner_id=t.owner_id AND b.hash=t.hash `
 const articleSummaryColumns = `a.id, ` + articleURL + `, a.title, a.summary, a.thumbnail_url, a.revision, a.created_at, a.updated_at,
  a.archived_at, a.trashed_at, a.thumbnail_status, COALESCE(b.hash,''), COALESCE(b.width,0), COALESCE(b.height,0), COALESCE(length(b.jpeg),0), ` + articleTags
-const articleColumns = articleSummaryColumns + ", a.content_markdown"
+const articleColumns = articleSummaryColumns + ", a.content_markdown, a.narration"
 
 type scanner interface{ Scan(...any) error }
 
 func scanArticle(row scanner) (Article, error) {
 	var a Article
 	var archived, trashed sql.NullInt64
-	var tags string
+	var tags, narration string
 	err := row.Scan(&a.ID, &a.URL, &a.Title, &a.Summary, &a.ThumbnailURL, &a.Revision, &a.CreatedAt, &a.UpdatedAt,
-		&archived, &trashed, &a.ThumbnailStatus, &a.ThumbnailHash, &a.ThumbnailWidth, &a.ThumbnailHeight, &a.ThumbnailBytes, &tags, &a.ContentMarkdown)
+		&archived, &trashed, &a.ThumbnailStatus, &a.ThumbnailHash, &a.ThumbnailWidth, &a.ThumbnailHeight, &a.ThumbnailBytes, &tags, &a.ContentMarkdown, &narration)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Article{}, ErrNotFound
+	}
+	if err != nil {
+		return Article{}, err
+	}
 	a.ArchivedAt, a.TrashedAt = archived.Int64, trashed.Int64
 	if tags != "" {
 		a.Tags = strings.Split(tags, ",")
 	}
-	if errors.Is(err, sql.ErrNoRows) {
-		return Article{}, ErrNotFound
+	if narration != "" {
+		if err := json.Unmarshal([]byte(narration), &a.Narration); err != nil {
+			return Article{}, err
+		}
 	}
-	return a, err
+	return a, nil
 }
 
 func (s *Store) Article(ctx context.Context, owner Owner, id string) (Article, error) {
@@ -177,7 +206,7 @@ func listArticles(ctx context.Context, db queryer, owner Owner, cursor Cursor, l
 	// The summary selection excludes both Markdown and JPEG payloads.
 	filter, order, args := articleSelection(owner, cursor, query, anyTags)
 	pageSQL, pageArgs := pageRange(order, "a.id", cursor.Timestamp, cursor.ID, cursor.Before, limit)
-	rows, err := db.QueryContext(ctx, "SELECT "+articleSummaryColumns+", ''"+articleFrom+
+	rows, err := db.QueryContext(ctx, "SELECT "+articleSummaryColumns+", '', ''"+articleFrom+
 		"WHERE "+filter+pageSQL, append(args, pageArgs...)...)
 	if err != nil {
 		return nil, err
@@ -326,8 +355,8 @@ func mutateArticleTx(ctx context.Context, tx *sql.Tx, owner Owner, key, operatio
 			if a.ThumbnailURL != "" {
 				a.ThumbnailStatus = "legacy"
 			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO articles(owner_id,id,canonical_url,title,summary,thumbnail_url,revision,created_at,updated_at,content_markdown,thumbnail_status)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?)`, owner.id, a.ID, storedURL(a), a.Title, a.Summary, a.ThumbnailURL, a.Revision, a.CreatedAt, a.UpdatedAt, a.ContentMarkdown, a.ThumbnailStatus); err != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO articles(owner_id,id,canonical_url,title,summary,thumbnail_url,revision,created_at,updated_at,content_markdown,thumbnail_status,narration)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, owner.id, a.ID, storedURL(a), a.Title, a.Summary, a.ThumbnailURL, a.Revision, a.CreatedAt, a.UpdatedAt, a.ContentMarkdown, a.ThumbnailStatus, narrationJSON(a.Narration)); err != nil {
 				return MutationResult{}, err
 			}
 			if err := replaceTags(ctx, tx, owner, a); err != nil {
@@ -368,8 +397,8 @@ func mutateArticleTx(ctx context.Context, tx *sql.Tx, owner Owner, key, operatio
 			a.Revision, a.CreatedAt, a.UpdatedAt, a.ArchivedAt = current.Revision+1, current.CreatedAt, now, current.ArchivedAt
 			a.ThumbnailStatus, a.ThumbnailHash = current.ThumbnailStatus, current.ThumbnailHash
 			a.ThumbnailWidth, a.ThumbnailHeight, a.ThumbnailBytes = current.ThumbnailWidth, current.ThumbnailHeight, current.ThumbnailBytes
-			if _, err := tx.ExecContext(ctx, `UPDATE articles SET canonical_url=?,title=?,summary=?,thumbnail_url=?,revision=?,updated_at=?,content_markdown=?
-   WHERE owner_id=? AND id=?`, storedURL(a), a.Title, a.Summary, a.ThumbnailURL, a.Revision, a.UpdatedAt, a.ContentMarkdown, owner.id, a.ID); err != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE articles SET canonical_url=?,title=?,summary=?,thumbnail_url=?,revision=?,updated_at=?,content_markdown=?,narration=?
+   WHERE owner_id=? AND id=?`, storedURL(a), a.Title, a.Summary, a.ThumbnailURL, a.Revision, a.UpdatedAt, a.ContentMarkdown, narrationJSON(a.Narration), owner.id, a.ID); err != nil {
 				return MutationResult{}, err
 			}
 			if err := replaceTags(ctx, tx, owner, a); err != nil {

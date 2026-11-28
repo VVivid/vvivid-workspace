@@ -133,7 +133,7 @@ func TestOfficialMCPAddListUpdateAndBrowserSharePrivateRecords(t *testing.T) {
 			t.Fatalf("retired tool %s did not return an unknown-tool error: %v", name, err)
 		}
 	}
-	in := feed.AddInput{IdempotencyKey: "mcp-add", Article: feed.Content{URL: "https://example.com/story?utm_source=agent", Title: "An interesting story", Summary: "A concise, sourced introduction.", ThumbnailURL: "https://images.publisher.example/source.png"}}
+	in := feed.AddInput{IdempotencyKey: "mcp-add", Article: narrated(feed.Content{URL: "https://example.com/story?utm_source=agent", Title: "An interesting story", Summary: "A concise, sourced introduction.", ThumbnailURL: "https://images.publisher.example/source.png"})}
 	first := decode[sqlite.MutationResult](t, call(t, c, "add_article", in))
 	if !first.Created {
 		t.Fatal("MCP did not create article")
@@ -145,10 +145,14 @@ func TestOfficialMCPAddListUpdateAndBrowserSharePrivateRecords(t *testing.T) {
 		t.Fatal("MCP replay changed original result")
 	}
 	page := decode[feed.Page](t, call(t, c, "list_articles", feed.ListInput{}))
-	if len(page.Articles) != 1 || !reflect.DeepEqual(page.Articles[0], first.Article) {
+	// Lists omit the narration script, like the body.
+	listed := first.Article
+	listed.Narration = nil
+	if len(page.Articles) != 1 || !reflect.DeepEqual(page.Articles[0], listed) {
 		t.Fatal("MCP list did not see write")
 	}
 	in.Article.Title = `<img src=x onerror=alert(1)>`
+	in.Article = narrated(in.Article)
 	in.Article.ThumbnailURL = "https://another-publisher.example/replacement.png"
 	edit := feed.UpdateInput{IdempotencyKey: "mcp-edit", ArticleID: first.Article.ID, ExpectedRevision: 1, Article: in.Article}
 	updated := decode[sqlite.MutationResult](t, call(t, c, "update_article", edit))
@@ -252,7 +256,7 @@ func TestComposedAuthenticationMetadataAndThumbnailBoundaries(t *testing.T) {
 	var calls atomic.Int32
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1) }))
 	defer remote.Close()
-	article, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "source", Article: feed.Content{URL: "https://example.com/a", Title: "Private", Summary: "Private introduction."}})
+	article, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "source", Article: narrated(feed.Content{URL: "https://example.com/a", Title: "Private", Summary: "Private introduction."})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +368,7 @@ func TestOwnedPersistedMarkdownImagesUseProtectedRoutes(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := f.Principal(t, "alice", allScopes)
-	content := feed.Content{URL: "https://publisher.example/articles/story", Title: "Source", Summary: "Source introduction", ThumbnailURL: "https://cdn.publisher.example/card.png", ContentMarkdown: "![Source image](../photo.png)\n\n![Again][source]\n\n[source]: ../photo.png\n\n![Private](https://127.0.0.1/private.png)\n\n[Link only](https://publisher.example/link-only.png)"}
+	content := narrated(feed.Content{URL: "https://publisher.example/articles/story", Title: "Source", Summary: "Source introduction", ThumbnailURL: "https://cdn.publisher.example/card.png", ContentMarkdown: "![Source image](../photo.png)\n\n![Again][source]\n\n[source]: ../photo.png\n\n![Private](https://127.0.0.1/private.png)\n\n[Link only](https://publisher.example/link-only.png)"})
 	legacy, err := feed.NormalizeAddInput(feed.AddInput{IdempotencyKey: "image-source", Article: content}, thumbnail.Policy{})
 	if err != nil {
 		t.Fatal(err)
@@ -432,6 +436,7 @@ func TestOwnedPersistedMarkdownImagesUseProtectedRoutes(t *testing.T) {
 		t.Fatal("card thumbnail contract changed")
 	}
 	content.ContentMarkdown = "Original text, with the image removed."
+	content = narrated(content)
 	if _, err := s.UpdateArticle(t.Context(), p, feed.UpdateInput{IdempotencyKey: "remove-image", ArticleID: article.Article.ID, ExpectedRevision: 1, Article: content}); err != nil {
 		t.Fatal(err)
 	}
@@ -458,7 +463,7 @@ func postArticleForm(h http.Handler, path string, cookie *http.Cookie, token, or
 func TestReaderDetailArchiveFormsRequireOwnerScopesAndCSRF(t *testing.T) {
 	f, s, h := app(t)
 	p := f.Principal(t, "alice", allScopes)
-	c := feed.Content{URL: "https://example.com/original", Title: "Original title", Summary: "Original introduction", ContentMarkdown: "# Original article\n\nSaved source text.\n\n![disabled](https://images.example.com/inline.png)\n\n<script>alert(1)</script>"}
+	c := narrated(feed.Content{URL: "https://example.com/original", Title: "Original title", Summary: "Original introduction", ContentMarkdown: "# Original article\n\nSaved source text.\n\n![disabled](https://images.example.com/inline.png)\n\n<script>alert(1)</script>"})
 	out, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: "reader", Article: c})
 	if err != nil {
 		t.Fatal(err)
@@ -560,7 +565,7 @@ func TestMCPAcceptsFullSourceBeyondOldRequestLimitAndListsSummaries(t *testing.T
 	server := httptest.NewServer(h)
 	defer server.Close()
 	c := client(t, server.URL, f.Bearer("alice", "newsfeed-chatgpt", f.Manager.MCPAudience(), allScopes))
-	in := feed.AddInput{IdempotencyKey: "long-original", Article: feed.Content{URL: "https://example.com/long", Title: "Source title", Summary: "Source introduction.", ContentMarkdown: "# Source\n\n" + strings.Repeat("Original source paragraph.\n\n", 3000)}}
+	in := feed.AddInput{IdempotencyKey: "long-original", Article: narrated(feed.Content{URL: "https://example.com/long", Title: "Source title", Summary: "Source introduction.", ContentMarkdown: "# Source\n\n" + strings.Repeat("Original source paragraph.\n\n", 3000)})}
 	out := decode[sqlite.MutationResult](t, call(t, c, "add_article", in))
 	if out.Article.ContentMarkdown != in.Article.ContentMarkdown {
 		t.Fatal("MCP truncated original Markdown")

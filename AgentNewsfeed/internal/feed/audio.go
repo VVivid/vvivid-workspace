@@ -1,6 +1,7 @@
 package feed
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -32,9 +33,15 @@ const (
 // EnableAudio lets the service create and serve audio with engine.
 func (s *Service) EnableAudio(engine *audio.Engine) { s.audio = engine }
 
+// AudioSegmentInput is one part of the article to speak. Text is what the
+// reader shows. With the article's narration script, Spoken is what the voice
+// says instead, and Sync pairs code point offsets in Text with the offsets in
+// Spoken where the same words start, so highlighting follows the voice.
 type AudioSegmentInput struct {
-	Block int    `json:"block"`
-	Text  string `json:"text"`
+	Block  int                `json:"block"`
+	Text   string             `json:"text"`
+	Spoken string             `json:"spoken,omitempty"`
+	Sync   []sqlite.SyncPoint `json:"sync,omitempty"`
 }
 
 type CreateAudioInput struct {
@@ -156,11 +163,12 @@ func (s *Service) CreateArticleAudio(ctx context.Context, p identity.Principal, 
 	segments := make([]sqlite.NewAudioSegment, 0, len(in.Segments))
 	characters := 0
 	for _, seg := range in.Segments {
-		if !validSpokenText(seg.Text) || seg.Block < audioTitleSummaryBlock {
+		if !validSpokenText(seg.Text) || seg.Block < audioTitleSummaryBlock || !validSpokenScript(seg) {
 			return AudioStatus{}, errInvalidAudio
 		}
-		characters += utf8.RuneCountInString(seg.Text)
-		segments = append(segments, sqlite.NewAudioSegment{Block: seg.Block, Text: seg.Text})
+		spoken := cmp.Or(seg.Spoken, seg.Text)
+		characters += utf8.RuneCountInString(spoken)
+		segments = append(segments, sqlite.NewAudioSegment{Block: seg.Block, Text: seg.Text, Spoken: seg.Spoken, Sync: seg.Sync})
 	}
 	if characters > maxAudioCharacters {
 		return AudioStatus{}, errInvalidAudio
@@ -171,6 +179,26 @@ func (s *Service) CreateArticleAudio(ctx context.Context, p identity.Principal, 
 	}
 	s.audio.Wake()
 	return s.audioStatus(a), nil
+}
+
+// validSpokenScript checks a segment's spoken text and its sync points, which
+// must move forward in both texts and stay inside them.
+func validSpokenScript(seg AudioSegmentInput) bool {
+	if seg.Spoken == "" {
+		return len(seg.Sync) == 0
+	}
+	if !validSpokenText(seg.Spoken) {
+		return false
+	}
+	shown, spoken := utf8.RuneCountInString(seg.Text), utf8.RuneCountInString(seg.Spoken)
+	previous := sqlite.SyncPoint{0, 0}
+	for _, point := range seg.Sync {
+		if point[0] <= previous[0] || point[1] <= previous[1] || point[0] >= shown || point[1] >= spoken {
+			return false
+		}
+		previous = point
+	}
+	return true
 }
 
 func validSpokenText(text string) bool {

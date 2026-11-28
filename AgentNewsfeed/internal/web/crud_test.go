@@ -66,7 +66,7 @@ func TestOfficialMCPFullReadPatchTrashRestoreArchiveAndAuthorization(t *testing.
 	bob := client(t, server.URL, f.Bearer("bob", "newsfeed-chatgpt", f.Manager.MCPAudience(), allScopes))
 	readOnly := client(t, server.URL, f.Bearer("alice", "newsfeed-codex", f.Manager.MCPAudience(), identity.Read))
 	writeOnly := client(t, server.URL, f.Bearer("alice", "newsfeed-codex", f.Manager.MCPAudience(), identity.ArticlesWrite))
-	add := feed.AddInput{IdempotencyKey: "full", Article: feed.Content{URL: "https://example.com/full", Title: "Source title", Summary: "Source introduction", ThumbnailURL: "https://images.example.com/a.png", ContentMarkdown: "# Complete original\n\n![Figure](https://images.example.com/figure.png)"}}
+	add := feed.AddInput{IdempotencyKey: "full", Article: narrated(feed.Content{URL: "https://example.com/full", Title: "Source title", Summary: "Source introduction", ThumbnailURL: "https://images.example.com/a.png", ContentMarkdown: "# Complete original\n\n![Figure](https://images.example.com/figure.png)"})}
 	first := decode[sqlite.MutationResult](t, call(t, alice, "add_article", add))
 	get := feed.GetInput{ArticleID: first.Article.ID}
 	if got := decode[sqlite.Article](t, call(t, alice, "get_article", get)); !reflect.DeepEqual(got, first.Article) {
@@ -75,7 +75,7 @@ func TestOfficialMCPFullReadPatchTrashRestoreArchiveAndAuthorization(t *testing.
 	if !call(t, bob, "get_article", get).IsError || !call(t, writeOnly, "get_article", get).IsError {
 		t.Fatal("MCP full read crossed owner or scope")
 	}
-	patch := feed.PatchInput{IdempotencyKey: "partial", ArticleID: first.Article.ID, ExpectedRevision: 1, Patch: feed.Patch{Title: new("Corrected title")}}
+	patch := feed.PatchInput{IdempotencyKey: "partial", ArticleID: first.Article.ID, ExpectedRevision: 1, Patch: feed.Patch{Title: new("Corrected title"), Narration: narrationFor("Corrected title", first.Article.ContentMarkdown)}}
 	if !call(t, readOnly, "patch_article", patch).IsError || !call(t, writeOnly, "patch_article", patch).IsError || !call(t, bob, "patch_article", patch).IsError {
 		t.Fatal("MCP patch crossed owner or scope")
 	}
@@ -89,7 +89,7 @@ func TestOfficialMCPFullReadPatchTrashRestoreArchiveAndAuthorization(t *testing.
 			t.Fatalf("MCP accepted invalid patch %v", bad)
 		}
 	}
-	clear := map[string]any{"article_id": first.Article.ID, "idempotency_key": "clear-body", "expected_revision": 2, "patch": map[string]any{"content_markdown": nil}}
+	clear := map[string]any{"article_id": first.Article.ID, "idempotency_key": "clear-body", "expected_revision": 2, "patch": map[string]any{"content_markdown": nil, "narration": feed.PlainNarration("Corrected title", "")}}
 	cleared := decode[sqlite.MutationResult](t, call(t, alice, "patch_article", clear))
 	if cleared.Article.ContentMarkdown != "" || cleared.Article.ThumbnailHash != first.Article.ThumbnailHash {
 		t.Fatal("MCP null clear not isolated")
@@ -189,8 +189,8 @@ func TestRawMCPPatchRejectsAmbiguousFieldsBeforeSideEffects(t *testing.T) {
 	c := client(t, server.URL, token)
 	first := decode[sqlite.MutationResult](t, call(t, c, "add_article", feed.AddInput{
 		IdempotencyKey: "raw-add",
-		Article: feed.Content{URL: "https://example.com/raw-patch", Title: "Original title", Summary: "Original introduction",
-			ContentMarkdown: "# Original body", ThumbnailURL: "https://images.example.com/original.jpg"},
+		Article: narrated(feed.Content{URL: "https://example.com/raw-patch", Title: "Original title", Summary: "Original introduction",
+			ContentMarkdown: "# Original body", ThumbnailURL: "https://images.example.com/original.jpg"}),
 	}))
 	p := f.Principal(t, "alice", allScopes)
 
@@ -309,11 +309,15 @@ func TestRawMCPPatchRejectsAmbiguousFieldsBeforeSideEffects(t *testing.T) {
 
 	// A rejected key remains usable. Omission still retains stored fields,
 	// while each explicit null clears only its optional field through the schema.
-	updated := decode[sqlite.MutationResult](t, patch(t, arguments("raw-rejected", 1, `"patch":{"title":"Accepted title"}`)))
+	script := func(title, body string) string {
+		raw, _ := json.Marshal(feed.PlainNarration(title, body))
+		return string(raw)
+	}
+	updated := decode[sqlite.MutationResult](t, patch(t, arguments("raw-rejected", 1, `"patch":{"title":"Accepted title","narration":`+script("Accepted title", "# Original body")+`}`)))
 	if updated.Article.ContentMarkdown != first.Article.ContentMarkdown || updated.Article.ThumbnailHash != first.Article.ThumbnailHash || images.calls.Load() != 1 {
 		t.Fatal("raw patch lost omitted body or thumbnail")
 	}
-	clearedBody := decode[sqlite.MutationResult](t, patch(t, arguments("raw-clear-body", 2, `"patch":{"content_markdown":null}`)))
+	clearedBody := decode[sqlite.MutationResult](t, patch(t, arguments("raw-clear-body", 2, `"patch":{"content_markdown":null,"narration":`+script("Accepted title", "")+`}`)))
 	if clearedBody.Article.ContentMarkdown != "" || clearedBody.Article.ThumbnailHash != first.Article.ThumbnailHash || clearedBody.Article.Title != updated.Article.Title {
 		t.Fatal("raw null body clear changed another field")
 	}
@@ -321,7 +325,7 @@ func TestRawMCPPatchRejectsAmbiguousFieldsBeforeSideEffects(t *testing.T) {
 	if clearedImage.Article.ThumbnailURL != "" || clearedImage.Article.ThumbnailHash != "" || clearedImage.Article.ContentMarkdown != "" || images.calls.Load() != 1 {
 		t.Fatal("raw null thumbnail clear fetched or retained an image")
 	}
-	if replay := decode[sqlite.MutationResult](t, patch(t, arguments("raw-clear-body", 2, `"patch":{"content_markdown":""}`))); !reflect.DeepEqual(replay, clearedBody) {
+	if replay := decode[sqlite.MutationResult](t, patch(t, arguments("raw-clear-body", 2, `"patch":{"content_markdown":"","narration":`+script("Accepted title", "")+`}`))); !reflect.DeepEqual(replay, clearedBody) {
 		t.Fatal("raw empty/null clear retry changed the original result")
 	}
 }
@@ -344,7 +348,7 @@ func stateForm(h http.Handler, path string, cookie *http.Cookie, csrf, key strin
 func TestBrowserTrashFormsViewsImagesAndCSRF(t *testing.T) {
 	f, s, h := app(t)
 	p := f.Principal(t, "alice", allScopes)
-	c := feed.Content{URL: "https://example.com/trash", Title: "Source title", Summary: "Source introduction", ContentMarkdown: "# Original source\n\n![Source figure](https://images.example.com/figure.png)"}
+	c := narrated(feed.Content{URL: "https://example.com/trash", Title: "Source title", Summary: "Source introduction", ContentMarkdown: "# Original source\n\n![Source figure](https://images.example.com/figure.png)"})
 	first, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: "save", Article: c})
 	if err != nil {
 		t.Fatal(err)

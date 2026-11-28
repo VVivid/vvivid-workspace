@@ -56,10 +56,10 @@ func TestBrowserJSONPageAndStateForms(t *testing.T) {
 	p := f.Principal(t, "alice", allScopes)
 	cookie := f.CookieWithScopes(t, "alice", allScopes)
 	_, csrf := f.BrowserPrincipal(t, cookie)
-	a, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: "json-article", Article: feed.Content{
+	a, err := s.AddArticle(t.Context(), p, feed.AddInput{IdempotencyKey: "json-article", Article: narrated(feed.Content{
 		URL: "https://example.com/story", Title: "Saved article", Summary: "Introduction",
 		ContentMarkdown: "# Source\n\n<script>untrusted()</script>\n\n![Figure](https://images.example.com/figure.png)",
-	}})
+	})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestCompactShelfActionsKeepViewAndRejectUnsafeDestinationsBeforeWrite(t *te
 	p := f.Principal(t, "alice", allScopes)
 	cookie := f.CookieWithScopes(t, "alice", allScopes)
 	_, csrf := f.BrowserPrincipal(t, cookie)
-	a, err := s.AddArticle(ctx, p, feed.AddInput{IdempotencyKey: "compact", Article: feed.Content{URL: "https://example.com/compact", Title: "Compact", Summary: "Saved source introduction"}})
+	a, err := s.AddArticle(ctx, p, feed.AddInput{IdempotencyKey: "compact", Article: narrated(feed.Content{URL: "https://example.com/compact", Title: "Compact", Summary: "Saved source introduction"})})
 	if err != nil {
 		t.Fatal(err)
 	}

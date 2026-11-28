@@ -197,7 +197,7 @@ class ChartTests(unittest.TestCase):
         env = {e["name"]: e["value"] for e in container["env"]}
         self.assertEqual(env["NEWSFEED_ELEVENLABS_API_KEY_FILE"], "/run/identity/elevenlabs-api-key")
         self.assertEqual(env["NEWSFEED_AUDIO_DIR"], "/data/audio")
-        self.assertEqual(env["NEWSFEED_ELEVENLABS_MODEL"], "eleven_multilingual_v2")
+        self.assertEqual(env["NEWSFEED_ELEVENLABS_MODEL"], "eleven_v4")
         self.assertEqual(env["NEWSFEED_ELEVENLABS_OUTPUT_FORMAT"], "mp3_44100_64")
         self.assertEqual(json.loads(env["NEWSFEED_AUDIO_VOICES"]), voices)
         for audio in ({"existingSecret": "elevenlabs"}, {"voices": [{"id": "Talia", "name": "Talia", "elevenlabs_voice_id": "abcdefghij1234567890"}]},

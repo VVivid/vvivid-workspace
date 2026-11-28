@@ -142,7 +142,7 @@ func TestDiscoveryConcurrencyBudgetsDedupeSourceAgeAndStalePreferences(t *testin
 		t.Fatal("concurrent leases")
 	}
 	input := func(key, path string) feed.IngestDiscoveryInput {
-		return feed.IngestDiscoveryInput{IdempotencyKey: key, RunID: run.ID, ExpectedPreferencesRevision: state.Revision, Article: feed.Content{URL: "https://example.com/" + path, Title: "Original research", Summary: "An introduction backed by the original source."}, WhyMatch: "Explains the chosen technical topic with evidence.", PublishedAt: time.Now().UnixMilli()}
+		return feed.IngestDiscoveryInput{IdempotencyKey: key, RunID: run.ID, ExpectedPreferencesRevision: state.Revision, Article: narrated(feed.Content{URL: "https://example.com/" + path, Title: "Original research", Summary: "An introduction backed by the original source."}), WhyMatch: "Explains the chosen technical topic with evidence.", PublishedAt: time.Now().UnixMilli()}
 	}
 	bad := input("blocked", "story")
 	bad.Article.URL = "https://blocked.example.com/story"

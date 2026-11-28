@@ -24,7 +24,7 @@ thumbnailHosts: ''
 # holds the API key under api-key. Empty existingSecret turns audio off.
 audio:
   existingSecret: ''
-  model: eleven_multilingual_v2
+  model: eleven_v4
   outputFormat: mp3_44100_64
   # Each voice: id (the app's name), name, description, elevenlabs_voice_id.
   voices: []

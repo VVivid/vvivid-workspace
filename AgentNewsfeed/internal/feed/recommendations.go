@@ -259,6 +259,11 @@ func (s *Service) IngestDiscoveryArticle(ctx context.Context, p identity.Princip
 	if out, found, err := s.store.ReplayMutation(ctx, p.Owner(), in.IdempotencyKey, "ingest_discovery_article", payload); found || err != nil {
 		return out, err
 	}
+	// After the replay check, so a retry from before scripts existed still
+	// returns its original result.
+	if err := requireNarration(in.Article); err != nil {
+		return sqlite.MutationResult{}, err
+	}
 	item := sqlite.DiscoveryItem{WhyMatch: in.WhyMatch, PublishedAt: in.PublishedAt, Evergreen: in.Evergreen}
 	if err := s.store.CheckDiscoveryArticle(ctx, p.Owner(), in.RunID, in.ExpectedPreferencesRevision, a, item); err != nil {
 		return sqlite.MutationResult{}, err

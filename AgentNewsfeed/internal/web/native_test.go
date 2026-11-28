@@ -64,10 +64,10 @@ func TestNativeAppBearerReadsOwnedArticlesAndImagesOnly(t *testing.T) {
 	inline := &recordingImageFetcher{}
 	f, s, h := nativeApp(t, inline)
 	figure := "https://images.example.com/figure.png"
-	added, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "native-read", Article: feed.Content{
+	added, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "native-read", Article: narrated(feed.Content{
 		URL: "https://example.com/native-story", Title: "Native story", Summary: "A sourced introduction.",
 		ThumbnailURL: "https://images.example.com/card.png", ContentMarkdown: "# Source\n\n![Figure](" + figure + ")",
-	}})
+	})})
 	if err != nil || added.Article.ThumbnailStatus != "stored" {
 		t.Fatalf("saved article: %v", err)
 	}
@@ -167,9 +167,9 @@ func TestNativeAppBearerReadsOwnedArticlesAndImagesOnly(t *testing.T) {
 
 func TestNativeAppBearerIsIgnoredWithoutConfiguredNativeClients(t *testing.T) {
 	f, s, h := app(t)
-	added, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "browser-only", Article: feed.Content{
+	added, err := s.AddArticle(t.Context(), f.Principal(t, "alice", allScopes), feed.AddInput{IdempotencyKey: "browser-only", Article: narrated(feed.Content{
 		URL: "https://example.com/browser-only", Title: "Browser only", Summary: "A sourced introduction.",
-	}})
+	})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,9 +258,9 @@ func requireNativeAppError(t *testing.T, response *httptest.ResponseRecorder, st
 func TestNativeAppStateChangesMatchMCPSemantics(t *testing.T) {
 	f, s, h := nativeApp(t, &recordingImageFetcher{})
 	alice := f.Principal(t, "alice", allScopes)
-	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "native-state", Article: feed.Content{
+	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "native-state", Article: narrated(feed.Content{
 		URL: "https://example.com/native-state", Title: "Native state", Summary: "A sourced introduction.", ContentMarkdown: "# Source\n\nOriginal text.",
-	}})
+	})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,9 +337,9 @@ func TestNativeAppStateChangesMatchMCPSemantics(t *testing.T) {
 func TestNativeAppStateChangesRequireBothScopesOwnerAndOnlyTheBearerToken(t *testing.T) {
 	f, s, h := nativeApp(t, &recordingImageFetcher{})
 	alice := f.Principal(t, "alice", allScopes)
-	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "native-guarded", Article: feed.Content{
+	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "native-guarded", Article: narrated(feed.Content{
 		URL: "https://example.com/native-guarded", Title: "Guarded", Summary: "A sourced introduction.",
-	}})
+	})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,9 +404,9 @@ func TestNativeAppStateChangesRequireBothScopesOwnerAndOnlyTheBearerToken(t *tes
 func TestOfflineAccessScopeGrantsNothingToNativeAppsOrBrowsers(t *testing.T) {
 	f, s, h := nativeApp(t, &recordingImageFetcher{})
 	alice := f.Principal(t, "alice", allScopes)
-	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "offline-access", Article: feed.Content{
+	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "offline-access", Article: narrated(feed.Content{
 		URL: "https://example.com/offline-access", Title: "Offline access", Summary: "A sourced introduction.",
-	}})
+	})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,9 +466,9 @@ func TestOfflineAccessScopeGrantsNothingToNativeAppsOrBrowsers(t *testing.T) {
 func TestNativeAppStateChangesRejectInvalidRequestsWithoutReservingKeys(t *testing.T) {
 	f, s, h := nativeApp(t, &recordingImageFetcher{})
 	alice := f.Principal(t, "alice", allScopes)
-	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "native-input-add", Article: feed.Content{
+	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "native-input-add", Article: narrated(feed.Content{
 		URL: "https://example.com/native-input", Title: "Input", Summary: "A sourced introduction.",
-	}})
+	})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -528,9 +528,9 @@ func TestNativeAppStateChangesRejectInvalidRequestsWithoutReservingKeys(t *testi
 func TestBrowserStateFormsAreUnchangedBesideNativeApps(t *testing.T) {
 	f, s, h := nativeApp(t, &recordingImageFetcher{})
 	alice := f.Principal(t, "alice", allScopes)
-	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "browser-state", Article: feed.Content{
+	added, err := s.AddArticle(t.Context(), alice, feed.AddInput{IdempotencyKey: "browser-state", Article: narrated(feed.Content{
 		URL: "https://example.com/browser-state", Title: "Browser state", Summary: "A sourced introduction.",
-	}})
+	})})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -141,7 +141,7 @@ func TestRecommendationBrowserAndAllMCPToolsShareOwnerStateDirectAndGateway(t *t
 				t.Fatal(context)
 			}
 			run := decode[sqlite.DiscoveryRun](t, call(t, alice, "start_discovery_run", feed.StartDiscoveryInput{IdempotencyKey: "run", ExpectedPreferencesRevision: current.Revision}))
-			ingest := feed.IngestDiscoveryInput{IdempotencyKey: "match", RunID: run.ID, ExpectedPreferencesRevision: current.Revision, Article: feed.Content{URL: "https://example.com/discovery", Title: "Storage design", Summary: "Source-backed introduction."}, WhyMatch: "Detailed storage engine design matches the accepted interest.", PublishedAt: time.Now().UnixMilli()}
+			ingest := feed.IngestDiscoveryInput{IdempotencyKey: "match", RunID: run.ID, ExpectedPreferencesRevision: current.Revision, Article: narrated(feed.Content{URL: "https://example.com/discovery", Title: "Storage design", Summary: "Source-backed introduction."}), WhyMatch: "Detailed storage engine design matches the accepted interest.", PublishedAt: time.Now().UnixMilli()}
 			saved := decode[sqlite.MutationResult](t, call(t, alice, "ingest_discovery_article", ingest))
 			if !saved.Created {
 				t.Fatal(saved)
@@ -232,7 +232,7 @@ func TestDiscoveryHistoryKeepsOriginalSourceAfterPatchAndRestart(t *testing.T) {
 	run := decode[sqlite.DiscoveryRun](t, call(t, alice, "start_discovery_run", feed.StartDiscoveryInput{IdempotencyKey: "run", ExpectedPreferencesRevision: 2}))
 	input := feed.IngestDiscoveryInput{
 		IdempotencyKey: "original-source", RunID: run.ID, ExpectedPreferencesRevision: 2,
-		Article:  feed.Content{URL: "https://example.com/original?utm_source=discovery#top", Title: "Original discovery title", Summary: "Source-backed introduction."},
+		Article:  narrated(feed.Content{URL: "https://example.com/original?utm_source=discovery#top", Title: "Original discovery title", Summary: "Source-backed introduction."}),
 		WhyMatch: "Detailed source evidence matches the reading brief.", PublishedAt: time.Now().UnixMilli(),
 	}
 	saved := decode[sqlite.MutationResult](t, call(t, alice, "ingest_discovery_article", input))
@@ -243,7 +243,7 @@ func TestDiscoveryHistoryKeepsOriginalSourceAfterPatchAndRestart(t *testing.T) {
 	}
 	patched := decode[sqlite.MutationResult](t, call(t, alice, "patch_article", feed.PatchInput{
 		IdempotencyKey: "edit-source", ArticleID: saved.Article.ID, ExpectedRevision: saved.Article.Revision,
-		Patch: feed.Patch{URL: new("https://example.com/edited"), Title: new("Edited article title")},
+		Patch: feed.Patch{URL: new("https://example.com/edited"), Title: new("Edited article title"), Narration: narrationFor("Edited article title", "")},
 	}))
 	verify := func() {
 		t.Helper()
