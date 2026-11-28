@@ -379,7 +379,7 @@ func SafeError(err error) string {
 	case errors.Is(err, ErrAudioUnavailable):
 		return "Audio isn't set up on this server."
 	case errors.Is(err, errInvalidAudio):
-		return "Invalid audio request. Choose one of the listed voices, send the article's current revision, and 1–2000 segments of spoken text, each 1–4500 bytes and 300,000 characters in all."
+		return "Invalid audio request. Choose one of the listed voices, send the article's current revision, and 1–2000 segments of spoken text, each 1–4500 bytes and 300,000 characters in all. A segment's optional spoken text follows the same rules, and its sync points must move forward through both texts and stay inside them."
 	case errors.Is(err, sqlite.ErrLocked):
 		return "This article has audio, so its text is locked. Ask the user to delete the audio in the app first."
 	case errors.Is(err, sqlite.ErrAudioExists):

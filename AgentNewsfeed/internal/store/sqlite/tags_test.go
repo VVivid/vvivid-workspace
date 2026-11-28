@@ -26,7 +26,7 @@ func articleTagsDuringSeed(t *testing.T, db *sql.DB) (drop func()) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"0009_article_tags.sql", "0010_article_audio.sql", "0011_article_narration.sql"} {
+	for _, name := range []string{"0009_article_tags.sql", "0010_article_audio.sql", "0011_article_narration.sql", "0012_audio_spoken_text.sql"} {
 		i := slices.IndexFunc(migrations, func(m migration) bool { return m.name == name })
 		if i < 0 {
 			t.Fatalf("migration %s is missing", name)
